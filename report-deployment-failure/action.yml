@@ -19,9 +19,8 @@ inputs:
     required: false
     default: 'false'
   token:
-    description: 'GitHub token for creating issues (default: github.token)'
+    description: 'GitHub token for creating issues (pass ${{ github.token }})'
     required: false
-    default: ${{ github.token }}
 
 runs:
   using: 'node20'

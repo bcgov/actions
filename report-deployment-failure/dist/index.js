@@ -31892,10 +31892,13 @@ function extractAssignees(codeownersPath) {
       .filter(line => line && !line.startsWith('#'));
     
     // Extract usernames from CODEOWNERS (format: * @username or path @username)
-    // Match both users (@username) and teams (@org/team-name)
-    // GitHub usernames must start/end with alphanumeric, can contain hyphens/underscores in middle
     // NOTE: This intentionally extracts all usernames across all lines, regardless of path patterns.
     // This ensures deployment failures are visible to all repository maintainers, not just path-specific owners.
+    // 
+    // Regex breakdown:
+    // - Matches @username or @org/team-name
+    // - GitHub usernames: alphanumeric start/end, can contain hyphens/underscores in middle
+    // - Pattern: @(username) or @(org/team-name)
     const usernameMatches = lines.join('\n').match(/@([a-zA-Z0-9](?:[a-zA-Z0-9_-]*[a-zA-Z0-9])?(?:\/[a-zA-Z0-9](?:[a-zA-Z0-9_-]*[a-zA-Z0-9])?)?)/g);
     
     if (usernameMatches) {
@@ -31953,7 +31956,7 @@ async function createIssue(octokit, context, zone, workflowRunId, assignees) {
     core.setOutput('issue_url', issue.data.html_url);
   } catch (error) {
     // If assignment fails due to permissions, retry without assignees but mention them
-    if (error.status === 422 || (error.response && error.response.status === 422)) {
+    if (error.status === 422) {
       core.warning(`Could not assign users: ${error.message}`);
       const bodyWithMentions = `${body}\n\ncc: ${assigneesToUse.map(u => `@${u}`).join(' ')}`;
       

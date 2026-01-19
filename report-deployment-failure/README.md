@@ -24,6 +24,7 @@ A reusable GitHub Action for reporting deployment failures. This action creates 
   with:
     zone: test
     report_issue: true
+    token: ${{ github.token }}
 ```
 
 ### With Workflow Run ID
@@ -35,6 +36,7 @@ A reusable GitHub Action for reporting deployment failures. This action creates 
     zone: prod
     workflow_run_id: ${{ github.run_id }}
     report_issue: true
+    token: ${{ github.token }}
 ```
 
 ### Full Example in Workflow
@@ -73,6 +75,7 @@ jobs:
         with:
           zone: production
           report_issue: true
+          token: ${{ github.token }}
 ```
 
 ## Inputs
@@ -82,7 +85,7 @@ jobs:
 | `zone` | Deployment zone name (e.g., "test", "prod", "pr-123") | Yes | - |
 | `workflow_run_id` | Workflow run ID for linking | No | `${{ github.run_id }}` |
 | `report_issue` | Whether to create an issue when deployment fails | No | `false` |
-| `token` | GitHub token for creating issues | No | `${{ github.token }}` |
+| `token` | GitHub token for creating issues (pass `${{ github.token }}`) | No | - |
 
 ## Outputs
 
@@ -168,6 +171,7 @@ permissions:
   with:
     zone: ${{ inputs.zone }}
     report_issue: true
+    token: ${{ github.token }}
 ```
 
 ### With Custom Token
@@ -211,6 +215,7 @@ If you're currently using inline `actions/github-script@v7` logic:
   with:
     zone: test
     report_issue: true
+    token: ${{ github.token }}
 ```
 
 ## Contributing

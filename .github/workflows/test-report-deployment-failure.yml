@@ -35,6 +35,7 @@ jobs:
         with:
           zone: test
           report_issue: false
+          token: ${{ github.token }}
 
       - name: Test action with report_issue=true (manual trigger only)
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.create_test_issue == 'true'
@@ -43,6 +44,7 @@ jobs:
           zone: test-manual
           report_issue: true
           workflow_run_id: ${{ github.run_id }}
+          token: ${{ github.token }}
 
       - name: Verify action exists
         run: |
