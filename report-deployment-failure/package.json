@@ -1,0 +1,29 @@
+{
+  "name": "report-deployment-failure",
+  "version": "1.0.0",
+  "description": "GitHub Action for reporting deployment failures",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "ncc build src/index.js -o dist --source-map --license licenses.txt",
+    "test": "jest",
+    "lint": "eslint src/**/*.js"
+  },
+  "keywords": [
+    "github",
+    "actions",
+    "deployment",
+    "failure",
+    "reporting"
+  ],
+  "author": "BC Government",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@actions/core": "^1.11.1",
+    "@actions/github": "^6.0.0"
+  },
+  "devDependencies": {
+    "@vercel/ncc": "^0.38.3",
+    "eslint": "^8.57.1",
+    "jest": "^29.7.0"
+  }
+}

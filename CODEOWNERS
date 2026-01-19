@@ -1,0 +1,12 @@
+# CODEOWNERS file for testing
+# This file will be used to test the report-deployment-failure action
+
+# Default owners for everything
+*                           @copilot
+
+# Workflows and actions
+.github/workflows/          @copilot
+report-deployment-failure/  @copilot
+
+# This team will be filtered out (teams cannot be assigned to issues)
+# @bcgov/team-example

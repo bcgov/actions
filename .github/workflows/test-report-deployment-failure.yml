@@ -1,0 +1,76 @@
+name: Test Report Deployment Failure
+
+on:
+  push:
+    branches:
+      - main
+      - 'copilot/**'
+    paths:
+      - 'report-deployment-failure/**'
+      - '.github/workflows/test-report-deployment-failure.yml'
+  pull_request:
+    paths:
+      - 'report-deployment-failure/**'
+      - '.github/workflows/test-report-deployment-failure.yml'
+  workflow_dispatch:
+    inputs:
+      create_test_issue:
+        description: 'Create a test issue'
+        required: false
+        default: 'false'
+
+jobs:
+  test:
+    name: Test Action
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Test action with report_issue=false
+        uses: ./report-deployment-failure
+        with:
+          zone: test
+          report_issue: false
+
+      - name: Test action with report_issue=true (manual trigger only)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.create_test_issue == 'true'
+        uses: ./report-deployment-failure
+        with:
+          zone: test-manual
+          report_issue: true
+          workflow_run_id: ${{ github.run_id }}
+
+      - name: Verify action exists
+        run: |
+          echo "Action tested successfully"
+          ls -la report-deployment-failure/
+          cat report-deployment-failure/action.yml
+
+  build:
+    name: Verify Build
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: report-deployment-failure
+        run: npm ci
+
+      - name: Build action
+        working-directory: report-deployment-failure
+        run: npm run build
+
+      - name: Check dist exists
+        run: |
+          test -f report-deployment-failure/dist/index.js
+          echo "Build successful"

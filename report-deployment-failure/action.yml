@@ -1,0 +1,28 @@
+name: 'Report Deployment Failure'
+description: 'Creates an issue when deployment fails, assigning to codeowners'
+author: 'BC Government'
+
+branding:
+  icon: 'alert-circle'
+  color: 'red'
+
+inputs:
+  zone:
+    description: 'Deployment zone name (e.g., "test", "prod", "pr-123")'
+    required: true
+  workflow_run_id:
+    description: 'Workflow run ID for linking (default: uses context.runId)'
+    required: false
+    default: ''
+  report_issue:
+    description: 'Whether to create an issue when deployment fails'
+    required: false
+    default: 'false'
+  token:
+    description: 'GitHub token for creating issues (default: github.token)'
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'
