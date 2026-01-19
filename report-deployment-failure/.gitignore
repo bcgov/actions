@@ -1,0 +1,16 @@
+# Dependency directories
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Testing
+coverage/
+
+# Misc
+.DS_Store
+*.swp
+*.swo
+
+# Note: dist/ is NOT ignored - it must be committed for GitHub Actions
