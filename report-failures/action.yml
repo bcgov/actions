@@ -1,0 +1,152 @@
+name: 'Report Failures'
+description: 'Creates GitHub Issues for deployment failures in test/prod zones with auto-assignment from CODEOWNERS'
+inputs:
+  zone:
+    description: 'Environment zone (test/prod)'
+    required: true
+  workflow_run_id:
+    description: 'Override workflow run ID (defaults to current run)'
+    required: false
+  title_template:
+    description: 'Custom issue title template (default: "ci(deploy): deployment failed in {zone}")'
+    required: false
+  body_template:
+    description: 'Custom issue body template (default includes workflow URL)'
+    required: false
+  codeowners_path:
+    description: 'Override CODEOWNERS file path (auto-detected if not provided)'
+    required: false
+outputs:
+  issue_number:
+    description: 'Created issue number'
+  issue_url:
+    description: 'URL to created issue'
+runs:
+  using: composite
+  steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
+
+    - name: Find CODEOWNERS file
+      id: find-codeowners
+      shell: bash
+      run: |
+        CODEOWNERS_PATH="${{ inputs.codeowners_path }}"
+        
+        # If path provided, use it; otherwise search
+        if [ -z "$CODEOWNERS_PATH" ]; then
+          # Check root first
+          CODEOWNERS_PATH=$(find . -maxdepth 1 -type f -iname "codeowners*" -not -path "*/\.git/*" 2>/dev/null | head -1)
+          # Then .github/
+          if [ -z "$CODEOWNERS_PATH" ]; then
+            CODEOWNERS_PATH=$(find .github -maxdepth 1 -type f -iname "codeowners*" 2>/dev/null | head -1)
+          fi
+          # Finally docs/
+          if [ -z "$CODEOWNERS_PATH" ]; then
+            CODEOWNERS_PATH=$(find docs -maxdepth 1 -type f -iname "codeowners*" 2>/dev/null | head -1)
+          fi
+        fi
+        
+        if [ -n "$CODEOWNERS_PATH" ]; then
+          echo "path=$CODEOWNERS_PATH" >> $GITHUB_OUTPUT
+          echo "Found CODEOWNERS at: $CODEOWNERS_PATH"
+        else
+          echo "No CODEOWNERS file found"
+        fi
+
+    - name: Report Results
+      id: report
+      uses: actions/github-script@v8
+      with:
+        script: |
+          const fs = require('fs');
+          const zone = '${{ inputs.zone }}';
+          const workflowRunId = '${{ inputs.workflow_run_id }}' || context.runId;
+          const workflowUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${workflowRunId}`;
+          
+          // Use custom templates or defaults
+          const titleTemplate = '${{ inputs.title_template }}' || `ci(deploy): deployment failed in ${zone}`;
+          const bodyTemplate = '${{ inputs.body_template }}' || `❌ Deployment to **${zone}** zone failed.\n\n[View workflow run](${workflowUrl})`;
+          
+          const title = titleTemplate.replace(/{zone}/g, zone);
+          const body = bodyTemplate.replace(/{zone}/g, zone).replace(/{workflow_url}/g, workflowUrl);
+
+          // Read CODEOWNERS file to get assignees
+          let assignees = [];
+          const codeownersPath = '${{ steps.find-codeowners.outputs.path }}'.trim();
+
+          if (codeownersPath) {
+            try {
+              const codeownersContent = fs.readFileSync(codeownersPath, 'utf8');
+              // Filter out comment lines (lines starting with #) and empty lines
+              const lines = codeownersContent.split('\n')
+                .map(line => line.trim())
+                .filter(line => line && !line.startsWith('#'));
+              
+              // Extract usernames from CODEOWNERS (format: * @username or path @username)
+              // Match both users (@username) and teams (@org/team-name)
+              // GitHub usernames must start/end with alphanumeric, can contain hyphens/underscores in middle
+              // NOTE: This intentionally extracts all usernames across all lines, regardless of path patterns.
+              // This ensures deployment failures are visible to all repository maintainers, not just path-specific owners.
+              const usernameMatches = lines.join('\n').match(/@([a-zA-Z0-9](?:[a-zA-Z0-9_-]*[a-zA-Z0-9])?(?:\/[a-zA-Z0-9](?:[a-zA-Z0-9_-]*[a-zA-Z0-9])?)?)/g);
+              if (usernameMatches) {
+                // Remove '@', filter out team references (those containing '/')
+                // Teams cannot be assigned to issues, only individual users
+                assignees = [...new Set(usernameMatches
+                  .map(m => m.substring(1))
+                  .filter(name => !name.includes('/'))
+                )];
+              }
+            } catch (error) {
+              console.log(`Could not read or parse CODEOWNERS: ${error.message}`);
+            }
+          } else {
+            console.log('No CODEOWNERS file found - issue will be created without assignees');
+          }
+
+          // GitHub Issues API limits assignees to 10 per issue
+          const maxAssignees = 10;
+          const assigneesToUse = assignees.slice(0, maxAssignees);
+          if (assignees.length > maxAssignees) {
+            console.log(`Warning: ${assignees.length} assignees found, limiting to first ${maxAssignees}`);
+          }
+
+          try {
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              assignees: assigneesToUse
+            });
+            console.log(`Created issue #${issue.data.number} for deployment failure${assigneesToUse.length > 0 ? ` (assigned to: ${assigneesToUse.join(', ')})` : ''}`);
+            core.setOutput('issue_number', issue.data.number);
+            core.setOutput('issue_url', issue.data.html_url);
+          } catch (error) {
+            // If assignment fails due to permissions, retry without assignees but mention them
+            if (error.status === 422 || (error.response && error.response.status === 422)) {
+              const bodyWithMentions = `${body}\n\ncc: ${assigneesToUse.map(u => `@${u}`).join(' ')}`;
+              try {
+                const issue = await github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: title,
+                  body: bodyWithMentions
+                });
+                console.log(`Created issue #${issue.data.number} (mentioned: ${assigneesToUse.join(', ')})`);
+                core.setOutput('issue_number', issue.data.number);
+                core.setOutput('issue_url', issue.data.html_url);
+              } catch (retryError) {
+                core.error(`Could not create issue: ${retryError.message}`);
+                throw retryError;
+              }
+            } else {
+              core.error(`Could not create issue: ${error.message}`);
+              throw error;
+            }
+          }
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+
