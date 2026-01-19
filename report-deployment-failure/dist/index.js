@@ -35642,9 +35642,9 @@ async function run() {
     }
 
     // Create GitHub issue
-    const token = core.getInput('token') || process.env.GITHUB_TOKEN;
+    const token = core.getInput('token');
     if (!token) {
-      core.setFailed('GitHub token not found. Please provide a token via input or GITHUB_TOKEN environment variable.');
+      core.setFailed('GitHub token not found. Please provide a token via the token input (e.g., token: ${{ github.token }})');
       return;
     }
 

@@ -28,5 +28,8 @@
   },
   "overrides": {
     "undici": "^6.23.0"
+  },
+  "comments": {
+    "overrides": "Fixes GHSA-g9mf-h72j-4rw9 - undici decompression chain vulnerability in @actions/github dependencies"
   }
 }
