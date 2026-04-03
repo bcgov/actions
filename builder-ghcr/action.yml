@@ -17,9 +17,6 @@ inputs:
   build_args:
     description: 'Additional build arguments'
     default: ''
-  strict_immutability:
-    description: "If 'true', skip re-tagging on no-change runs. (Default: 'false' for backward compatibility)"
-    default: 'false'
 
 outputs:
   triggered:
@@ -78,21 +75,30 @@ runs:
         provenance: true
         cache-from: type=gha
         cache-to: type=gha,mode=max
+        build-args: |
+          VERSION=sha-${{ steps.sha.outputs.commit }}
+          ${{ inputs.build_args }}
 
-    - name: Retag (Legacy/Compatibility mode)
-      if: steps.diff.outputs.triggered == 'false' && inputs.strict_immutability != 'true'
-      uses: ./.github/actions/builder-ghcr/retag
-      with:
-        image: ${{ inputs.image }}
-        base_ref: ${{ steps.diff.outputs.base_ref }}
+    - name: Setup Crane
+      if: steps.diff.outputs.triggered == 'false'
+      uses: imjasonh/setup-crane@v0.4
+
+    - name: Retag (on skip)
+      if: steps.diff.outputs.triggered == 'false'
+      shell: bash
+      run: |
+        # Resolve actual SHA of base_ref to find existing image
+        BASE_SHA_TAG="sha-$(git rev-parse --short ${{ steps.diff.outputs.base_ref }})"
+        CURRENT_SHA_TAG="sha-$(git rev-parse --short HEAD)"
+
+        echo "Retagging existing image: ${{ inputs.image }}:$BASE_SHA_TAG -> $CURRENT_SHA_TAG"
+        crane tag "${{ inputs.image }}:$BASE_SHA_TAG" "$CURRENT_SHA_TAG"
 
     - name: Summary
       shell: bash
       run: |
         if [ "${{ steps.diff.outputs.triggered }}" == "true" ]; then
           echo "::notice title=Builder GHCR::✅ Build successful for ${{ inputs.image }}"
-        elif [ "${{ inputs.strict_immutability }}" == "true" ]; then
-          echo "::notice title=Builder GHCR::⏭️ Build skipped. (Forensic Immutable Mode Enabled)"
         else
-          echo "::notice title=Builder GHCR::⏭️ Build skipped. Image re-tagged from ${{ steps.diff.outputs.base_ref }} (Compatibility Mode)"
+          echo "::notice title=Builder GHCR::⏭️ Build skipped. Image re-tagged from ${{ steps.diff.outputs.base_ref }}"
         fi
