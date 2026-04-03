@@ -29,14 +29,18 @@ inputs:
 
 outputs:
   issue_number:
-    description: "The created issue number"
+    description: "The created issue number (0 if dry run)"
+    value: "${{ steps.run_script.outputs.issue_number }}"
   assignees:
-    description: "The owners detected in CODEOWNERS"
+    description: "Comma-separated list of assigned owners"
+    value: "${{ steps.run_script.outputs.assignees }}"
 
 runs:
   using: "composite"
   steps:
-    - shell: bash
+    - name: Run Notifier
+      id: run_script
+      shell: bash
       env:
         INPUT_TOKEN: "${{ inputs.token }}"
         INPUT_DEBUG: "${{ inputs.debug }}"
