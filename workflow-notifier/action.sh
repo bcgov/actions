@@ -4,7 +4,7 @@ set -x # Enable X-ray vision for debugging
 
 # Helper functions for consistency across all actions
 function log_debug() {
-  [ "${INPUT_DEBUG}" == "true" ] && echo "DEBUG: $1"
+  [ "${INPUT_DEBUG}" == "true" ] && echo "DEBUG: $1" || true
 }
 
 # 1. Discover CODEOWNERS (root, .github/, docs/)
@@ -69,6 +69,8 @@ echo "Summary ---"
 echo -e "\tIssue: #${ISSUE_NUM}"
 echo -e "\tURL:   ${ISSUE_URL}"
 
-# Write outputs unconditionally (useful even in dry runs)
-echo "issue_number=${ISSUE_NUM}" >> "${GITHUB_OUTPUT}"
-echo "assignees=${ASSIGNEES}" >> "${GITHUB_OUTPUT}"
+# Write outputs (useful even in dry runs)
+if [ -n "${INPUT_TOKEN:-}" ]; then
+  echo "issue_number=${ISSUE_NUM}" >> "${GITHUB_OUTPUT}"
+  echo "assignees=${ASSIGNEES}" >> "${GITHUB_OUTPUT}"
+fi
