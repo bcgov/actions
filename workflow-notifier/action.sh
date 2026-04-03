@@ -19,7 +19,7 @@ done
 # 2. Extract Owners (Exclude teams)
 ASSIGNEES=""
 if [ -n "$CODEOWNERS_PATH" ]; then
-  ASSIGNEES=$(grep -v '^#' "$CODEOWNERS_PATH" | grep -o '@[a-zA-Z0-9_-]\+' | grep -v '/' | sed 's/@//g' | sort -u | tr '\n' ',' | sed 's/,$//')
+  ASSIGNEES=$(grep -v '^#' "$CODEOWNERS_PATH" | grep -o '@[a-zA-Z0-9_-]\+' | grep -v '/' | sed 's/@//g' | sort -u | tr '\n' ',' | sed 's/,$//' || true)
   log_debug "Owners found: ${ASSIGNEES}"
 fi
 
@@ -47,7 +47,7 @@ if [ "${INPUT_DRY_RUN}" == "true" ]; then
   ISSUE_URL="https://github.com/${GITHUB_REPOSITORY}/issues/dry-run"
 else
   ISSUE_URL=$(GH_TOKEN="${INPUT_TOKEN}" gh "${GH_ARGS[@]}")
-  ISSUE_NUM=$(echo "$ISSUE_URL" | grep -oE '[0-9]+$')
+  ISSUE_NUM=$(echo "$ISSUE_URL" | grep -oE '[0-9]+$' || echo "0")
 fi
 
 echo "Summary ---"
