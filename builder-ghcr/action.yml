@@ -17,6 +17,9 @@ inputs:
   build_args:
     description: 'Additional build arguments'
     default: ''
+  strict_immutability:
+    description: "If 'true', skip re-tagging on no-change runs. (Default: 'false' for backward compatibility)"
+    default: 'false'
 
 outputs:
   triggered:
@@ -75,15 +78,21 @@ runs:
         provenance: true
         cache-from: type=gha
         cache-to: type=gha,mode=max
-        build-args: |
-          VERSION=sha-${{ steps.sha.outputs.commit }}
-          ${{ inputs.build_args }}
+
+    - name: Retag (Legacy/Compatibility mode)
+      if: steps.diff.outputs.triggered == 'false' && inputs.strict_immutability != 'true'
+      uses: ./.github/actions/builder-ghcr/retag
+      with:
+        image: ${{ inputs.image }}
+        base_ref: ${{ steps.diff.outputs.base_ref }}
 
     - name: Summary
       shell: bash
       run: |
         if [ "${{ steps.diff.outputs.triggered }}" == "true" ]; then
-          echo "::notice title=Builder GHCR::✅ Build successful for ${{ inputs.image }} (sha-${{ steps.sha.outputs.commit }})"
+          echo "::notice title=Builder GHCR::✅ Build successful for ${{ inputs.image }}"
+        elif [ "${{ inputs.strict_immutability }}" == "true" ]; then
+          echo "::notice title=Builder GHCR::⏭️ Build skipped. (Forensic Immutable Mode Enabled)"
         else
-          echo "::notice title=Builder GHCR::⏭️ Build skipped. No code changes detected."
+          echo "::notice title=Builder GHCR::⏭️ Build skipped. Image re-tagged from ${{ steps.diff.outputs.base_ref }} (Compatibility Mode)"
         fi

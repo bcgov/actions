@@ -1,0 +1,25 @@
+name: 'Builder GHCR Retag'
+description: 'Internal helper to re-tag images for backward compatibility.'
+
+inputs:
+  image:
+    description: 'Target image name'
+    required: true
+  base_ref:
+    description: 'The Git base ref of the diff'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Crane
+      uses: imjasonh/setup-crane@v0.4
+
+    - name: Retag
+      shell: bash
+      run: |
+        BASE_SHA_TAG="sha-$(git rev-parse --short ${{ inputs.base_ref }})"
+        CURRENT_SHA_TAG="sha-$(git rev-parse --short HEAD)"
+        
+        echo "Retagging existing image: ${{ inputs.image }}:$BASE_SHA_TAG -> $CURRENT_SHA_TAG"
+        crane tag "${{ inputs.image }}:$BASE_SHA_TAG" "$CURRENT_SHA_TAG"
