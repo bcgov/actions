@@ -24,9 +24,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       
-      - name: Dry Run - Notify Owners
+      - name: Dry Run - Simulate Failure Notification
         id: dry_run
-        uses: ./notify-owners
+        uses: ./workflow-notifier
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           title: "[DRY RUN] Simulating a failure for testing"
