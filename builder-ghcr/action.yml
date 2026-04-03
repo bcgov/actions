@@ -1,40 +1,43 @@
 name: 'Builder GHCR'
-description: 'Consolidated container builder action for GitHub Container Registry.'
+description: 'Builds and pushes images to GHCR using a diff-based trigger.'
 
 inputs:
-  image:
-    description: 'Target image name (e.g. ghcr.io/bcgov/vexilon)'
+  package:
+    description: 'The name of the package/image being built'
     required: true
-  context:
-    description: 'Docker build context'
+  build_context:
+    description: 'The path to the build context'
     default: '.'
-  file:
-    description: 'Path to Containerfile'
-    default: './Containerfile'
-  triggers:
-    description: 'Space-separated list of files/dirs to watch for changes'
-    default: '.'
-  build_args:
-    description: 'Additional build arguments'
+  build_file:
+    description: 'The path to the Containerfile/Dockerfile'
+    default: 'Dockerfile'
+  tag_fallback:
+    description: 'The fallback tag to use if no other tag is found'
+    default: 'test'
+  tags:
+    description: 'Additional tags to apply'
     default: ''
+  triggers:
+    description: 'The files or directories to trigger a build'
+    required: true
 
 outputs:
-  triggered:
-    description: "'true' if a new image was built, 'false' if skipped"
-    value: ${{ steps.diff.outputs.triggered }}
-  image_tag:
-    description: 'The primary tag produced (sha-XXXXXXX)'
-    value: "sha-${{ steps.sha.outputs.commit }}"
+  image:
+    description: 'The final image URL'
+    value: ${{ steps.meta.outputs.tags }}
+  tag:
+    description: 'The primary tag used'
+    value: "sha-${{ steps.sha.outputs.short }}"
 
 runs:
   using: 'composite'
   steps:
-    - name: Resolve commit SHA
+    - name: Resolve SHA
       id: sha
       shell: bash
-      run: echo "commit=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+      run: echo "short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
-    - name: Check for changes
+    - name: Diff Triggers
       id: diff
       uses: ./.github/actions/diff-triggers
       with:
@@ -45,10 +48,11 @@ runs:
       id: meta
       uses: docker/metadata-action@v5
       with:
-        images: ${{ inputs.image }}
+        images: ghcr.io/${{ github.repository }}/${{ inputs.package }}
         tags: |
           type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
-          type=raw,value=sha-${{ steps.sha.outputs.commit }}
+          type=raw,value=sha-${{ steps.sha.outputs.short }}
+          ${{ inputs.tags }}
 
     - name: Set up Docker Buildx
       if: steps.diff.outputs.triggered == 'true'
@@ -67,17 +71,14 @@ runs:
       id: build
       uses: docker/build-push-action@v7
       with:
-        context: ${{ inputs.context }}
-        file: ${{ inputs.file }}
+        context: ${{ inputs.build_context }}
+        file: ${{ inputs.build_file }}
         push: true
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
         provenance: true
         cache-from: type=gha
         cache-to: type=gha,mode=max
-        build-args: |
-          VERSION=sha-${{ steps.sha.outputs.commit }}
-          ${{ inputs.build_args }}
 
     - name: Setup Crane
       if: steps.diff.outputs.triggered == 'false'
@@ -90,15 +91,16 @@ runs:
         # Resolve actual SHA of base_ref to find existing image
         BASE_SHA_TAG="sha-$(git rev-parse --short ${{ steps.diff.outputs.base_ref }})"
         CURRENT_SHA_TAG="sha-$(git rev-parse --short HEAD)"
+        PACKAGE_URL="ghcr.io/${{ github.repository }}/${{ inputs.package }}"
 
-        echo "Retagging existing image: ${{ inputs.image }}:$BASE_SHA_TAG -> $CURRENT_SHA_TAG"
-        crane tag "${{ inputs.image }}:$BASE_SHA_TAG" "$CURRENT_SHA_TAG"
+        echo "Retagging existing image: $PACKAGE_URL:$BASE_SHA_TAG -> $CURRENT_SHA_TAG"
+        crane tag "$PACKAGE_URL:$BASE_SHA_TAG" "$CURRENT_SHA_TAG"
 
     - name: Summary
       shell: bash
       run: |
         if [ "${{ steps.diff.outputs.triggered }}" == "true" ]; then
-          echo "::notice title=Builder GHCR::✅ Build successful for ${{ inputs.image }}"
+          echo "::notice title=Builder GHCR::✅ Build successful for ${{ inputs.package }}"
         else
           echo "::notice title=Builder GHCR::⏭️ Build skipped. Image re-tagged from ${{ steps.diff.outputs.base_ref }}"
         fi
