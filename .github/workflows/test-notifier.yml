@@ -1,0 +1,51 @@
+name: Test Notifier
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: Lint (ShellCheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      
+      - name: Run ShellCheck
+        run: |
+          # Find all .sh files (in root, skeleton, and sub-actions)
+          # We're ignoringSC1091 (source follow) if you have local includes
+          find . -name "*.sh" -print0 | xargs -0 shellcheck -s bash
+      
+  test-notifier:
+    name: Functional Test (Dry Run)
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      
+      - name: Dry Run - Notify Owners
+        id: dry_run
+        uses: ./notify-owners
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          title: "[DRY RUN] Simulating a failure for testing"
+          body: "This is a dry run test of the notifier action."
+          dry_run: true
+          
+      - name: Verify Outputs
+        run: |
+          echo "Output: issue_number = ${{ steps.dry_run.outputs.issue_number }}"
+          echo "Output: assignees    = ${{ steps.dry_run.outputs.assignees }}"
+          
+          if [ "${{ steps.dry_run.outputs.issue_number }}" != "0" ]; then
+            echo "::error ::Dry run should have returned issue_number 0"
+            exit 1
+          fi
+          
+          if [ -z "${{ steps.dry_run.outputs.assignees }}" ]; then
+            echo "::error ::No assignees detected (check .github/codeowners)"
+            exit 1
+          fi
+          
+          echo "✅ All tests passed! Boss level achieved."
