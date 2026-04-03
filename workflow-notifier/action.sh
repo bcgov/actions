@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+set -x # X-Ray Vision: ON
 set -x # Enable X-ray vision for debugging
 
 # Helper functions for consistency across all actions
@@ -74,3 +75,5 @@ echo -e "\tURL:   ${ISSUE_URL}"
 # Write outputs (useful even in dry runs)
 echo "issue_number=${ISSUE_NUM}" >> "${GITHUB_OUTPUT}"
 echo "assignees=${ASSIGNEES}" >> "${GITHUB_OUTPUT}"
+
+log_debug "Action completed successfully."
