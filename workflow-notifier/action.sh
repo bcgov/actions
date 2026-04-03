@@ -4,7 +4,9 @@ set -x # Enable X-ray vision for debugging
 
 # Helper functions for consistency across all actions
 function log_debug() {
-  [ "${INPUT_DEBUG}" == "true" ] && echo "DEBUG: $1" || true
+  if [ "${INPUT_DEBUG}" == "true" ]; then
+    echo "DEBUG: $1"
+  fi
 }
 
 # 1. Discover CODEOWNERS (root, .github/, docs/)
@@ -38,7 +40,7 @@ GH_ARGS=(issue create --title "$INPUT_TITLE" --body "$FINAL_BODY")
 
 # Split labels on comma and add --label for each
 if [ -n "${INPUT_LABELS:-}" ]; then
-  # read -a returns 1 on empty input, so we use || true
+  # read -a returns 1 on empty input, so we use || true inside the condition or just trust the if -n
   IFS=',' read -r -a LABELS_ARRAY <<< "$INPUT_LABELS" || true
   for label in "${LABELS_ARRAY[@]}"; do
     # Trim whitespace

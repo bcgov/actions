@@ -3,7 +3,9 @@ set -euo pipefail
 
 # Helper functions for consistency across all actions
 function log_debug() {
-  [ "${INPUT_DEBUG}" == "true" ] && echo "DEBUG: $1" || true
+  if [ "${INPUT_DEBUG}" == "true" ]; then
+    echo "DEBUG: $1"
+  fi
 }
 
 # Add your logic here!
