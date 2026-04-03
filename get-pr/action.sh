@@ -25,8 +25,8 @@ function get_pr_from_api_response() {
 function get_pr_from_git() {
   local commits=${1:-1}
   log_debug "Searching git history (last $commits commits)..."
-  git log --pretty=format:%s -${commits} 2>/dev/null | while read line; do
-    trimmed=$(echo "$line" | sed 's/[[:space:]]*$//')
+  git log --pretty=format:%s -"${commits}" 2>/dev/null | while read -r line; do
+    trimmed="${line%"${line##*[![:space:]]}"}"
     if [[ $trimmed =~ \(#([0-9]+)\)$ ]]; then
       echo "${BASH_REMATCH[1]}"
       break
