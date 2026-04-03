@@ -22,8 +22,14 @@ inputs:
 
 outputs:
   triggered:
-    description: "Boolean result of triggers"
+    description: "'true' if changes detected, 'false' otherwise"
     value: "${{ steps.run_script.outputs.triggered }}"
+  base_ref:
+    description: "The Git base ref used for the diff comparison (e.g. main or HEAD^)"
+    value: "${{ steps.run_script.outputs.base_ref }}"
+  head_ref:
+    description: "The Git head ref used for the diff comparison (e.g. current SHA)"
+    value: "${{ steps.run_script.outputs.head_ref }}"
 
 runs:
   using: "composite"

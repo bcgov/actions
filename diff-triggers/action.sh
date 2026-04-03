@@ -115,3 +115,6 @@ else
   fi
   echo "triggered=false" >> "$GITHUB_OUTPUT"
 fi
+# 5. Export refs for downstream forensic walk
+echo "base_ref=$BASE_REF" >> "$GITHUB_OUTPUT"
+echo "head_ref=$HEAD_REF" >> "$GITHUB_OUTPUT"
