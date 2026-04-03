@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+set -x # Enable X-ray vision for debugging
 
 # Helper functions for consistency across all actions
 function log_debug() {
@@ -37,7 +38,8 @@ GH_ARGS=(issue create --title "$INPUT_TITLE" --body "$FINAL_BODY")
 
 # Split labels on comma and add --label for each
 if [ -n "${INPUT_LABELS:-}" ]; then
-  IFS=',' read -r -a LABELS_ARRAY <<< "$INPUT_LABELS"
+  # read -a returns 1 on empty input, so we use || true
+  IFS=',' read -r -a LABELS_ARRAY <<< "$INPUT_LABELS" || true
   for label in "${LABELS_ARRAY[@]}"; do
     # Trim whitespace
     label=$(echo "$label" | xargs)
