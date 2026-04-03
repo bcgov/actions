@@ -1,0 +1,53 @@
+name: "workflow-notifier"
+description: "Find CODEOWNERS and notify them via GitHub Issues on failure"
+branding:
+  icon: "alert-circle"
+  color: "red"
+
+inputs:
+  token:
+    description: "GitHub token (defaults to github.token)"
+    default: "${{ github.token }}"
+  debug:
+    description: "Enable debug logging"
+    default: "false"
+  title:
+    description: "Issue title"
+    required: true
+  body:
+    description: "Issue body (pre-filled with run URL if omitted)"
+    required: false
+  labels:
+    description: "Comma-separated labels"
+    default: "bug,failure"
+  assign:
+    description: "Whether to assign owners to the issue"
+    default: "true"
+  dry_run:
+    description: "If true, logs the issue creation without actually creating it"
+    default: "false"
+
+outputs:
+  issue_number:
+    description: "The created issue number (0 if dry run)"
+    value: "${{ steps.run_script.outputs.issue_number }}"
+  assignees:
+    description: "Comma-separated list of assigned owners"
+    value: "${{ steps.run_script.outputs.assignees }}"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run Notifier
+      id: run_script
+      shell: bash
+      env:
+        INPUT_TOKEN: "${{ inputs.token }}"
+        INPUT_DEBUG: "${{ inputs.debug }}"
+        INPUT_TITLE: "${{ inputs.title }}"
+        INPUT_BODY: "${{ inputs.body }}"
+        INPUT_LABELS: "${{ inputs.labels }}"
+        INPUT_ASSIGN: "${{ inputs.assign }}"
+        INPUT_DRY_RUN: "${{ inputs.dry_run }}"
+      run: |
+        "${{ github.action_path }}/action.sh"

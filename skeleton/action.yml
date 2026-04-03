@@ -1,0 +1,26 @@
+name: "__ACTION_NAME__"
+description: "__ACTION_DESCRIPTION__"
+branding:
+  icon: "package"
+  color: "blue"
+
+inputs:
+  token:
+    description: "GitHub token (defaults to github.token)"
+    default: "${{ github.token }}"
+  debug:
+    description: "Enable debug logging"
+    default: "false"
+
+outputs: {}
+  # Define outputs here
+
+runs:
+  using: "composite"
+  steps:
+    - shell: bash
+      env:
+        INPUT_TOKEN: "${{ inputs.token }}"
+        INPUT_DEBUG: "${{ inputs.debug }}"
+      run: |
+        "${{ github.action_path }}/action.sh"
