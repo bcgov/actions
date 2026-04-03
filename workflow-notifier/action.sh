@@ -54,5 +54,5 @@ echo "Summary ---"
 echo -e "\tIssue: #${ISSUE_NUM}"
 echo -e "\tURL:   ${ISSUE_URL}"
 
-[ -n "$INPUT_TOKEN" ] && echo "issue_number=${ISSUE_NUM}" >> $GITHUB_OUTPUT
-[ -n "$INPUT_TOKEN" ] && echo "assignees=${ASSIGNEES}" >> $GITHUB_OUTPUT
+[ -n "$INPUT_TOKEN" ] && echo "issue_number=${ISSUE_NUM}" >> "${GITHUB_OUTPUT}"
+[ -n "$INPUT_TOKEN" ] && echo "assignees=${ASSIGNEES}" >> "${GITHUB_OUTPUT}"
