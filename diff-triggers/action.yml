@@ -1,0 +1,40 @@
+name: Diff Triggers
+description: Check if changed files match trigger paths. Returns true if any trigger matches, false otherwise.
+branding:
+  icon: package
+  color: blue
+
+inputs:
+  triggers:
+    description: "Paths used to trigger an event; e.g. './backend/' './frontend/' (always trigger if omitted)"
+    required: false
+  ref:
+    description: "Reference to compare against (e.g., 'main', 'HEAD^'). Defaults to base branch for PRs, or HEAD^ for pushes."
+    required: false
+  annotations:
+    description: "Emit workflow summary annotations"
+    required: false
+    default: 'true'
+  debug:
+    description: "Enable debug logging"
+    required: false
+    default: 'false'
+
+outputs:
+  triggered:
+    description: "Boolean result of triggers"
+    value: "${{ steps.run_script.outputs.triggered }}"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run Notifier
+      id: run_script
+      shell: bash
+      env:
+        INPUT_TRIGGERS: "${{ inputs.triggers }}"
+        INPUT_REF: "${{ inputs.ref }}"
+        INPUT_ANNOTATIONS: "${{ inputs.annotations }}"
+        INPUT_DEBUG: "${{ inputs.debug }}"
+      run: |
+        "${{ github.action_path }}/action.sh"
