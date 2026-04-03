@@ -80,27 +80,11 @@ runs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
-    - name: Setup Crane
-      if: steps.diff.outputs.triggered == 'false'
-      uses: imjasonh/setup-crane@v0.4
-
-    - name: Retag (on skip)
-      if: steps.diff.outputs.triggered == 'false'
-      shell: bash
-      run: |
-        # Resolve actual SHA of base_ref to find existing image
-        BASE_SHA_TAG="sha-$(git rev-parse --short ${{ steps.diff.outputs.base_ref }})"
-        CURRENT_SHA_TAG="sha-$(git rev-parse --short HEAD)"
-        PACKAGE_URL="ghcr.io/${{ github.repository }}/${{ inputs.package }}"
-
-        echo "Retagging existing image: $PACKAGE_URL:$BASE_SHA_TAG -> $CURRENT_SHA_TAG"
-        crane tag "$PACKAGE_URL:$BASE_SHA_TAG" "$CURRENT_SHA_TAG"
-
     - name: Summary
       shell: bash
       run: |
         if [ "${{ steps.diff.outputs.triggered }}" == "true" ]; then
           echo "::notice title=Builder GHCR::✅ Build successful for ${{ inputs.package }}"
         else
-          echo "::notice title=Builder GHCR::⏭️ Build skipped. Image re-tagged from ${{ steps.diff.outputs.base_ref }}"
+          echo "::notice title=Builder GHCR::⏭️ Build skipped. (No changes in ${{ inputs.triggers }})"
         fi
