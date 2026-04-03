@@ -45,4 +45,3 @@ This will:
 1. **Standard Inputs**: All actions SHOULD support \`token\` and \`debug\` inputs.
 2. **Bash-First**: Prefer **Composite Actions** calling dedicated shell scripts (\`action.sh\`) for simple logic.
 3. **Consistent Branding**: Icons/Colors should reflect purpose (Build = blue, Fail/Alert = red).
-EOF

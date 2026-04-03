@@ -23,16 +23,29 @@ if [ -n "$CODEOWNERS_PATH" ]; then
   log_debug "Owners found: ${ASSIGNEES}"
 fi
 
-# 3. Create Issue
+# 3. Build the Issue Body
 FINAL_BODY="${INPUT_BODY:-"Workflow failure detected at $(date)."}"
 RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-FINAL_BODY="${FINAL_BODY}\n\n[View Workflow Run](${RUN_URL})"
+# Use printf to handle newlines correctly
+printf -v FINAL_BODY "%s\n\n[View Workflow Run](%s)" "$FINAL_BODY" "$RUN_URL"
 
 # 4. Create the Issue via gh CLI
 log_debug "Creating issue: $INPUT_TITLE"
 
 # Construct the command array
-GH_ARGS=(issue create --title "$INPUT_TITLE" --body "$FINAL_BODY" --label "$INPUT_LABELS")
+GH_ARGS=(issue create --title "$INPUT_TITLE" --body "$FINAL_BODY")
+
+# Split labels on comma and add --label for each
+if [ -n "${INPUT_LABELS:-}" ]; then
+  IFS=',' read -r -a LABELS_ARRAY <<< "$INPUT_LABELS"
+  for label in "${LABELS_ARRAY[@]}"; do
+    # Trim whitespace
+    label=$(echo "$label" | xargs)
+    if [ -n "$label" ]; then
+      GH_ARGS+=(--label "$label")
+    fi
+  done
+fi
 
 # Handle assignment (limit 10 for GitHub)
 if [ "${INPUT_ASSIGN}" == "true" ] && [ -n "$ASSIGNEES" ]; then
@@ -54,5 +67,6 @@ echo "Summary ---"
 echo -e "\tIssue: #${ISSUE_NUM}"
 echo -e "\tURL:   ${ISSUE_URL}"
 
-[ -n "$INPUT_TOKEN" ] && echo "issue_number=${ISSUE_NUM}" >> "${GITHUB_OUTPUT}"
-[ -n "$INPUT_TOKEN" ] && echo "assignees=${ASSIGNEES}" >> "${GITHUB_OUTPUT}"
+# Write outputs unconditionally (useful even in dry runs)
+echo "issue_number=${ISSUE_NUM}" >> "${GITHUB_OUTPUT}"
+echo "assignees=${ASSIGNEES}" >> "${GITHUB_OUTPUT}"

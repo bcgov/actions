@@ -22,10 +22,17 @@ cp skeleton/action.yml "$NAME/action.yml"
 cp skeleton/action.sh "$NAME/action.sh"
 chmod +x "$NAME/action.sh"
 
-# Find and replace placeholders
-# Use | as sed delimiter to handle potential special chars in description
-sed -i "s|__ACTION_NAME__|$NAME|g" "$NAME/action.yml"
-sed -i "s|__ACTION_DESCRIPTION__|$DESCRIPTION|g" "$NAME/action.yml"
+# Find and replace placeholders using Python for safety and portability
+ACTION_YML="$NAME/action.yml" ACTION_NAME="$NAME" ACTION_DESCRIPTION="$DESCRIPTION" python3 - <<'PY'
+import os
+from pathlib import Path
+
+action_yml = Path(os.environ["ACTION_YML"])
+content = action_yml.read_text(encoding="utf-8")
+content = content.replace("__ACTION_NAME__", os.environ["ACTION_NAME"])
+content = content.replace("__ACTION_DESCRIPTION__", os.environ["ACTION_DESCRIPTION"])
+action_yml.write_text(content, encoding="utf-8")
+PY
 
 # Create a basic README.md
 cat <<EOF > "$NAME/README.md"
