@@ -1,4 +1,4 @@
-name: "notify-owners"
+name: "workflow-notifier"
 description: "Find CODEOWNERS and notify them via GitHub Issues on failure"
 branding:
   icon: "alert-circle"

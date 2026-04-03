@@ -15,10 +15,10 @@ To maintain "Boss Level" consistency across all our actions, every PR should:
 
 ## 🏗 Sub-Actions
 
-### [notify-owners](./notify-owners/)
+### [workflow-notifier](./workflow-notifier/)
 Find `CODEOWNERS` and coordinate notifications (GitHub Issues) on job failures.
 - **Icon:** `alert-circle` (red)
-- **Uses:** `bcgov/actions/notify-owners@v1`
+- **Uses:** `bcgov/actions/workflow-notifier@v1`
 
 ---
 
