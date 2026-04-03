@@ -32,11 +32,9 @@ if [ -z "${INPUT_TRIGGERS:-}" ]; then
   exit 0
 fi
 
-# 2. Parse triggers input (properly handles quoted strings with spaces)
+# 2. Parse triggers input (handles spaces and simple quotes)
 TRIGGERS=()
-while IFS= read -r line; do
-  [[ -n "$line" ]] && TRIGGERS+=("$line")
-done < <(grep -o "'[^']*'" <<< "${INPUT_TRIGGERS}" | sed "s/'//g")
+read -ra TRIGGERS <<< "${INPUT_TRIGGERS//\'/}"
 
 # 3. Determine Base Reference
 # For PRs: default to base repo default branch if ref omitted
@@ -45,6 +43,8 @@ BASE_REF="${INPUT_REF:-}"
 if [ -z "$BASE_REF" ]; then
     if [ -n "${GITHUB_BASE_REF:-}" ]; then
         BASE_REF="${GITHUB_BASE_REF}"
+    elif [ -n "${GITHUB_EVENT_BEFORE:-}" ] && [ "${GITHUB_EVENT_BEFORE}" != "0000000000000000000000000000000000000000" ]; then
+        BASE_REF="${GITHUB_EVENT_BEFORE}"
     else
         BASE_REF="HEAD^"
     fi
