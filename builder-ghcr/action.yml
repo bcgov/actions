@@ -39,7 +39,7 @@ runs:
 
     - name: Diff Triggers
       id: diff
-      uses: ./.github/actions/diff-triggers
+      uses: bcgov/actions/diff-triggers@main
       with:
         triggers: ${{ inputs.triggers }}
 
