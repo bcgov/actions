@@ -72,7 +72,5 @@ echo -e "\tIssue: #${ISSUE_NUM}"
 echo -e "\tURL:   ${ISSUE_URL}"
 
 # Write outputs (useful even in dry runs)
-if [ -n "${INPUT_TOKEN:-}" ]; then
-  echo "issue_number=${ISSUE_NUM}" >> "${GITHUB_OUTPUT}"
-  echo "assignees=${ASSIGNEES}" >> "${GITHUB_OUTPUT}"
-fi
+echo "issue_number=${ISSUE_NUM}" >> "${GITHUB_OUTPUT}"
+echo "assignees=${ASSIGNEES}" >> "${GITHUB_OUTPUT}"
