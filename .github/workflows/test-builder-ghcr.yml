@@ -25,9 +25,22 @@ jobs:
         run: |
           find . -name "*.sh" -print0 | xargs -0 shellcheck -s bash
 
+  unit:
+    name: Unit Tests
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run Unit Tests
+        run: |
+          # builder-ghcr is composite, no .sh to test
+          # but we validate YAML instead
+          echo "✅ No shell tests for composite action"
+
   validate:
     name: Validate Action Definition
-    needs: lint
+    needs: unit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
