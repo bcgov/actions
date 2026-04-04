@@ -17,13 +17,14 @@ inputs:
 outputs:
   pr:
     description: "Associated pull request number"
-    value: "${{ steps.run_script.outputs.pr }}"
+    value: "${{ steps.vars.outputs.pr }}"
 
 runs:
   using: "composite"
   steps:
-    - name: Run Notifier
-      id: run_script
+    - uses: actions/checkout@v6
+
+    - id: vars
       shell: bash
       env:
         INPUT_TOKEN: "${{ inputs.token }}"

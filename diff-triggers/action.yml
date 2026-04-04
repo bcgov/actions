@@ -1,35 +1,51 @@
 name: 'Diff Triggers'
-description: 'Triggers a build based on file differences using git diff.'
+description: 'Check if changed files match trigger paths. Returns true if any trigger matches, false otherwise. Always returns true if triggers are omitted.'
+branding:
+  icon: package
+  color: blue
 
 inputs:
   triggers:
-    description: 'The files or directories to trigger a build'
-    required: true
+    description: "Paths used to trigger an event; e.g. ('./backend/' './frontend/'); always trigger if omitted"
+    required: false
   ref:
-    description: 'The ref to compare against (default: origin/main or HEAD~1)'
+    description: "Reference to compare against (e.g., 'main', 'HEAD^', commit SHA). Defaults to base repo default branch for PRs, or HEAD^ for non-PR events."
+    required: false
     default: ''
   annotations:
-    description: 'Whether to enable GitHub annotations'
+    description: "Emit workflow summary annotations for fired/not fired results"
+    required: false
     default: 'true'
+  debug:
+    description: "Enable debug logging"
+    required: false
+    default: 'false'
 
 outputs:
   triggered:
-    description: 'Whether the build was triggered'
+    description: "Boolean result of triggers"
     value: ${{ steps.diff.outputs.triggered }}
   base_ref:
-    description: 'The resolved base ref SHA'
+    description: "The resolved base ref SHA"
     value: ${{ steps.diff.outputs.base_ref }}
   head_ref:
-    description: 'The resolved head ref SHA'
+    description: "The resolved head ref SHA"
     value: ${{ steps.diff.outputs.head_ref }}
 
 runs:
   using: 'composite'
   steps:
+    - uses: actions/checkout@v6
+      with:
+        repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+        ref: ${{ github.event.pull_request.head.sha || github.ref }}
+        fetch-depth: ${{ github.event.pull_request && 1 || 0 }}
+
     - id: diff
       shell: bash
       env:
         INPUT_TRIGGERS: ${{ inputs.triggers }}
         INPUT_REF: ${{ inputs.ref }}
         INPUT_ANNOTATIONS: ${{ inputs.annotations }}
+        INPUT_DEBUG: ${{ inputs.debug }}
       run: bash ${{ github.action_path }}/action.sh
