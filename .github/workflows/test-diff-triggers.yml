@@ -23,9 +23,20 @@ jobs:
         run: |
           find . -name "*.sh" -print0 | xargs -0 shellcheck -s bash
 
+  unit:
+    name: Unit Tests
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run Unit Tests
+        run: |
+          bash diff-triggers/tests/unit.sh
+
   test-true:
     name: Test for True (triggered)
-    needs: lint
+    needs: unit
     outputs:
       triggered: ${{ steps.test.outputs.triggered }}
     runs-on: ubuntu-latest
@@ -39,7 +50,7 @@ jobs:
 
   test-false:
     name: Test for False (not triggered)
-    needs: lint
+    needs: unit
     outputs:
       triggered: ${{ steps.test.outputs.triggered }}
     runs-on: ubuntu-latest
@@ -53,7 +64,7 @@ jobs:
 
   test-omitted:
     name: Test for Omitted (no triggers)
-    needs: lint
+    needs: unit
     outputs:
       triggered: ${{ steps.test.outputs.triggered }}
     runs-on: ubuntu-latest

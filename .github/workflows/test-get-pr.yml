@@ -27,9 +27,20 @@ jobs:
         run: |
           find . -name "*.sh" -print0 | xargs -0 shellcheck -s bash
 
+  unit:
+    name: Unit Tests
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run Unit Tests
+        run: |
+          bash get-pr/tests/unit.sh
+
   dump-event:
     name: Event Details
-    needs: lint
+    needs: unit
     runs-on: ubuntu-latest
     steps:
       - name: Dump Event Details
@@ -42,7 +53,7 @@ jobs:
 
   get-pr:
     name: Get PR Number
-    needs: lint
+    needs: unit
     runs-on: ubuntu-latest
     outputs:
       pr: ${{ steps.vars.outputs.pr }}
@@ -54,7 +65,7 @@ jobs:
 
   verify-pr:
     name: Verify PR Number
-    needs: [lint, get-pr]
+    needs: [unit, get-pr]
     env:
       pr: ${{ needs.get-pr.outputs.pr }}
     runs-on: ubuntu-latest

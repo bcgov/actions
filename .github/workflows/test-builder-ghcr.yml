@@ -13,8 +13,21 @@ permissions:
   packages: write
 
 jobs:
+  lint:
+    name: Lint (ShellCheck)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run ShellCheck
+        run: |
+          find . -name "*.sh" -print0 | xargs -0 shellcheck -s bash
+
   validate:
     name: Validate Action Definition
+    needs: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

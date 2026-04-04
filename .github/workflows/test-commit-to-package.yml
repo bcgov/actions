@@ -24,9 +24,20 @@ jobs:
         run: |
           find . -name "*.sh" -print0 | xargs -0 shellcheck -s bash
 
+  unit:
+    name: Unit Tests
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run Unit Tests
+        run: |
+          bash commit-to-package/tests/unit.sh
+
   validate:
     name: Validate Action Definition
-    needs: lint
+    needs: unit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -46,7 +57,7 @@ jobs:
 
   dry-run:
     name: Dry Run Test
-    needs: validate
+    needs: unit
     runs-on: ubuntu-latest
     permissions:
       contents: read

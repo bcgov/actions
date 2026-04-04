@@ -18,10 +18,21 @@ jobs:
           # Find all .sh files (in root, skeleton, and sub-actions)
           # We're ignoringSC1091 (source follow) if you have local includes
           find . -name "*.sh" -print0 | xargs -0 shellcheck -s bash
+
+  unit:
+    name: Unit Tests
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run Unit Tests
+        run: |
+          bash workflow-notifier/tests/unit.sh
       
   test-notifier:
     name: Functional Test (Dry Run)
-    needs: lint
+    needs: unit
     runs-on: ubuntu-latest
     permissions:
       contents: read
