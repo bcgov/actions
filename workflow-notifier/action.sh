@@ -1,7 +1,10 @@
 #!/bin/bash
 set -euo pipefail
-set -x # X-Ray Vision: ON
-set -x # Enable X-ray vision for debugging
+
+# Enable debug tracing only when INPUT_DEBUG is true
+if [ "${INPUT_DEBUG:-false}" == "true" ]; then
+  set -x
+fi
 
 # Helper functions for consistency across all actions
 function log_debug() {

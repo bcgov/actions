@@ -35,8 +35,8 @@ jobs:
       - name: Run Unit Tests
         run: |
           # builder-ghcr is composite, no .sh to test
-          # but we validate YAML instead
-          echo "✅ No shell tests for composite action"
+          # Run skeleton tests as proxy for common patterns
+          bash skeleton/tests/unit.sh
 
   validate:
     name: Validate Action Definition
