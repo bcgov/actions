@@ -1,0 +1,29 @@
+name: 'Commit to Package'
+description: 'Traverses git history to find stable image SHAs in the registry. NOTE: Requires a git repository (actions/checkout) and authenticated Docker session.'
+
+inputs:
+  images:
+    description: 'Component to repo mapping (e.g. "frontend=ghcr.io/vexilon-web backend=...")'
+    required: true
+  max_depth:
+    description: 'Max commits to walk back'
+    default: '100'
+  debug:
+    description: 'Enable debug logging'
+    default: 'false'
+
+outputs:
+  bundle:
+    description: 'A JSON object mapping COMPONENT to verified SHA'
+    value: ${{ steps.walk.outputs.bundle }}
+
+runs:
+  using: 'composite'
+  steps:
+    - id: walk
+      shell: bash
+      env:
+        INPUT_IMAGES: ${{ inputs.images }}
+        INPUT_MAX_DEPTH: ${{ inputs.max_depth }}
+        INPUT_DEBUG: ${{ inputs.debug }}
+      run: bash ${{ github.action_path }}/action.sh
