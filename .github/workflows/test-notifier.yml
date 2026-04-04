@@ -8,9 +8,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
-  issues: write
+permissions: {}
 
 jobs:
   lint:
@@ -20,7 +18,7 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
-      
+
       - name: Run ShellCheck
         run: |
           find . -name "*.sh" -print0 | xargs -0 shellcheck -s bash
@@ -29,13 +27,15 @@ jobs:
     name: Unit Tests
     needs: lint
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v6
 
       - name: Run Unit Tests
         run: |
           bash workflow-notifier/tests/unit.sh
-      
+
   test-notifier:
     name: Functional Test (Dry Run)
     needs: unit
@@ -45,7 +45,7 @@ jobs:
       issues: write
     steps:
       - uses: actions/checkout@v6
-      
+
       - name: Dry Run - Simulate Failure Notification
         id: dry_run
         uses: ./workflow-notifier
@@ -54,20 +54,20 @@ jobs:
           title: "[DRY RUN] Simulating a failure for testing"
           body: "This is a dry run test of the notifier action."
           dry_run: true
-          
+
       - name: Verify Outputs
         run: |
           echo "Output: issue_number = ${{ steps.dry_run.outputs.issue_number }}"
           echo "Output: assignees    = ${{ steps.dry_run.outputs.assignees }}"
-          
+
           if [ "${{ steps.dry_run.outputs.issue_number }}" != "0" ]; then
             echo "::error ::Dry run should have returned issue_number 0"
             exit 1
           fi
-          
+
           if [ -z "${{ steps.dry_run.outputs.assignees }}" ]; then
             echo "::error ::No assignees detected (check .github/codeowners)"
             exit 1
           fi
-          
+
           echo "✅ All tests passed! Boss level achieved."

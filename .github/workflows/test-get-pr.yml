@@ -11,8 +11,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   lint:
@@ -31,6 +30,8 @@ jobs:
     name: Unit Tests
     needs: lint
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v6
 
@@ -55,6 +56,8 @@ jobs:
     name: Get PR Number
     needs: unit
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       pr: ${{ steps.vars.outputs.pr }}
     steps:
@@ -66,9 +69,9 @@ jobs:
   verify-pr:
     name: Verify PR Number
     needs: [unit, get-pr]
+    runs-on: ubuntu-latest
     env:
       pr: ${{ needs.get-pr.outputs.pr }}
-    runs-on: ubuntu-latest
     steps:
       - name: Verify PR Number
         run: |

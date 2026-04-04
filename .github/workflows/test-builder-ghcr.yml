@@ -8,9 +8,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
-  packages: write
+permissions: {}
 
 jobs:
   lint:
@@ -29,19 +27,21 @@ jobs:
     name: Unit Tests
     needs: lint
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v6
 
       - name: Run Unit Tests
         run: |
-          # builder-ghcr is composite, no .sh to test
-          # Run skeleton tests as proxy for common patterns
           bash skeleton/tests/unit.sh
 
   validate:
     name: Validate Action Definition
     needs: unit
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v6
 

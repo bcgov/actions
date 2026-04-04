@@ -8,8 +8,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   lint:
@@ -28,6 +27,8 @@ jobs:
     name: Unit Tests
     needs: lint
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v6
 
@@ -39,6 +40,8 @@ jobs:
     name: Validate Action Definition
     needs: unit
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v6
 
@@ -57,7 +60,7 @@ jobs:
 
   dry-run:
     name: Dry Run Test
-    needs: unit
+    needs: validate
     runs-on: ubuntu-latest
     permissions:
       contents: read

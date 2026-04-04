@@ -27,6 +27,8 @@ jobs:
     name: Unit Tests
     needs: lint
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v6
 
@@ -40,6 +42,8 @@ jobs:
     outputs:
       triggered: ${{ steps.test.outputs.triggered }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v6
 
@@ -54,6 +58,8 @@ jobs:
     outputs:
       triggered: ${{ steps.test.outputs.triggered }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v6
 
@@ -68,6 +74,8 @@ jobs:
     outputs:
       triggered: ${{ steps.test.outputs.triggered }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v6
 
