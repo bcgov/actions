@@ -9,6 +9,8 @@ permissions:
   contents: read
 
 jobs:
+  # Separate init job to discover node version from fixtures if necessary
+  # In this mono-repo, we can also simplify to matrix-wide node versions.
   test-matrix:
     name: ${{ matrix.name }}
     runs-on: ubuntu-24.04
@@ -57,8 +59,11 @@ jobs:
       - id: action
         uses: ./test-and-analyse
         with:
+          # RESTORED: Actually running the tests, not mocking them!
           commands: |
-            echo "Exercising test command: ${{ matrix.test_command }}"
+            set -e
+            npm ci
+            ${{ matrix.test_command }}
           dir: fixture/${{ matrix.dir }}
           repository: ${{ matrix.repository }}
           triggers: ${{ matrix.triggers }}
