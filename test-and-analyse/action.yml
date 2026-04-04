@@ -1,0 +1,75 @@
+name: 'Test and Analyse'
+description: 'Run node tests with optional SonarCloud and Knip analysis.'
+branding:
+  icon: 'check-square'
+  color: 'blue'
+
+inputs:
+  commands:
+    description: 'Commands to run tests'
+    required: true
+  dir:
+    description: 'App/package directory'
+    required: true
+  node_version:
+    description: 'Node version'
+    required: true
+  cache:
+    description: 'Package manager for caching'
+    default: 'npm'
+  sonar_token:
+    description: 'Sonar token'
+  sonar_args: 
+    description: 'SonarCloud arguments'
+  triggers:
+    description: 'Paths to trigger build'
+  supply_scan:
+    description: 'Enable supply chain attack detection'
+    default: 'true'
+  dep_scan:
+    description: 'Enable dependency analysis (Knip)'
+    default: 'warn'
+  knip_config:
+    description: 'Custom Knip config'
+
+outputs:
+  triggered:
+    description: 'Whether the action was triggered'
+    value: ${{ steps.diff.outputs.triggered }}
+
+runs:
+  using: 'composite'
+  steps:
+    - id: diff
+      uses: ./diff-triggers
+      with:
+        triggers: ${{ inputs.triggers }}
+
+    - name: Setup Node
+      if: steps.diff.outputs.triggered == 'true'
+      uses: actions/setup-node@v6
+      with:
+        node-version: ${{ inputs.node_version }}
+        cache: ${{ inputs.cache }}
+        cache-dependency-path: ${{ inputs.dir }}/package-lock.json
+
+    - id: walk
+      if: steps.diff.outputs.triggered == 'true'
+      shell: bash
+      env:
+        COMMANDS: ${{ inputs.commands }}
+        DIR: ${{ inputs.dir }}
+        SONAR_TOKEN: ${{ inputs.sonar_token }}
+        SONAR_ARGS: ${{ inputs.sonar_args }}
+        SUPPLY_SCAN: ${{ inputs.supply_scan }}
+        DEP_SCAN: ${{ inputs.dep_scan }}
+        KNIP_CONFIG: ${{ inputs.knip_config }}
+      run: "${{ github.action_path }}/action.sh"
+
+    - if: inputs.sonar_token && steps.diff.outputs.triggered == 'true'
+      uses: SonarSource/sonarqube-scan-action@a31c9398be7ace6bbfaf30c0bd5d415f843d45e9
+      env:
+        SONAR_TOKEN: ${{ inputs.sonar_token }}
+      with:
+        projectBaseDir: ${{ inputs.dir }}
+        args: ${{ inputs.sonar_args }}
