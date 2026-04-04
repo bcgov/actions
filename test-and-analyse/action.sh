@@ -48,9 +48,9 @@ if [[ "$DEP_SCAN" != "off" ]]; then
     CONFIG_ARG="--config=$RUNNER_TEMP/.knip.json --no-config-hints"
   fi
 
-  # Run knip with JSON output
+  # Run npx knip with JSON output
   set +e
-  DOTENV_CONFIG_QUIET=true knip --dependencies --exports --reporter json --no-progress "$CONFIG_ARG" > knip-output.json
+  DOTENV_CONFIG_QUIET=true npx knip --dependencies --exports --reporter json --no-progress "$CONFIG_ARG" > knip-output.json
   KNIP_RES=$?
   set -e
 
