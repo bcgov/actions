@@ -41,6 +41,10 @@ if [[ "$DEP_SCAN" != "off" ]]; then
   echo "::group::Dependency Analysis (Knip)"
   pushd "$DIR"
 
+  # Stage default config into temp
+  mkdir -p "$RUNNER_TEMP"
+  cp "$GITHUB_ACTION_PATH/default-knip.json" "$RUNNER_TEMP/.knip.json"
+
   # Determine config
   if [[ -n "$KNIP_CONFIG" ]]; then
     CONFIG_ARG="--config=$GITHUB_WORKSPACE/$KNIP_CONFIG"
@@ -50,7 +54,7 @@ if [[ "$DEP_SCAN" != "off" ]]; then
 
   # Run npx knip with JSON output
   set +e
-  DOTENV_CONFIG_QUIET=true npx knip --dependencies --exports --reporter json --no-progress "$CONFIG_ARG" > knip-output.json
+  DOTENV_CONFIG_QUIET=true npx knip --dependencies --exports --reporter json --no-progress $CONFIG_ARG > knip-output.json
   KNIP_RES=$?
   set -e
 
