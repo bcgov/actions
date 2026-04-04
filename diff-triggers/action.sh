@@ -54,10 +54,12 @@ if [[ -n "$MATCHED_LIST" ]]; then
     if [[ "$ANNOTATIONS_ENABLED" == "true" ]]; then
         echo "::notice title=Diff Triggers::✅ Diff Triggers fired. ($GITHUB_REPOSITORY)"
     fi
-    echo "triggered=true" >> "$GITHUB_OUTPUT"
-    # Exporting refs for forensic walker support (PR #13 prep)
-    echo "base_ref=$(git rev-parse "$COMPARE_REF")" >> "$GITHUB_OUTPUT"
-    echo "head_ref=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+    { 
+      echo "triggered=true"
+      # Exporting refs for forensic walker support (PR #13 prep)
+      echo "base_ref=$(git rev-parse "$COMPARE_REF")"
+      echo "head_ref=$(git rev-parse HEAD)"
+    } >> "$GITHUB_OUTPUT"
 else
     if [[ "$ANNOTATIONS_ENABLED" == "true" ]]; then
         echo "::notice title=Diff Triggers::ℹ️ Diff Triggers not fired. ($GITHUB_REPOSITORY)"
