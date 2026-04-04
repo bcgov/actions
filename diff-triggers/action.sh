@@ -25,24 +25,24 @@ while IFS= read -r line; do
 done < <(grep -o "'[^']*'" <<< "$TRIGGERS_STR" | sed "s/'//g")
 
 # Resolve the base ref to compare against
+# PR events: default to base repo default branch if ref omitted
+# Non-PR events: default to HEAD^ if ref omitted
 if [[ -z "$COMPARE_REF" ]]; then
     if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
-        # Use PR base if available (matching ancestor behavior)
-        COMPARE_REF="origin/$GITHUB_BASE_REF"
+        COMPARE_REF="$GITHUB_BASE_REF"
     else
-        COMPARE_REF="HEAD~1"
+        COMPARE_REF="HEAD^"
     fi
 fi
 
-# Analyze changes
+# Analyze changes - match the original approach
 MATCHED_LIST=""
 TRIGGERED=false
 
 for t in "${TRIGGERS[@]}"; do
-    # Use name-only check for performance parity
-    if git diff --quiet "$COMPARE_REF" HEAD -- "$t"; then
-        continue
-    else
+    # Use name-only check (captures output to handle non-existent paths properly)
+    DIFF_OUTPUT=$(git diff "$COMPARE_REF" --name-only -- "$t" 2>/dev/null || true)
+    if [[ -n "$DIFF_OUTPUT" ]]; then
         TRIGGERED=true
         MATCHED_LIST="$MATCHED_LIST $t"
     fi
