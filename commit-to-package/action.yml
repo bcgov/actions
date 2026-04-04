@@ -13,9 +13,9 @@ inputs:
     default: 'false'
 
 outputs:
-  bundle_shas:
-    description: 'A space-separated list of COMPONENT=SHA mappings'
-    value: ${{ steps.walk.outputs.bundle_shas }}
+  bundle:
+    description: 'A JSON object mapping COMPONENT to verified SHA'
+    value: ${{ steps.walk.outputs.bundle }}
 
 runs:
   using: 'composite'

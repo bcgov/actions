@@ -76,7 +76,24 @@ fi
 
 echo "::endgroup::"
 
+# Building the JSON object using native Bash strings (Zero dependencies!)
+FOUND_JSON="{"
+for component in "${!IMAGE_REPOS[@]}"; do
+    # Check if we actually found a SHA for this component
+    for found in $FOUND_BUNDLE; do
+        if [[ "$found" == "$component="* ]]; then
+            sha="${found#*=}"
+            FOUND_JSON="${FOUND_JSON}\"$component\": \"$sha\", "
+            break
+        fi
+    done
+done
+
+# Trim trailing comma and close JSON
+FOUND_JSON="${FOUND_JSON%, }}"
+echo "::endgroup::"
+
 # Output the result
 {
-  echo "bundle_shas=${FOUND_BUNDLE% }"
+  echo "bundle=${FOUND_JSON:-{}}"
 } >> "$GITHUB_OUTPUT"
