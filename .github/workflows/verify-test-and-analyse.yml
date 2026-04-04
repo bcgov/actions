@@ -5,6 +5,9 @@ on:
       - "test-and-analyse/**"
       - ".github/workflows/verify-test-and-analyse.yml"
 
+permissions:
+  contents: read
+
 jobs:
   test-matrix:
     name: ${{ matrix.name }}
@@ -15,34 +18,48 @@ jobs:
         include:
           - name: backend-triggered
             dir: backend
-            triggers: "('.')"
+            triggers: "('\x27.\x27')"
             expected_triggered: "true"
             dep_scan: error
             test_command: npm run test:cov
             repository: bcgov/quickstart-openshift
           - name: backend-not-triggered
             dir: backend
-            triggers: "('backend/')"
+            triggers: "('\x27backend/\x27')"
             expected_triggered: "false"
             dep_scan: error
             test_command: npm run test:cov
             repository: bcgov/quickstart-openshift
+          - name: frontend-basic
+            dir: frontend
+            triggers: "('\x27.\x27')"
+            expected_triggered: "true"
+            dep_scan: warn
+            test_command: npm run test:cov
+            repository: bcgov/quickstart-openshift
+          - name: waste-plus-scan
+            dir: frontend
+            triggers: "('\x27.\x27')"
+            expected_triggered: "true"
+            dep_scan: warn
+            test_command: echo "Testing Knip on Waste Plus"
+            repository: bcgov/nr-waste-plus
 
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Initialize
-        id: init
-        run: |
-          # Create a fake package.json for engines check if needed
-          echo "{"engines":{"node":"22"}}" > package.json
+
+      - name: Clone Test Fixture (${{ matrix.repository }})
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ matrix.repository }}
+          path: fixture
 
       - id: action
         uses: ./test-and-analyse
         with:
           commands: |
-            echo "Mocking test command: ${{ matrix.test_command }}"
-          dir: ${{ matrix.dir }}
+            echo "Exercising test command: ${{ matrix.test_command }}"
+          dir: fixture/${{ matrix.dir }}
           repository: ${{ matrix.repository }}
           triggers: ${{ matrix.triggers }}
           dep_scan: ${{ matrix.dep_scan }}
