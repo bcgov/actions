@@ -8,9 +8,13 @@ TRIGGERS_STR="${INPUT_TRIGGERS:-}"
 COMPARE_REF="${INPUT_REF:-}"
 ANNOTATIONS_ENABLED="${INPUT_ANNOTATIONS:-true}"
 
+# Always fire if triggers are omitted (matching original behavior)
 if [[ -z "$TRIGGERS_STR" ]]; then
-  echo "::error::No triggers provided. Please set the 'triggers' input."
-  exit 1
+  echo "triggered=true" >> "$GITHUB_OUTPUT"
+  if [[ "$ANNOTATIONS_ENABLED" == "true" ]]; then
+    echo "::notice title=Diff Triggers::✅ Diff Triggers fired. (triggers omitted — always fires)"
+  fi
+  exit 0
 fi
 
 # RESTORED: Parse triggers exactly like the original high-performance baseline

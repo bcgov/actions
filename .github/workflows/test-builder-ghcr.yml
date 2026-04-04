@@ -72,9 +72,9 @@ jobs:
         id: dry_run
         uses: ./builder-ghcr
         with:
-          package: test
+          package: builder-ghcr
           tag_fallback: test
-          triggers: ('test/')
+          triggers: ('builder-ghcr/')
 
       - name: Verify Outputs
         run: |
