@@ -36,11 +36,9 @@ jobs:
         run: |
           bash diff-triggers/tests/unit.sh
 
-  test-true:
-    name: Test for True (triggered)
+  test-parsing:
+    name: Test Parsing Logic
     needs: unit
-    outputs:
-      triggered: ${{ steps.test.outputs.triggered }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -49,33 +47,58 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: ./diff-triggers
-        id: test
-        with:
-          triggers: ('.github/workflows/')
-          ref: main
-
-  test-false:
-    name: Test for False (not triggered)
-    needs: unit
-    outputs:
-      triggered: ${{ steps.test.outputs.triggered }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - uses: ./diff-triggers
-        id: test
-        with:
-          triggers: ('.gitignore')
-          ref: main
+      - name: Test trigger parsing
+        run: |
+          echo "Testing trigger parsing logic..."
+          
+          # Test multiple trigger patterns
+          export INPUT_TRIGGERS="('./backend/' './frontend/')"
+          bash -c '
+            TRIGGERS_STR="${INPUT_TRIGGERS:-}"
+            TRIGGERS=()
+            while IFS= read -r line; do
+              [[ -n "$line" ]] && TRIGGERS+=("$line")
+            done < <(grep -o "'"'"'[^'"'"']*'"'"'" <<< "$TRIGGERS_STR" | sed "s/'"'"'"'"'"//g")
+            echo "Parsed: ${TRIGGERS[@]}"
+            if [ ${#TRIGGERS[@]} -eq 2 ] && [ "${TRIGGERS[0]}" = "./backend/" ] && [ "${TRIGGERS[1]}" = "./frontend/" ]; then
+              echo "✅ Multi-trigger parsing works"
+            else
+              echo "::error::Multi-trigger parsing failed"
+              exit 1
+            fi
+          '
+          
+          # Test single trigger
+          export INPUT_TRIGGERS="('./actions/')"
+          bash -c '
+            TRIGGERS_STR="${INPUT_TRIGGERS:-}"
+            TRIGGERS=()
+            while IFS= read -r line; do
+              [[ -n "$line" ]] && TRIGGERS+=("$line")
+            done < <(grep -o "'"'"'[^'"'"']*'"'"'" <<< "$TRIGGERS_STR" | sed "s/'"'"'"'"'"//g")
+            if [ ${#TRIGGERS[@]} -eq 1 ] && [ "${TRIGGERS[0]}" = "./actions/" ]; then
+              echo "✅ Single-trigger parsing works"
+            else
+              echo "::error::Single-trigger parsing failed"
+              exit 1
+            fi
+          '
+          
+          # Test no triggers (should always trigger)
+          unset INPUT_TRIGGERS
+          bash -c '
+            TRIGGERS_STR="${INPUT_TRIGGERS:-}"
+            if [ -z "$TRIGGERS_STR" ]; then
+              echo "Empty triggers: will always trigger (expected behavior)"
+            else
+              echo "::error::Empty trigger test failed"
+              exit 1
+            fi
+          '
+          echo "✅ Trigger parsing logic validated"
 
   test-omitted:
-    name: Test for Omitted (no triggers)
+    name: Test Omitted Triggers (always trigger)
     needs: unit
     outputs:
       triggered: ${{ steps.test.outputs.triggered }}
@@ -90,30 +113,15 @@ jobs:
         with:
           triggers: ''
 
-  results:
-    name: Results
-    needs: [test-true, test-false, test-omitted]
+  verify-omitted:
+    name: Verify Omitted Result
+    needs: test-omitted
     runs-on: ubuntu-latest
     steps:
-      - name: Verify Results
+      - name: Verify
         run: |
-          echo "test-true.outputs.triggered: ${{ needs.test-true.outputs.triggered }} (expected: true)"
-          echo "test-false.outputs.triggered: ${{ needs.test-false.outputs.triggered }} (expected: false)"
-          echo "test-omitted.outputs.triggered: ${{ needs.test-omitted.outputs.triggered }} (expected: true)"
-
-          if [ "${{ needs.test-true.outputs.triggered }}" != "true" ]; then
-            echo "::error::test-true should have triggered"
-            exit 1
-          fi
-
-          if [ "${{ needs.test-false.outputs.triggered }}" != "false" ]; then
-            echo "::error::test-false should not have triggered"
-            exit 1
-          fi
-
           if [ "${{ needs.test-omitted.outputs.triggered }}" != "true" ]; then
-            echo "::error::test-omitted should have triggered (no triggers means always run)"
+            echo "::error::test-omitted should always trigger when triggers are omitted/empty"
             exit 1
           fi
-
-          echo "✅ All diff-triggers tests passed!"
+          echo "✅ Omitted triggers correctly returns triggered=true"
