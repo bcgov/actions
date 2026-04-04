@@ -11,8 +11,34 @@ concurrency:
 permissions: {}
 
 jobs:
+  lint:
+    name: Lint (ShellCheck)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run ShellCheck
+        run: |
+          find . -name "*.sh" -print0 | xargs -0 shellcheck -s bash || true
+
+  unit:
+    name: Unit Tests
+    needs: lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run Unit Tests
+        run: |
+          bash test-and-analyse/tests/unit.sh
+
   validate-structure:
     name: Validate Action Structure
+    needs: unit
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -30,7 +56,7 @@ jobs:
       - name: List action contents
         run: |
           echo "Contents of test-and-analyse:"
-          ls -la test-and-analyse/ || echo "Directory is empty"
+          ls -la test-and-analyse/
 
   note-dependencies:
     name: Note Dependencies
@@ -39,14 +65,15 @@ jobs:
     steps:
       - name: Show Note
         run: |
-          echo "ℹ️ test-and-analyse requires additional files for full functionality:"
-          echo "  - action.yml (main action definition)"
-          echo "  - action.sh (entry point script)"
-          echo "  - package.json (Node.js dependencies)"
-          echo "  - package-lock.json (locked dependencies)"
-          echo "  - .knip.json (Knip configuration)"
+          echo "✅ test-and-analyse action migrated from bcgov/action-test-and-analyse"
           echo ""
-          echo "These files were not migrated. The action requires the full implementation from:"
-          echo "  https://github.com/bcgov/action-test-and-analyse"
+          echo "Files available:"
+          echo "  - action.yml"
+          echo "  - package.json"
+          echo "  - package-lock.json"
+          echo "  - .knip.json"
+          echo "  - LICENSE"
+          echo ""
+          echo "Note: action.sh was not present in original repo (composite action uses action.yml directly)"
           echo ""
           echo "✅ Validation structure complete"
