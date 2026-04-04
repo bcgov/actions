@@ -1,0 +1,37 @@
+name: Verify PR Description Add
+on:
+  pull_request:
+    paths:
+      - "pr-description-add/**"
+      - ".github/workflows/verify-pr-description-add.yml"
+
+jobs:
+  test:
+    name: Test Action (Local)
+    runs-on: ubuntu-24.04
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # Test action against the current PR
+      - name: Append Test Content
+        uses: ./pr-description-add
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          add_markdown: |
+            ---
+            ### Automated Verification Test ✅
+            - [x] Logic Refactor: **Bash-First**
+            - [ ] External Dependencies: **Zero**
+
+      # Verify idempotency (should not duplicate)
+      - name: Verify Idempotency
+        uses: ./pr-description-add
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          add_markdown: |
+            ---
+            ### Automated Verification Test ✅
+            - [x] Logic Refactor: **Bash-First**
+            - [ ] External Dependencies: **Zero**
