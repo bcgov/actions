@@ -46,11 +46,13 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - uses: ./diff-triggers
         id: test
         with:
-          triggers: ('.github/' 'action.yml' '.md')
+          triggers: ('.github/workflows/')
 
   test-false:
     name: Test for False (not triggered)
@@ -62,11 +64,13 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - uses: ./diff-triggers
         id: test
         with:
-          triggers: ('path/to/nowhere')
+          triggers: ('.gitignore')
 
   test-omitted:
     name: Test for Omitted (no triggers)
