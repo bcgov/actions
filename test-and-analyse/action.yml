@@ -59,6 +59,7 @@ runs:
       env:
         COMMANDS: ${{ inputs.commands }}
         DIR: ${{ inputs.dir }}
+        CACHE: ${{ inputs.cache }}
         SONAR_TOKEN: ${{ inputs.sonar_token }}
         SONAR_ARGS: ${{ inputs.sonar_args }}
         SUPPLY_SCAN: ${{ inputs.supply_scan }}

@@ -7,20 +7,35 @@ set -euo pipefail
 echo "::group::Environment Information"
 echo "Running Test & Analysis for component in: $DIR"
 echo "Node version: $(node --version)"
+echo "::endgroup::"
+
 # 1. Supply Chain Protection
 if [[ "$SUPPLY_SCAN" == "true" ]]; then
-  echo "::group::Supply Chain Scan (Safe-Chain)"
-  # Ensure tools are installed (Should be pre-installed in runner or by composite)
-  safe-chain setup-ci
-  echo "::endgroup::"
+  if command -v safe-chain >/dev/null 2>&1; then
+    echo "::group::Supply Chain Scan (Safe-Chain)"
+    safe-chain setup-ci
+    echo "::endgroup::"
+  else
+    echo "::warning::safe-chain not found; skipping supply chain scan."
+  fi
 fi
 
 # 2. Run Tests
 echo "::group::Running Component Tests"
 pushd "$DIR"
-npm install
-eval "$COMMANDS"
+
+# Determine package manager and run deterministic install based on user choice
+case "$CACHE" in
+  yarn) yarn install --frozen-lockfile ;;
+  pnpm) pnpm install --frozen-lockfile ;;
+  *)    npm ci ;;
+esac
+
+# Execute user commands with secure shell invocation (Upgrade from eval)
+bash -lc "$COMMANDS"
 popd
+echo "::endgroup::"
+
 # 3. Dependency Analysis (Knip)
 if [[ "$DEP_SCAN" != "off" ]]; then
   echo "::group::Dependency Analysis (Knip)"
