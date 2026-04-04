@@ -13,24 +13,36 @@ inputs:
     required: true
   node_version:
     description: 'Node version'
-    required: true
+    required: false
+    default: '22'
+  repository:
+    description: 'The repository to analyze'
+    required: false
+    default: ${{ github.repository }}
   cache:
     description: 'Package manager for caching'
+    required: false
     default: 'npm'
   sonar_token:
     description: 'Sonar token'
+    required: false
   sonar_args: 
     description: 'SonarCloud arguments'
+    required: false
   triggers:
     description: 'Paths to trigger build'
+    required: false
   supply_scan:
     description: 'Enable supply chain attack detection'
+    required: false
     default: 'true'
   dep_scan:
     description: 'Enable dependency analysis (Knip)'
+    required: false
     default: 'warn'
   knip_config:
     description: 'Custom Knip config'
+    required: false
 
 outputs:
   triggered:
@@ -47,7 +59,7 @@ runs:
 
     - name: Setup Node
       if: steps.diff.outputs.triggered == 'true'
-      uses: actions/setup-node@v6
+      uses: actions/setup-node@v4
       with:
         node-version: ${{ inputs.node_version }}
         cache: ${{ inputs.cache }}
@@ -65,6 +77,7 @@ runs:
         SUPPLY_SCAN: ${{ inputs.supply_scan }}
         DEP_SCAN: ${{ inputs.dep_scan }}
         KNIP_CONFIG: ${{ inputs.knip_config }}
+        REPOSITORY: ${{ inputs.repository }}
       run: "${{ github.action_path }}/action.sh"
 
     - if: inputs.sonar_token && steps.diff.outputs.triggered == 'true'
