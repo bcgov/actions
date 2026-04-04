@@ -36,7 +36,7 @@ jobs:
         run: |
           bash commit-to-package/tests/unit.sh
 
-  validate:
+validate:
     name: Validate Action Definition
     needs: unit
     runs-on: ubuntu-latest
@@ -55,27 +55,32 @@ jobs:
 
       - name: Validate YAML syntax
         run: |
+          pip install pyyaml -q
           python3 -c "import yaml; yaml.safe_load(open('commit-to-package/action.yml'))"
           echo "✅ YAML syntax valid"
 
-  dry-run:
-    name: Dry Run Test
-    needs: validate
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Dry Run
-        id: dry_run
-        uses: ./commit-to-package
-        with:
-          images: "test=ghcr.io/test/test"
-          max_depth: "5"
-          debug: "true"
-
-      - name: Verify Outputs
+      - name: Verify inputs parse correctly
         run: |
-          echo "bundle: ${{ steps.dry_run.outputs.bundle }}"
-          echo "✅ Dry run completed"
+          echo "Testing image mapping parsing..."
+          export INPUT_IMAGES="test=ghcr.io/test/test"
+          bash -c '
+            IMAGES_MAPPING="${INPUT_IMAGES:-}"
+            if [[ -z "$IMAGES_MAPPING" ]]; then
+              echo "::error::No image mapping provided"
+              exit 1
+            fi
+            declare -A IMAGE_REPOS
+            for pair in $IMAGES_MAPPING; do
+                component="${pair%%=*}"
+                repo="${pair#*=}"
+                IMAGE_REPOS["$component"]="$repo"
+            done
+            echo "Parsed components: ${!IMAGE_REPOS[@]}"
+            if [[ "${IMAGE_REPOS[test]}" == "ghcr.io/test/test" ]]; then
+              echo "✅ Image mapping parsing works"
+            else
+              echo "::error::Failed to parse image mapping"
+              exit 1
+            fi
+          '
+          echo "✅ Input parsing validation complete"

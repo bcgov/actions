@@ -59,3 +59,6 @@ else
         echo "::notice title=Diff Triggers::ℹ️ Diff Triggers not fired."
     fi
 fi
+
+echo "base_ref=${COMPARE_REF}" >> "$GITHUB_OUTPUT"
+echo "head_ref=${GITHUB_REF}" >> "$GITHUB_OUTPUT"

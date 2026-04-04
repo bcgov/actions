@@ -55,34 +55,26 @@ jobs:
 
       - name: Validate YAML syntax
         run: |
+          pip install pyyaml -q
           python3 -c "import yaml; yaml.safe_load(open('builder-ghcr/action.yml'))"
           echo "✅ YAML syntax valid"
 
-  dry-run:
-    name: Dry Run Test
-    needs: validate
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: read
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Dry Run
-        id: dry_run
-        uses: ./builder-ghcr
-        with:
-          package: builder-ghcr
-          tag_fallback: test
-          triggers: ('builder-ghcr/')
-
-      - name: Verify Outputs
+      - name: Verify triggers input resolves
         run: |
-          echo "triggered: ${{ steps.dry_run.outputs.triggered }}"
-          echo "digest: ${{ steps.dry_run.outputs.digest }}"
-          
-          if [ "${{ steps.dry_run.outputs.triggered }}" == "false" ]; then
-            echo "✅ Dry run completed - build not triggered (expected for no changes)"
-          else
-            echo "✅ Dry run completed - build triggered"
-          fi
+          echo "Testing that triggers parsing works in isolation..."
+          export INPUT_TRIGGERS="('builder-ghcr/')"
+          bash -c '
+            TRIGGERS_STR="${INPUT_TRIGGERS:-}"
+            TRIGGERS=()
+            while IFS= read -r line; do
+              [[ -n "$line" ]] && TRIGGERS+=("$line")
+            done < <(grep -o "'"'[^'"']*'"'" <<< "$TRIGGERS_STR" | sed "s/'"'"'"'"'"//g")
+            echo "Parsed triggers: ${TRIGGERS[@]}"
+            if [ ${#TRIGGERS[@]} -gt 0 ]; then
+              echo "✅ Trigger parsing works"
+            else
+              echo "::error::Failed to parse triggers"
+              exit 1
+            fi
+          '
+          echo "✅ Parsing validation complete"

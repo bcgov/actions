@@ -53,6 +53,7 @@ jobs:
         id: test
         with:
           triggers: ('.github/workflows/')
+          ref: main
 
   test-false:
     name: Test for False (not triggered)
@@ -71,6 +72,7 @@ jobs:
         id: test
         with:
           triggers: ('.gitignore')
+          ref: main
 
   test-omitted:
     name: Test for Omitted (no triggers)
@@ -85,6 +87,8 @@ jobs:
 
       - uses: ./diff-triggers
         id: test
+        with:
+          triggers: ''
 
   results:
     name: Results
