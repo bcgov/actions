@@ -59,22 +59,7 @@ jobs:
           python3 -c "import yaml; yaml.safe_load(open('builder-ghcr/action.yml'))"
           echo "✅ YAML syntax valid"
 
-      - name: Verify triggers input resolves
+      - name: Verify parsing via unit tests
         run: |
-          echo "Testing that triggers parsing works in isolation..."
-          export INPUT_TRIGGERS="('builder-ghcr/')"
-          bash -c '
-            TRIGGERS_STR="${INPUT_TRIGGERS:-}"
-            TRIGGERS=()
-            while IFS= read -r line; do
-              [[ -n "$line" ]] && TRIGGERS+=("$line")
-            done < <(grep -o "'"'[^'"']*'"'" <<< "$TRIGGERS_STR" | sed "s/'"'"'"'"'"//g")
-            echo "Parsed triggers: ${TRIGGERS[@]}"
-            if [ ${#TRIGGERS[@]} -gt 0 ]; then
-              echo "✅ Trigger parsing works"
-            else
-              echo "::error::Failed to parse triggers"
-              exit 1
-            fi
-          '
-          echo "✅ Parsing validation complete"
+          cd diff-triggers
+          bash tests/unit.sh

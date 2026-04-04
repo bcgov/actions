@@ -49,53 +49,11 @@ jobs:
 
       - name: Test trigger parsing
         run: |
-          echo "Testing trigger parsing logic..."
-          
-          # Test multiple trigger patterns
-          export INPUT_TRIGGERS="('./backend/' './frontend/')"
+          cd diff-triggers
           bash -c '
-            TRIGGERS_STR="${INPUT_TRIGGERS:-}"
-            TRIGGERS=()
-            while IFS= read -r line; do
-              [[ -n "$line" ]] && TRIGGERS+=("$line")
-            done < <(grep -o "'"'"'[^'"'"']*'"'"'" <<< "$TRIGGERS_STR" | sed "s/'"'"'"'"'"//g")
-            echo "Parsed: ${TRIGGERS[@]}"
-            if [ ${#TRIGGERS[@]} -eq 2 ] && [ "${TRIGGERS[0]}" = "./backend/" ] && [ "${TRIGGERS[1]}" = "./frontend/" ]; then
-              echo "✅ Multi-trigger parsing works"
-            else
-              echo "::error::Multi-trigger parsing failed"
-              exit 1
-            fi
+            # Call unit tests which include trigger parsing tests
+            bash tests/unit.sh
           '
-          
-          # Test single trigger
-          export INPUT_TRIGGERS="('./actions/')"
-          bash -c '
-            TRIGGERS_STR="${INPUT_TRIGGERS:-}"
-            TRIGGERS=()
-            while IFS= read -r line; do
-              [[ -n "$line" ]] && TRIGGERS+=("$line")
-            done < <(grep -o "'"'"'[^'"'"']*'"'"'" <<< "$TRIGGERS_STR" | sed "s/'"'"'"'"'"//g")
-            if [ ${#TRIGGERS[@]} -eq 1 ] && [ "${TRIGGERS[0]}" = "./actions/" ]; then
-              echo "✅ Single-trigger parsing works"
-            else
-              echo "::error::Single-trigger parsing failed"
-              exit 1
-            fi
-          '
-          
-          # Test no triggers (should always trigger)
-          unset INPUT_TRIGGERS
-          bash -c '
-            TRIGGERS_STR="${INPUT_TRIGGERS:-}"
-            if [ -z "$TRIGGERS_STR" ]; then
-              echo "Empty triggers: will always trigger (expected behavior)"
-            else
-              echo "::error::Empty trigger test failed"
-              exit 1
-            fi
-          '
-          echo "✅ Trigger parsing logic validated"
 
   test-omitted:
     name: Test Omitted Triggers (always trigger)
