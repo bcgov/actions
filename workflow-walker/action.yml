@@ -1,0 +1,29 @@
+name: 'Forensic Workflow Walker'
+description: 'Traverses git history to find stable image SHAs in the registry.'
+
+inputs:
+  images:
+    description: 'Component to repo mapping (e.g. "frontend=ghcr.io/vexilon-web backend=...")'
+    required: true
+  max_depth:
+    description: 'Max commits to walk back'
+    default: '100'
+  debug:
+    description: 'Enable debug logging'
+    default: 'false'
+
+outputs:
+  bundle_shas:
+    description: 'A space-separated list of COMPONENT=SHA mappings'
+    value: ${{ steps.walk.outputs.bundle_shas }}
+
+runs:
+  using: 'composite'
+  steps:
+    - id: walk
+      shell: bash
+      env:
+        INPUT_IMAGES: ${{ inputs.images }}
+        INPUT_MAX_DEPTH: ${{ inputs.max_depth }}
+        INPUT_DEBUG: ${{ inputs.debug }}
+      run: bash ${{ github.action_path }}/action.sh
