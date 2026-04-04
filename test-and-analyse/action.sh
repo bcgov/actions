@@ -35,8 +35,7 @@ if [[ "$DEP_SCAN" != "off" ]]; then
 
   # Run knip with JSON output
   set +e
-  DOTENV_CONFIG_QUIET=true knip --dependencies --exports --reporter json --no-progress $CONFIG_ARG > knip-output.json
-  KNIP_EXIT_CODE=$?
+  DOTENV_CONFIG_QUIET=true knip --dependencies --exports --reporter json --no-progress "$CONFIG_ARG" > knip-output.json
   set -e
 
   # Reporting logic summarized here...
