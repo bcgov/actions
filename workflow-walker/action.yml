@@ -1,5 +1,5 @@
 name: 'Forensic Workflow Walker'
-description: 'Traverses git history to find stable image SHAs in the registry.'
+description: 'Traverses git history to find stable image SHAs in the registry. NOTE: Requires a git repository (actions/checkout) and authenticated Docker session.'
 
 inputs:
   images:

@@ -17,6 +17,17 @@ if [[ -z "$IMAGES_MAPPING" ]]; then
   exit 1
 fi
 
+# Pre-flight Checks (Forensic Safeguards)
+if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+  echo "::error::Workflow Walker requires a git repository. Please ensure 'actions/checkout' was called before this action."
+  exit 1
+fi
+
+if ! docker version > /dev/null 2>&1; then
+  echo "::error::Workflow Walker requires Docker. Please ensure Docker is installed and functional on the runner."
+  exit 1
+fi
+
 echo "Group: Workflow Walker — Forensic History Traversal"
 
 # Parse the mapping into an associative array (requires Bash 4+)
