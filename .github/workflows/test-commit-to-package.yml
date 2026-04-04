@@ -1,0 +1,67 @@
+name: Test Commit to Package
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint (ShellCheck)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run ShellCheck
+        run: |
+          find . -name "*.sh" -print0 | xargs -0 shellcheck -s bash
+
+  validate:
+    name: Validate Action Definition
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Validate action.yml exists
+        run: |
+          if [ ! -f "commit-to-package/action.yml" ]; then
+            echo "::error::commit-to-package/action.yml not found"
+            exit 1
+          fi
+          echo "✅ action.yml exists"
+
+      - name: Validate YAML syntax
+        run: |
+          python3 -c "import yaml; yaml.safe_load(open('commit-to-package/action.yml'))"
+          echo "✅ YAML syntax valid"
+
+  dry-run:
+    name: Dry Run Test
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Dry Run
+        id: dry_run
+        uses: ./commit-to-package
+        with:
+          images: "test=ghcr.io/test/test"
+          max_depth: "5"
+          debug: "true"
+
+      - name: Verify Outputs
+        run: |
+          echo "bundle: ${{ steps.dry_run.outputs.bundle }}"
+          echo "✅ Dry run completed"

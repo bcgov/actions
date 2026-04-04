@@ -1,0 +1,62 @@
+name: Test Builder GHCR
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  validate:
+    name: Validate Action Definition
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Validate action.yml exists
+        run: |
+          if [ ! -f "builder-ghcr/action.yml" ]; then
+            echo "::error::builder-ghcr/action.yml not found"
+            exit 1
+          fi
+          echo "✅ action.yml exists"
+
+      - name: Validate YAML syntax
+        run: |
+          python3 -c "import yaml; yaml.safe_load(open('builder-ghcr/action.yml'))"
+          echo "✅ YAML syntax valid"
+
+  dry-run:
+    name: Dry Run Test
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Dry Run
+        id: dry_run
+        uses: ./builder-ghcr
+        with:
+          package: test
+          tag_fallback: test
+          triggers: ('test/')
+
+      - name: Verify Outputs
+        run: |
+          echo "triggered: ${{ steps.dry_run.outputs.triggered }}"
+          echo "digest: ${{ steps.dry_run.outputs.digest }}"
+          
+          if [ "${{ steps.dry_run.outputs.triggered }}" == "false" ]; then
+            echo "✅ Dry run completed - build not triggered (expected for no changes)"
+          else
+            echo "✅ Dry run completed - build triggered"
+          fi

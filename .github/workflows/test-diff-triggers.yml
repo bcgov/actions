@@ -1,0 +1,92 @@
+name: Test Diff Triggers
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  lint:
+    name: Lint (ShellCheck)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run ShellCheck
+        run: |
+          find . -name "*.sh" -print0 | xargs -0 shellcheck -s bash
+
+  test-true:
+    name: Test for True (triggered)
+    needs: lint
+    outputs:
+      triggered: ${{ steps.test.outputs.triggered }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ./diff-triggers
+        id: test
+        with:
+          triggers: ('.github/' 'action.yml' '.md')
+
+  test-false:
+    name: Test for False (not triggered)
+    needs: lint
+    outputs:
+      triggered: ${{ steps.test.outputs.triggered }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ./diff-triggers
+        id: test
+        with:
+          triggers: ('path/to/nowhere')
+
+  test-omitted:
+    name: Test for Omitted (no triggers)
+    needs: lint
+    outputs:
+      triggered: ${{ steps.test.outputs.triggered }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ./diff-triggers
+        id: test
+
+  results:
+    name: Results
+    needs: [test-true, test-false, test-omitted]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify Results
+        run: |
+          echo "test-true.outputs.triggered: ${{ needs.test-true.outputs.triggered }} (expected: true)"
+          echo "test-false.outputs.triggered: ${{ needs.test-false.outputs.triggered }} (expected: false)"
+          echo "test-omitted.outputs.triggered: ${{ needs.test-omitted.outputs.triggered }} (expected: true)"
+
+          if [ "${{ needs.test-true.outputs.triggered }}" != "true" ]; then
+            echo "::error::test-true should have triggered"
+            exit 1
+          fi
+
+          if [ "${{ needs.test-false.outputs.triggered }}" != "false" ]; then
+            echo "::error::test-false should not have triggered"
+            exit 1
+          fi
+
+          if [ "${{ needs.test-omitted.outputs.triggered }}" != "true" ]; then
+            echo "::error::test-omitted should have triggered (no triggers means always run)"
+            exit 1
+          fi
+
+          echo "✅ All diff-triggers tests passed!"

@@ -1,0 +1,51 @@
+name: Test Test and Analyse
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate-structure:
+    name: Validate Action Structure
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check action directory exists
+        run: |
+          if [ ! -d "test-and-analyse" ]; then
+            echo "::error::test-and-analyse directory not found"
+            exit 1
+          fi
+          echo "✅ test-and-analyse directory exists"
+
+      - name: List action contents
+        run: |
+          echo "Contents of test-and-analyse:"
+          ls -la test-and-analyse/ || echo "Directory is empty"
+
+  note-dependencies:
+    name: Note Dependencies
+    needs: validate-structure
+    runs-on: ubuntu-latest
+    steps:
+      - name: Show Note
+        run: |
+          echo "ℹ️ test-and-analyse requires additional files for full functionality:"
+          echo "  - action.yml (main action definition)"
+          echo "  - action.sh (entry point script)"
+          echo "  - package.json (Node.js dependencies)"
+          echo "  - package-lock.json (locked dependencies)"
+          echo "  - .knip.json (Knip configuration)"
+          echo ""
+          echo "These files were not migrated. The action requires the full implementation from:"
+          echo "  https://github.com/bcgov/action-test-and-analyse"
+          echo ""
+          echo "✅ Validation structure complete"

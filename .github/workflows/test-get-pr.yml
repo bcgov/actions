@@ -1,0 +1,76 @@
+name: Test Get PR
+
+on:
+  merge_group:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint (ShellCheck)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run ShellCheck
+        run: |
+          find . -name "*.sh" -print0 | xargs -0 shellcheck -s bash
+
+  dump-event:
+    name: Event Details
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dump Event Details
+        run: |
+          echo "github.event_name: ${{ github.event_name }}"
+          echo "github.event.action: ${{ github.event.action }}"
+          echo "github.event.number: ${{ github.event.number }}"
+          echo "github.event.merge_group.head_ref: ${{ github.event.merge_group.head_ref }}"
+          echo "github.event.after: ${{ github.event.after }}"
+
+  get-pr:
+    name: Get PR Number
+    needs: lint
+    runs-on: ubuntu-latest
+    outputs:
+      pr: ${{ steps.vars.outputs.pr }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: vars
+        uses: ./get-pr
+
+  verify-pr:
+    name: Verify PR Number
+    needs: [lint, get-pr]
+    env:
+      pr: ${{ needs.get-pr.outputs.pr }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify PR Number
+        run: |
+          echo "PR Number: ${{ env.pr }}"
+          
+          if [ -z "${{ env.pr }}" ]; then
+            echo "::warning::No PR number found (this may be expected for some events)"
+            exit 0
+          fi
+          
+          if ! echo "${{ env.pr }}" | grep -qE '^[0-9]+$'; then
+            echo "::error::PR number should be numeric"
+            exit 1
+          fi
+          
+          echo "✅ PR number retrieved: ${{ env.pr }}"
