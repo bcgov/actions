@@ -1,5 +1,9 @@
 name: Verify PR Description Add
 on:
+ 
+permissions:
+  contents: read
+  pull-requests: write
   pull_request:
     paths:
       - "pr-description-add/**"
@@ -9,6 +13,10 @@ jobs:
   test:
     name: Test Action (Local)
     runs-on: ubuntu-24.04
+ 
+permissions:
+  contents: read
+  pull-requests: write
     permissions:
       pull-requests: write
     steps:

@@ -1,5 +1,8 @@
 name: Verify Test & Analyse
 on:
+ 
+permissions:
+  contents: read
   pull_request:
     paths:
       - "test-and-analyse/**"
@@ -9,6 +12,9 @@ jobs:
   test-matrix:
     name: ${{ matrix.name }}
     runs-on: ubuntu-24.04
+ 
+permissions:
+  contents: read
     strategy:
       fail-fast: false
       matrix:
