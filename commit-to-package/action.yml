@@ -1,4 +1,4 @@
-name: 'Forensic Workflow Walker'
+name: 'Commit to Package'
 description: 'Traverses git history to find stable image SHAs in the registry. NOTE: Requires a git repository (actions/checkout) and authenticated Docker session.'
 
 inputs:
