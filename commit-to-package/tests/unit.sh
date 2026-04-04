@@ -3,8 +3,6 @@
 
 set -eo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 test_parse_image_mapping_single() {
     local images="frontend=ghcr.io/owner/frontend"
     local component repo
@@ -110,8 +108,7 @@ test_git_history_traversal() {
     local count=0
     
     while [[ $count -lt $max_depth ]]; do
-        local target
-        target=$(git rev-parse "HEAD~$count" 2>/dev/null) || break
+        git rev-parse "HEAD~$count" >/dev/null 2>&1 || break
         count=$((count + 1))
     done
     

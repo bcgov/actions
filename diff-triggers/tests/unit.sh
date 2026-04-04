@@ -3,9 +3,6 @@
 
 set -eo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ACTION_DIR="$(dirname "$SCRIPT_DIR")"
-
 test_parse_triggers_single() {
     local triggers_str="('./backend/')"
     local expected="./backend/"

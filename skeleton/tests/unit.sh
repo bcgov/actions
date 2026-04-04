@@ -3,8 +3,6 @@
 
 set -eo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 test_debug_log_disabled() {
     INPUT_DEBUG="false"
     

@@ -3,8 +3,6 @@
 
 set -eo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 test_parse_labels_single() {
     local labels="bug"
     local labels_array=()
@@ -58,7 +56,8 @@ test_parse_labels_empty() {
 
 test_assignee_limit() {
     local assignees="user1,user2,user3,user4,user5,user6,user7,user8,user9,user10,user11,user12"
-    local cleaned=$(echo "$assignees" | cut -d',' -f1-10)
+    local cleaned
+    cleaned=$(echo "$assignees" | cut -d',' -f1-10)
     
     local count
     IFS=',' read -ra ADDR <<< "$cleaned"
@@ -97,14 +96,16 @@ test_build_issue_body_custom() {
 
 test_pr_number_extraction_from_url() {
     local url="https://github.com/owner/repo/issues/456"
-    local issue_num=$(echo "$url" | grep -oE '[0-9]+$' || echo "0")
+    local issue_num
+    issue_num=$(echo "$url" | grep -oE '[0-9]+$' || echo "0")
     
     assert_eq "$issue_num" "456" "Extract issue number from URL"
 }
 
 test_pr_number_extraction_from_url_dry_run() {
     local url="https://github.com/owner/repo/issues/dry-run"
-    local issue_num=$(echo "$url" | grep -oE '[0-9]+$' || echo "0")
+    local issue_num
+    issue_num=$(echo "$url" | grep -oE '[0-9]+$' || echo "0")
     
     assert_eq "$issue_num" "0" "Dry run returns 0"
 }
