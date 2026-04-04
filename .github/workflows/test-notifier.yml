@@ -61,12 +61,12 @@ jobs:
           echo "Output: assignees    = ${{ steps.dry_run.outputs.assignees }}"
 
           if [ "${{ steps.dry_run.outputs.issue_number }}" != "0" ]; then
-            echo "::error ::Dry run should have returned issue_number 0"
+            echo "::error::Dry run should have returned issue_number 0"
             exit 1
           fi
 
           if [ -z "${{ steps.dry_run.outputs.assignees }}" ]; then
-            echo "::error ::No assignees detected (check .github/codeowners)"
+            echo "::error::No assignees detected (check .github/codeowners)"
             exit 1
           fi
 
