@@ -176,10 +176,11 @@ runs:
     # for bcgov/action-diff-triggers (v1.0.0+ uses `ref` instead of `diff_branch`).
     - id: diff
       if: inputs.repository == github.repository && steps.vars.outputs.skip != 'true'
-      uses: bcgov/actions/diff-triggers@031bb059c1063c5c0d9d6462afe26fa15ea29966
-      with:
-        triggers: ${{ inputs.triggers }}
-        ref: ${{ inputs.diff_branch }}
+      shell: bash
+      env:
+        INPUT_TRIGGERS: ${{ inputs.triggers }}
+        INPUT_REF: ${{ inputs.diff_branch }}
+      run: bash ${{ github.action_path }}/../diff-triggers/action.sh
 
     # Check if a build is required (steps.build.outputs.triggered=true|false)
     - name: Check for builds
