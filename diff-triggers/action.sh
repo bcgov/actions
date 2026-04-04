@@ -4,11 +4,12 @@
 
 set -eo pipefail
 
+# ShellCheck Global Directives for GitHub Actions Execution
 # shellcheck disable=SC2154
+# shellcheck disable=SC2129
+
 TRIGGERS_STR="${INPUT_TRIGGERS:-}"
-# shellcheck disable=SC2154
 COMPARE_REF="${INPUT_REF:-}"
-# shellcheck disable=SC2154
 ANNOTATIONS_ENABLED="${INPUT_ANNOTATIONS:-true}"
 
 if [[ -z "$TRIGGERS_STR" ]]; then
@@ -19,9 +20,7 @@ fi
 # Resolve the base ref to compare against
 if [[ -z "$COMPARE_REF" ]]; then
     # Default behavior matches original action-diff-triggers
-    # shellcheck disable=SC2154
     if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
-        # shellcheck disable=SC2154
         COMPARE_REF="origin/$GITHUB_BASE_REF"
         REF_SOURCE="pull_request.base_ref"
     else
@@ -32,7 +31,6 @@ else
     REF_SOURCE="input.ref"
 fi
 
-# shellcheck disable=SC2154
 echo "Group: Diff Triggers — Analyzing | $GITHUB_REPOSITORY"
 echo "  Triggers:     $TRIGGERS_STR"
 echo "  Comparing to: $COMPARE_REF"
@@ -56,7 +54,6 @@ if [[ -n "$MATCHED_LIST" ]]; then
     if [[ "$ANNOTATIONS_ENABLED" == "true" ]]; then
         echo "::notice title=Diff Triggers::✅ Diff Triggers fired. ($GITHUB_REPOSITORY)"
     fi
-    # shellcheck disable=SC2129
     echo "triggered=true" >> "$GITHUB_OUTPUT"
     # Exporting refs for forensic walker support (PR #13 prep)
     echo "base_ref=$(git rev-parse "$COMPARE_REF")" >> "$GITHUB_OUTPUT"
