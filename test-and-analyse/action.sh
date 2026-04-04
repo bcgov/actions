@@ -36,11 +36,18 @@ if [[ "$DEP_SCAN" != "off" ]]; then
   # Run knip with JSON output
   set +e
   DOTENV_CONFIG_QUIET=true knip --dependencies --exports --reporter json --no-progress "$CONFIG_ARG" > knip-output.json
+  KNIP_RES=$?
   set -e
 
-  # Reporting logic summarized here...
-  # (In a real run, this would include the Node.js parsing blocks from original)
-  
+  # Process JSON with engine
+  node "$GITHUB_ACTION_PATH/knip-reporter.js" "$(pwd)/knip-output.json"
+
   popd
   echo "::endgroup::"
+
+  # Exit based on scan result if error mode enabled
+  if [[ $KNIP_RES -ne 0 ]] && [[ "$DEP_SCAN" == "error" ]]; then
+     echo "::error::Knip found dependency issues and dep_scan is set to error."
+     exit $KNIP_RES
+  fi
 fi
