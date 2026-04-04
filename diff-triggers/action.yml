@@ -1,40 +1,35 @@
-name: Diff Triggers
-description: Check if changed files match trigger paths. Returns true if any trigger matches, false otherwise.
-branding:
-  icon: package
-  color: blue
+name: 'Diff Triggers'
+description: 'Triggers a build based on file differences using git diff.'
 
 inputs:
   triggers:
-    description: "Paths used to trigger an event; e.g. './backend/' './frontend/' (always trigger if omitted)"
-    required: false
+    description: 'The files or directories to trigger a build'
+    required: true
   ref:
-    description: "Reference to compare against (e.g., 'main', 'HEAD^'). Defaults to base branch for PRs, or HEAD^ for pushes."
-    required: false
+    description: 'The ref to compare against (default: origin/main or HEAD~1)'
+    default: ''
   annotations:
-    description: "Emit workflow summary annotations"
-    required: false
+    description: 'Whether to enable GitHub annotations'
     default: 'true'
-  debug:
-    description: "Enable debug logging"
-    required: false
-    default: 'false'
 
 outputs:
   triggered:
-    description: "Boolean result of triggers"
-    value: "${{ steps.run_script.outputs.triggered }}"
+    description: 'Whether the build was triggered'
+    value: ${{ steps.diff.outputs.triggered }}
+  base_ref:
+    description: 'The resolved base ref SHA'
+    value: ${{ steps.diff.outputs.base_ref }}
+  head_ref:
+    description: 'The resolved head ref SHA'
+    value: ${{ steps.diff.outputs.head_ref }}
 
 runs:
-  using: "composite"
+  using: 'composite'
   steps:
-    - name: Run Notifier
-      id: run_script
+    - id: diff
       shell: bash
       env:
-        INPUT_TRIGGERS: "${{ inputs.triggers }}"
-        INPUT_REF: "${{ inputs.ref }}"
-        INPUT_ANNOTATIONS: "${{ inputs.annotations }}"
-        INPUT_DEBUG: "${{ inputs.debug }}"
-      run: |
-        "${{ github.action_path }}/action.sh"
+        INPUT_TRIGGERS: ${{ inputs.triggers }}
+        INPUT_REF: ${{ inputs.ref }}
+        INPUT_ANNOTATIONS: ${{ inputs.annotations }}
+      run: bash ${{ github.action_path }}/action.sh
