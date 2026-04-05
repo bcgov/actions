@@ -4,8 +4,8 @@
 
 This plan consolidates scattered bcgov GitHub Actions into two centralized repositories:
 
-- **bcgov/actions** (current repo): For non-OpenShift/general actions
-- **bcgov/actions-openshift** (new repo): For OpenShift-specific actions
+- **bcgov/actions** (current repo): For general-purpose Actions (Generic Build, Test, Audit, Orchestrate).
+- **Platform Specific Repos**: Actions for OpenShift (bcgov/actions-openshift), AWS, or Azure will remain in dedicated specialized repositories to minimize core bloat.
 
 Each action will live in its own subdirectory within the appropriate repository.
 
