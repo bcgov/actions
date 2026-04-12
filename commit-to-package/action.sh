@@ -5,47 +5,40 @@
 set -eo pipefail
 
 # Inputs
-IMAGES_MAPPING="${INPUT_IMAGES:-}"
+PACKAGE_INPUT="${INPUT_PACKAGE:-}"
 MAX_DEPTH="${INPUT_MAX_DEPTH:-100}"
 GH_TOKEN="${GH_TOKEN:-}"
 DIR="${INPUT_DIR:-.}"
 REPOSITORY="${INPUT_REPOSITORY:-$GITHUB_REPOSITORY}"
 
-if [[ -z "$IMAGES_MAPPING" ]]; then
-  echo "::error::No images provided. Set the 'images' input with package names or component=repo mappings."
+if [[ -z "$PACKAGE_INPUT" ]]; then
+  echo "::error::No packages provided. Set the 'package' input."
   exit 1
 fi
 
-# Pre-flight setup
 cd "$DIR" || { echo "::error::Could not change to directory $DIR"; exit 1; }
 
-# Parse images input into component -> repo mapping.
-# Each token is either:
-#   bare name:        "frontend"             -> auto-resolved to ghcr.io/<owner>/<repo>[/<name>]
-#   explicit mapping: "frontend=ghcr.io/..."  -> used as-is
+# Parse one or more package names (space, comma, or newline separated)
+# and resolve each to its GHCR image path.
 declare -A IMAGE_REPOS
 repo_name="${REPOSITORY#*/}"
 lc_repo=$(echo "$REPOSITORY" | tr '[:upper:]' '[:lower:]')
 
-for pair in $IMAGES_MAPPING; do
-    if [[ "$pair" == *"="* ]]; then
-        component="${pair%%=*}"
-        repo="${pair#*=}"
+while IFS= read -r pkg; do
+    pkg=$(echo "$pkg" | tr -d '[:space:]')
+    [[ -z "$pkg" ]] && continue
+    # If the package name matches the repo name, image lives at the repo root path
+    if [[ "${pkg,,}" == "${repo_name,,}" ]]; then
+        IMAGE_REPOS["$pkg"]="ghcr.io/${lc_repo}"
     else
-        component="$pair"
-        # If name matches repo name, image lives at the repo root path
-        if [[ "${pair,,}" == "${repo_name,,}" ]]; then
-            repo="ghcr.io/${lc_repo}"
-        else
-            repo="ghcr.io/${lc_repo}/${pair,,}"
-        fi
+        IMAGE_REPOS["$pkg"]="ghcr.io/${lc_repo}/${pkg,,}"
     fi
-    IMAGE_REPOS["$component"]="$repo"
-done
+done < <(echo "$PACKAGE_INPUT" | tr ',' '\n')
 
 echo "Group: Workflow Walker — Forensic History Traversal"
 echo "  Target Repository: $REPOSITORY"
 echo "  Max Depth: $MAX_DEPTH"
+echo "  Packages: ${!IMAGE_REPOS[*]}"
 
 # Resolve revisions
 REVISIONS=$(git rev-list --max-count="$MAX_DEPTH" HEAD 2>/dev/null || true)
@@ -57,13 +50,11 @@ fi
 FOUND_BUNDLE_JSON="{}"
 NOT_FOUND_COMPONENTS=("${!IMAGE_REPOS[@]}")
 
-# Verify a single image tag exists in the registry
 check_image() {
     local component="$1"
     local sha="$2"
     local desc="$3"
-    local repo="${IMAGE_REPOS[$component]}"
-    local full_image="${repo}:sha-${sha}"
+    local full_image="${IMAGE_REPOS[$component]}:sha-${sha}"
 
     if docker manifest inspect "$full_image" > /dev/null 2>&1; then
         echo "  [✓] FOUND ($desc): $component -> sha-${sha}"
@@ -106,7 +97,7 @@ for TARGET_SHA in $REVISIONS; do
     fi
 
     if [[ ${#NOT_FOUND_COMPONENTS[@]} -eq 0 ]]; then
-        echo "  [!] Success: All components resolved."
+        echo "  [!] Success: All packages resolved."
         break
     fi
 done
@@ -114,7 +105,7 @@ done
 echo "::endgroup::"
 
 if [[ ${#NOT_FOUND_COMPONENTS[@]} -gt 0 ]]; then
-    echo "::error::Failed to resolve components after $MAX_DEPTH commits: ${NOT_FOUND_COMPONENTS[*]}"
+    echo "::error::Failed to resolve packages after $MAX_DEPTH commits: ${NOT_FOUND_COMPONENTS[*]}"
     exit 1
 fi
 

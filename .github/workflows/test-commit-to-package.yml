@@ -82,13 +82,13 @@ jobs:
           path: quickstart-repo
           fetch-depth: 100
 
-      - name: Multi-Package Test — explicit mapping (Quickstart)
+      - name: Multi-Package Test (Quickstart)
         id: quickstart
         uses: ./commit-to-package
         with:
-          images: |
-            frontend=ghcr.io/bcgov/quickstart-openshift/frontend
-            backend=ghcr.io/bcgov/quickstart-openshift/backend
+          package: |
+            frontend
+            backend
           repository: bcgov/quickstart-openshift
           dir: quickstart-repo
           token: ${{ github.token }}
@@ -99,20 +99,20 @@ jobs:
           echo "Bundle: $BUNDLE"
           echo "$BUNDLE" | jq -e '.frontend and .backend' > /dev/null \
             || { echo "::error::Quickstart multi-package resolution failed"; exit 1; }
-          echo "✅ Multi-package (explicit mapping) passed"
+          echo "✅ Multi-package passed"
 
-      - name: Checkout Vexilon History (single-package, bare name)
+      - name: Checkout Vexilon History (single-package)
         uses: actions/checkout@v6
         with:
           repository: DerekRoberts/vexilon
           path: vexilon-repo
           fetch-depth: 100
 
-      - name: Single-Package Test — bare name (Vexilon)
+      - name: Single-Package Test (Vexilon)
         id: vexilon
         uses: ./commit-to-package
         with:
-          images: vexilon
+          package: vexilon
           repository: DerekRoberts/vexilon
           dir: vexilon-repo
           token: ${{ github.token }}
@@ -123,4 +123,4 @@ jobs:
           echo "Bundle: $BUNDLE"
           echo "$BUNDLE" | jq -e '.vexilon' > /dev/null \
             || { echo "::error::Vexilon single-package resolution failed"; exit 1; }
-          echo "✅ Single-package (bare name) passed"
+          echo "✅ Single-package passed"

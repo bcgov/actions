@@ -2,18 +2,15 @@ name: 'Commit to Package'
 description: 'Forensic history traversal to resolve stable image SHAs from squash-merged commits.'
 
 inputs:
-  images:
+  package:
     description: |
-      Package names or explicit component=repo mappings (space or newline separated).
-      Bare names (e.g. "frontend") auto-resolve to ghcr.io/<owner>/<repo>[/<name>].
-      Explicit mappings (e.g. "frontend=ghcr.io/org/app/frontend") are used as-is.
+      One or more package names (space, comma, or newline separated).
+      Each resolves to ghcr.io/<owner>/<repo>/<package>, except when the package
+      name matches the repo name, in which case it resolves to ghcr.io/<owner>/<repo>.
     required: true
   max_depth:
     description: 'Max commits to walk back'
     default: '100'
-  debug:
-    description: 'Enable debug logging'
-    default: 'false'
   token:
     description: 'GitHub token (defaults to github.token)'
     default: ${{ github.token }}
@@ -26,7 +23,7 @@ inputs:
 
 outputs:
   bundle:
-    description: 'JSON object mapping components to verified image tags (e.g. {"frontend":"sha-abc123"})'
+    description: 'JSON object mapping package names to verified image tags (e.g. {"frontend":"sha-abc123"})'
     value: ${{ steps.walk.outputs.bundle }}
 
 runs:
@@ -35,9 +32,8 @@ runs:
     - id: walk
       shell: bash
       env:
-        INPUT_IMAGES: ${{ inputs.images }}
+        INPUT_PACKAGE: ${{ inputs.package }}
         INPUT_MAX_DEPTH: ${{ inputs.max_depth }}
-        INPUT_DEBUG: ${{ inputs.debug }}
         INPUT_DIR: ${{ inputs.dir }}
         INPUT_REPOSITORY: ${{ inputs.repository }}
         GH_TOKEN: ${{ inputs.token }}
