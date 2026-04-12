@@ -77,8 +77,16 @@ for TARGET_SHA in $REVISIONS; do
     # This correctly handles squash-merges by finding the original head SHA without
     # relying on easily-spoofable commit message metadata.
     if [[ -n "$GH_TOKEN" ]]; then
+        [[ "$DEBUG" == "true" ]] && echo "    [DEBUG] Querying API for PRs associated with $TARGET_SHA..."
         PR_JSON=$(gh api "repos/${INPUT_REPOSITORY:-$GITHUB_REPOSITORY}/commits/${TARGET_SHA}/pulls" 2>/dev/null || true)
-        PR_HEAD_SHA=$(echo "$PR_JSON" | jq -r '.[0].head.sha' 2>/dev/null || echo "null")
+        
+        if [[ -z "$PR_JSON" ]]; then
+            [[ "$DEBUG" == "true" ]] && echo "    [DEBUG] API returned no data (likely permission denied or repo not found)."
+            PR_HEAD_SHA="null"
+        else
+            PR_HEAD_SHA=$(echo "$PR_JSON" | jq -r '.[0].head.sha' 2>/dev/null || echo "null")
+            [[ "$DEBUG" == "true" ]] && echo "    [DEBUG] API returned PR Head SHA: $PR_HEAD_SHA"
+        fi
         
         if [[ -n "$PR_HEAD_SHA" && "$PR_HEAD_SHA" != "null" && "$PR_HEAD_SHA" != "$TARGET_SHA" ]]; then
             REMAINING_COMPONENTS=()
