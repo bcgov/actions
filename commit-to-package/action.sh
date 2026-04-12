@@ -124,8 +124,9 @@ for TARGET_SHA in $REVISIONS; do
 done
 
 if [[ ${#NOT_FOUND_COMPONENTS[@]} -gt 0 ]]; then
-    echo "::warning::Could not find manifests for all components after inspecting $MAX_DEPTH commits."
+    echo "::error::Could not find manifests for all components after inspecting $MAX_DEPTH commits."
     echo "  MISSING: ${NOT_FOUND_COMPONENTS[*]}"
+    exit 1
 fi
 
 echo "::endgroup::"
