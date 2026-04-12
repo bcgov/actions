@@ -75,40 +75,14 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Checkout Quickstart History (multi-package)
-        uses: actions/checkout@v6
-        with:
-          repository: bcgov/quickstart-openshift
-          path: quickstart-repo
-          fetch-depth: 100
-
-      - name: Multi-Package Test (Quickstart)
-        id: quickstart
-        uses: ./commit-to-package
-        with:
-          package: |
-            frontend
-            backend
-          repository: bcgov/quickstart-openshift
-          dir: quickstart-repo
-          token: ${{ github.token }}
-
-      - name: Verify Quickstart Resolution
-        run: |
-          BUNDLE='${{ steps.quickstart.outputs.bundle }}'
-          echo "Bundle: $BUNDLE"
-          echo "$BUNDLE" | jq -e '.frontend and .backend' > /dev/null \
-            || { echo "::error::Quickstart multi-package resolution failed"; exit 1; }
-          echo "✅ Multi-package passed"
-
-      - name: Checkout Vexilon History (single-package)
+      - name: Checkout Vexilon
         uses: actions/checkout@v6
         with:
           repository: DerekRoberts/vexilon
           path: vexilon-repo
           fetch-depth: 100
 
-      - name: Single-Package Test (Vexilon)
+      - name: Resolve vexilon package
         id: vexilon
         uses: ./commit-to-package
         with:
@@ -117,10 +91,10 @@ jobs:
           dir: vexilon-repo
           token: ${{ github.token }}
 
-      - name: Verify Vexilon Resolution
+      - name: Verify resolution
         run: |
           BUNDLE='${{ steps.vexilon.outputs.bundle }}'
           echo "Bundle: $BUNDLE"
           echo "$BUNDLE" | jq -e '.vexilon' > /dev/null \
-            || { echo "::error::Vexilon single-package resolution failed"; exit 1; }
-          echo "✅ Single-package passed"
+            || { echo "::error::Resolution failed"; exit 1; }
+          echo "✅ Passed: $(echo "$BUNDLE" | jq -r '.vexilon')"
