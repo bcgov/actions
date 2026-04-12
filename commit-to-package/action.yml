@@ -1,9 +1,12 @@
-name: 'Commit to Package'
-description: 'Traverses git history to find stable image SHAs in the registry. NOTE: Requires a git repository (actions/checkout) and authenticated Docker session.'
+name: 'Workflow Walker — Commit to Package'
+description: 'Forensic history traversal to resolve stable image SHAs from high-order repositories.'
+branding:
+  icon: search
+  color: blue
 
 inputs:
   images:
-    description: 'Component to repo mapping (e.g. "frontend=ghcr.io/vexilon-web backend=...")'
+    description: 'Component to repo mapping (e.g. "frontend=ghcr.io/vexilon-web")'
     required: true
   max_depth:
     description: 'Max commits to walk back'
@@ -12,18 +15,18 @@ inputs:
     description: 'Enable debug logging'
     default: 'false'
   token:
-    description: 'GitHub token for API access (required for squash-merge resolution)'
+    description: 'GitHub token (GH_TOKEN or PAT)'
     default: ${{ github.token }}
+  repository:
+    description: 'Target repository to investigate (e.g. owner/repo)'
+    default: ${{ github.repository }}
   dir:
     description: 'Directory containing the git repository'
     default: '.'
-  repository:
-    description: 'The GitHub repository to investigate (e.g. owner/repo). Defaults to the current repository.'
-    default: ${{ github.repository }}
 
 outputs:
   bundle:
-    description: 'A JSON object mapping COMPONENT to verified SHA'
+    description: 'JSON object mapping components to verified SHAs'
     value: ${{ steps.walk.outputs.bundle }}
 
 runs:
