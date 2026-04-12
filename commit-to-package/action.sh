@@ -76,7 +76,7 @@ check_image() {
 
     if docker manifest inspect "$full_image" > /dev/null 2>&1; then
         echo "  [✓] FOUND ($desc): $component -> $sha"
-        FOUND_BUNDLE_JSON=$(echo "$FOUND_BUNDLE_JSON" | jq --arg c "$component" --arg s "$sha" '.[$c] = $s')
+        FOUND_BUNDLE_JSON=$(echo "$FOUND_BUNDLE_JSON" | jq -c --arg c "$component" --arg s "$sha" '.[$c] = $s')
         return 0
     fi
     return 1
