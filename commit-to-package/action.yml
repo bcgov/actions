@@ -1,12 +1,9 @@
-name: 'Workflow Walker — Commit to Package'
+name: 'Commit to Package'
 description: 'Forensic history traversal to resolve stable image SHAs from high-order repositories.'
-branding:
-  icon: search
-  color: blue
 
 inputs:
   images:
-    description: 'Component to repo mapping (e.g. "frontend=ghcr.io/vexilon-web")'
+    description: 'Component to repo mapping (e.g. "frontend=ghcr.io/web")'
     required: true
   max_depth:
     description: 'Max commits to walk back'
@@ -15,10 +12,10 @@ inputs:
     description: 'Enable debug logging'
     default: 'false'
   token:
-    description: 'GitHub token (GH_TOKEN or PAT)'
+    description: 'Specify token (GH or PAT)'
     default: ${{ github.token }}
   repository:
-    description: 'Target repository to investigate (e.g. owner/repo)'
+    description: 'Non-default repo to clone'
     default: ${{ github.repository }}
   dir:
     description: 'Directory containing the git repository'
