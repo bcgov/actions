@@ -43,6 +43,7 @@ jobs:
           images: "vexilon=ghcr.io/derekroberts/vexilon"
           max_depth: 50
           token: ${{ secrets.GITHUB_TOKEN }}
+          dir: "vexilon-repo"
           debug: true
 
       - name: Verify Resolution
