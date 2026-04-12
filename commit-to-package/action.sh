@@ -73,9 +73,11 @@ check_image() {
 for TARGET_SHA in $REVISIONS; do
     [[ "$DEBUG" == "true" ]] && echo "  🔍 Inspecting $TARGET_SHA..."
 
-    # 1. Side-step: Check associated PRs (handles Squash Merges)
+    # Secure PR lookup: Query GitHub API for the PR associated with this commit SHA.
+    # This correctly handles squash-merges by finding the original head SHA without
+    # relying on easily-spoofable commit message metadata.
     if [[ -n "$GH_TOKEN" ]]; then
-        PR_JSON=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${TARGET_SHA}/pulls" 2>/dev/null || true)
+        PR_JSON=$(gh api "repos/${INPUT_REPOSITORY:-$GITHUB_REPOSITORY}/commits/${TARGET_SHA}/pulls" 2>/dev/null || true)
         PR_HEAD_SHA=$(echo "$PR_JSON" | jq -r '.[0].head.sha' 2>/dev/null || echo "null")
         
         if [[ -n "$PR_HEAD_SHA" && "$PR_HEAD_SHA" != "null" && "$PR_HEAD_SHA" != "$TARGET_SHA" ]]; then

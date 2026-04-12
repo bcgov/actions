@@ -17,6 +17,9 @@ inputs:
   dir:
     description: 'Directory containing the git repository'
     default: '.'
+  repository:
+    description: 'The GitHub repository to investigate (e.g. owner/repo). Defaults to the current repository.'
+    default: ${{ github.repository }}
 
 outputs:
   bundle:
@@ -33,5 +36,6 @@ runs:
         INPUT_MAX_DEPTH: ${{ inputs.max_depth }}
         INPUT_DEBUG: ${{ inputs.debug }}
         INPUT_DIR: ${{ inputs.dir }}
+        INPUT_REPOSITORY: ${{ inputs.repository }}
         GH_TOKEN: ${{ inputs.token }}
       run: bash ${{ github.action_path }}/action.sh
