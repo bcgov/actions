@@ -4,28 +4,52 @@
 
 set -eo pipefail
 
-# Mandatory inputs
+# Mandatory inputs (at least one of package or images)
+PACKAGE_NAMES="${INPUT_PACKAGE:-}"
 IMAGES_MAPPING="${INPUT_IMAGES:-}"
 MAX_DEPTH="${INPUT_MAX_DEPTH:-100}"
 GH_TOKEN="${GH_TOKEN:-}"
 DIR="${INPUT_DIR:-.}"
 REPOSITORY="${INPUT_REPOSITORY:-$GITHUB_REPOSITORY}"
 
-if [[ -z "$IMAGES_MAPPING" ]]; then
-  echo "::error::No image mapping provided. Format: component1=repo/image1 component2=repo/image2"
+if [[ -z "$PACKAGE_NAMES" && -z "$IMAGES_MAPPING" ]]; then
+  echo "::error::No package or image mapping provided. Provide 'package' or 'images' input."
   exit 1
 fi
 
 # Pre-flight setup
 cd "$DIR" || { echo "::error::Could not change to directory $DIR"; exit 1; }
 
-# Parse mapping into associative array
+# Unified mapping logic
 declare -A IMAGE_REPOS
-for pair in $IMAGES_MAPPING; do
-    component="${pair%%=*}"
-    repo="${pair#*=}"
-    IMAGE_REPOS["$component"]="$repo"
-done
+
+# 1. Process explicit images mapping
+if [[ -n "$IMAGES_MAPPING" ]]; then
+    for pair in $IMAGES_MAPPING; do
+        component="${pair%%=*}"
+        repo="${pair#*=}"
+        IMAGE_REPOS["$component"]="$repo"
+    done
+fi
+
+# 2. Process package names (with auto-resolution)
+if [[ -n "$PACKAGE_NAMES" ]]; then
+    # Support space or comma separated lists
+    CLEAN_PACKAGES=$(echo "$PACKAGE_NAMES" | tr ',' ' ')
+    for pkg in $CLEAN_PACKAGES; do
+        repo_name="${REPOSITORY#*/}"
+        
+        # Lowercase for GHCR compatibility
+        lc_repo=$(echo "$REPOSITORY" | tr '[:upper:]' '[:lower:]')
+        
+        # Heuristic: If package name matches repo name, use the repo base path
+        if [[ "$pkg" == "$repo_name" ]]; then
+             IMAGE_REPOS["$pkg"]="ghcr.io/${lc_repo}"
+        else
+             IMAGE_REPOS["$pkg"]="ghcr.io/${lc_repo}/${pkg,,}"
+        fi
+    done
+fi
 
 echo "Group: Workflow Walker — Forensic History Traversal"
 echo "  Target Repository: $REPOSITORY"

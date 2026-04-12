@@ -2,9 +2,12 @@ name: 'Commit to Package'
 description: 'Forensic history traversal to resolve stable image SHAs from high-order repositories.'
 
 inputs:
+  package:
+    description: 'Simplified package name(s) (space or comma separated). Automatically resolves to ghcr.io paths.'
+    required: false
   images:
-    description: 'Component to repo mapping (e.g. "frontend=ghcr.io/web")'
-    required: true
+    description: 'Fallback: Explicit component to repo mapping (e.g. "frontend=ghcr.io/web")'
+    required: false
   max_depth:
     description: 'Max commits to walk back'
     default: '100'
@@ -32,6 +35,7 @@ runs:
     - id: walk
       shell: bash
       env:
+        INPUT_PACKAGE: ${{ inputs.package }}
         INPUT_IMAGES: ${{ inputs.images }}
         INPUT_MAX_DEPTH: ${{ inputs.max_depth }}
         INPUT_DEBUG: ${{ inputs.debug }}
