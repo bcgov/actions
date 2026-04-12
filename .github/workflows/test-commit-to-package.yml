@@ -34,9 +34,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "Deep probing commit 7b6f8c22 in DerekRoberts/vexilon..."
-          PR_DATA=$(gh api "repos/DerekRoberts/vexilon/commits/7b6f8c222ade55990d24b54dc75d4718fba4722a/pulls")
-          echo "PR Data Result: $PR_DATA"
-          echo "Head SHA: $(echo "$PR_DATA" | jq -r '.[0].head.sha')"
+          # Using -i to see HTTP headers and status
+          gh api -i "repos/DerekRoberts/vexilon/commits/7b6f8c222ade55990d24b54dc75d4718fba4722a/pulls" || true
 
       - name: Log in to GHCR
         uses: docker/login-action@v4
@@ -60,18 +59,10 @@ jobs:
           BUNDLE='${{ steps.resolve.outputs.bundle }}'
           echo "Resolved Bundle: $BUNDLE"
           
-          # Check for 'null' or empty in 'vexilon' component
           SHA=$(echo "$BUNDLE" | jq -r '.vexilon')
           
           if [[ "$SHA" == "null" ]] || [[ -z "$SHA" ]]; then
-            # We didn't find the SHA. Is it a real failure or just permission denied?
-            # Prove we could walk the history by checking the bundle type at least.
-            if [[ "$BUNDLE" == "{}" ]]; then
-              echo "::warning::The bundle is empty. This is likely due to the GITHUB_TOKEN not having access to private PR metadata or packages in DerekRoberts/vexilon."
-              echo "Script execution successful, but resolution skipped for security reasons."
-              exit 0
-            fi
-            echo "::error::Failed to resolve vexilon image SHA!"
+            echo "::error::Failed to resolve vexilon image SHA! Empty bundle detected."
             exit 1
           fi
           

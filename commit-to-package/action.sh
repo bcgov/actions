@@ -78,7 +78,11 @@ for TARGET_SHA in $REVISIONS; do
     # relying on easily-spoofable commit message metadata.
     if [[ -n "$GH_TOKEN" ]]; then
         [[ "$DEBUG" == "true" ]] && echo "    [DEBUG] Querying API for PRs associated with $TARGET_SHA..."
-        PR_JSON=$(gh api "repos/${INPUT_REPOSITORY:-$GITHUB_REPOSITORY}/commits/${TARGET_SHA}/pulls" 2>/dev/null || true)
+        if [[ "$DEBUG" == "true" ]]; then
+            PR_JSON=$(gh api "repos/${INPUT_REPOSITORY:-$GITHUB_REPOSITORY}/commits/${TARGET_SHA}/pulls" || true)
+        else
+            PR_JSON=$(gh api "repos/${INPUT_REPOSITORY:-$GITHUB_REPOSITORY}/commits/${TARGET_SHA}/pulls" 2>/dev/null || true)
+        fi
         
         if [[ -z "$PR_JSON" ]]; then
             [[ "$DEBUG" == "true" ]] && echo "    [DEBUG] API returned no data (likely permission denied or repo not found)."
