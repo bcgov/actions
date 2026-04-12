@@ -56,9 +56,10 @@ while [[ $CURRENT_DEPTH -lt $MAX_DEPTH ]] && [[ ${#NOT_FOUND_COMPONENTS[@]} -gt 
     # This correctly handles squash-merges by finding the original head SHA without
     # relying on easily-spoofable commit message metadata.
     if [[ -n "$GH_TOKEN" ]]; then
-        PR_HEAD_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${TARGET_SHA}/pulls" --jq '.[0].head.sha' 2>/dev/null || true)
+        PR_JSON=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${TARGET_SHA}/pulls" 2>/dev/null || true)
+        PR_HEAD_SHA=$(echo "$PR_JSON" | jq -r '.[0].head.sha' 2>/dev/null || true)
         
-        if [[ -n "$PR_HEAD_SHA" && "$PR_HEAD_SHA" != "$TARGET_SHA" ]]; then
+        if [[ -n "$PR_HEAD_SHA" && "$PR_HEAD_SHA" != "null" && "$PR_HEAD_SHA" != "$TARGET_SHA" ]]; then
             [[ "$DEBUG" == "true" ]] && echo "    [!] Detected associated PR. Resolving head SHA -> $PR_HEAD_SHA"
             
             # Check PR Head SHA for each missing component
