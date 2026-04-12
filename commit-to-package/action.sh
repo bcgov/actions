@@ -72,15 +72,50 @@ check_image() {
     local sha="$2"
     local desc="$3"
     local repo="${IMAGE_REPOS[$component]}"
-    local full_image="${repo}:sha-${sha}"
+    local full_image
+
+    # If the repo already contains a tag or digest, treat it as a literal reference
+    if [[ "$repo" == *":"* || "$repo" == *"@"* ]]; then
+        full_image="$repo"
+    else
+        full_image="${repo}:sha-${sha}"
+    fi
 
     if docker manifest inspect "$full_image" > /dev/null 2>&1; then
-        echo "  [✓] FOUND ($desc): $component -> $sha"
-        FOUND_BUNDLE_JSON=$(echo "$FOUND_BUNDLE_JSON" | jq -c --arg c "$component" --arg s "$sha" '.[$c] = $s')
+        echo "  [✓] FOUND ($desc): $component -> ${full_image#*[:@]}"
+        # Ensure we return the full tag (sha-...) or digest (sha256:...)
+        local result="${full_image#*[:@]}"
+        # If it was a digest, we need to restore the prefix (docker doesn't return it in #)
+        [[ "$full_image" == *"@"* ]] && result="sha256:$result"
+        
+        FOUND_BUNDLE_JSON=$(echo "$FOUND_BUNDLE_JSON" | jq -c --arg c "$component" --arg s "$result" '.[$c] = $s')
         return 0
     fi
     return 1
 }
+
+# Phase 0: Literal Resolution (Check for explicit tags/digests first)
+echo "Phase 0: Literal Resolution"
+REFRESHED_COMPONENTS=()
+for component in "${NOT_FOUND_COMPONENTS[@]}"; do
+    repo="${IMAGE_REPOS[$component]}"
+    if [[ "$repo" == *":"* || "$repo" == *"@"* ]]; then
+        if check_image "$component" "" "Literal"; then
+            continue
+        fi
+    fi
+    REFRESHED_COMPONENTS+=("$component")
+done
+NOT_FOUND_COMPONENTS=("${REFRESHED_COMPONENTS[@]}")
+
+# Early exit if all literally resolved
+if [[ ${#NOT_FOUND_COMPONENTS[@]} -eq 0 ]]; then
+    echo "  [!] Success: All components resolved via literal mapping."
+else
+    echo "Group: Workflow Walker — Forensic History Traversal"
+    echo "  Target Repository: $REPOSITORY"
+    echo "  Max Depth: $MAX_DEPTH"
+fi
 
 # Principal Traversal Loop
 for TARGET_SHA in $REVISIONS; do
