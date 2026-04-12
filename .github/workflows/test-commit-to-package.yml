@@ -2,10 +2,12 @@ name: Test Commit to Package
 
 on:
   workflow_dispatch:
-  pull_request:
+  push:
+    branches: [fix/squash-merge-resolution]
     paths:
       - 'commit-to-package/**'
       - '.github/workflows/test-commit-to-package.yml'
+  pull_request:
 
 permissions:
   contents: read
