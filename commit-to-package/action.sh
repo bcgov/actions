@@ -1,36 +1,25 @@
 #!/usr/bin/env bash
-# Forensic Workflow Walker: Native Edition
-# Traverses git history and verifies existences of images via native Docker manifest inspection.
+# Forensic Workflow Walker: Professional Edition
+# Traverses git history and resolves image SHAs via secure GitHub API PR mapping.
 
 set -eo pipefail
 
-# ShellCheck global ignores for GitHub Actions
-# shellcheck disable=SC2154
-# shellcheck disable=SC2129
-
+# Mandatory inputs
 IMAGES_MAPPING="${INPUT_IMAGES:-}"
 MAX_DEPTH="${INPUT_MAX_DEPTH:-100}"
-DEBUG="${INPUT_DEBUG:-false}"
+GH_TOKEN="${GH_TOKEN:-}"
+DIR="${INPUT_DIR:-.}"
+REPOSITORY="${INPUT_REPOSITORY:-$GITHUB_REPOSITORY}"
 
 if [[ -z "$IMAGES_MAPPING" ]]; then
   echo "::error::No image mapping provided. Format: component1=repo/image1 component2=repo/image2"
   exit 1
 fi
 
-# Pre-flight Checks (Forensic Safeguards)
-if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
-  echo "::error::Workflow Walker requires a git repository. Please ensure 'actions/checkout' was called before this action."
-  exit 1
-fi
+# Pre-flight setup
+cd "$DIR" || { echo "::error::Could not change to directory $DIR"; exit 1; }
 
-if ! docker version > /dev/null 2>&1; then
-  echo "::error::Workflow Walker requires Docker. Please ensure Docker is installed and functional on the runner."
-  exit 1
-fi
-
-echo "Group: Workflow Walker — Forensic History Traversal"
-
-# Parse the mapping into an associative array (requires Bash 4+)
+# Parse mapping into associative array
 declare -A IMAGE_REPOS
 for pair in $IMAGES_MAPPING; do
     component="${pair%%=*}"
@@ -38,62 +27,81 @@ for pair in $IMAGES_MAPPING; do
     IMAGE_REPOS["$component"]="$repo"
 done
 
-# Traverse history
-CURRENT_DEPTH=0
-FOUND_BUNDLE=""
-NOT_FOUND_COMPONENTS=("${!IMAGE_REPOS[@]}")
-
-# Log base/head context
-echo "  Head Ref: ${INPUT_HEAD_REF:-HEAD}"
+echo "Group: Workflow Walker — Forensic History Traversal"
+echo "  Target Repository: $REPOSITORY"
 echo "  Max Depth: $MAX_DEPTH"
 
-while [[ $CURRENT_DEPTH -lt $MAX_DEPTH ]] && [[ ${#NOT_FOUND_COMPONENTS[@]} -gt 0 ]]; do
-    TARGET_SHA=$(git rev-parse "HEAD~$CURRENT_DEPTH")
-    
-    [[ "$DEBUG" == "true" ]] && echo "  Checking depth $CURRENT_DEPTH (SHA: $TARGET_SHA)..."
-
-    REMAINING_COMPONENTS=()
-    for component in "${NOT_FOUND_COMPONENTS[@]}"; do
-        FULL_IMAGE="${IMAGE_REPOS[$component]}:$TARGET_SHA"
-        
-        # Native Docker Check (No Crane!)
-        if docker manifest inspect "$FULL_IMAGE" > /dev/null 2>&1; then
-            echo "  [✓] FOUND: $component -> $TARGET_SHA"
-            FOUND_BUNDLE="${FOUND_BUNDLE}${component}=${TARGET_SHA} "
-        else
-            REMAINING_COMPONENTS+=("$component")
-        fi
-    done
-    
-    NOT_FOUND_COMPONENTS=("${REMAINING_COMPONENTS[@]}")
-    ((CURRENT_DEPTH++))
-done
-
-if [[ ${#NOT_FOUND_COMPONENTS[@]} -gt 0 ]]; then
-    echo "::warning::Could not find manifests for all components after $MAX_DEPTH commits."
-    echo "  MISSING: ${NOT_FOUND_COMPONENTS[*]}"
+# Resolve revisions (Graph-aware)
+REVISIONS=$(git rev-list --max-count="$MAX_DEPTH" HEAD 2>/dev/null || true)
+if [[ -z "$REVISIONS" ]]; then
+    # Fallback to local HEAD (last resort)
+    REVISIONS=$(git rev-parse HEAD)
 fi
 
-echo "::endgroup::"
+# Image verification state
+FOUND_BUNDLE_JSON="{}"
+NOT_FOUND_COMPONENTS=("${!IMAGE_REPOS[@]}")
 
-# Building the JSON object using native Bash strings (Zero dependencies!)
-FOUND_JSON="{"
-for component in "${!IMAGE_REPOS[@]}"; do
-    # Check if we actually found a SHA for this component
-    for found in $FOUND_BUNDLE; do
-        if [[ "$found" == "$component="* ]]; then
-            sha="${found#*=}"
-            FOUND_JSON="${FOUND_JSON}\"$component\": \"$sha\", "
-            break
+# Helper: Verify if image exists in GHCR
+check_image() {
+    local component="$1"
+    local sha="$2"
+    local desc="$3"
+    local repo="${IMAGE_REPOS[$component]}"
+    local full_image="${repo}:sha-${sha}"
+
+    if docker manifest inspect "$full_image" > /dev/null 2>&1; then
+        echo "  [✓] FOUND ($desc): $component -> $sha"
+        FOUND_BUNDLE_JSON=$(echo "$FOUND_BUNDLE_JSON" | jq --arg c "$component" --arg s "$sha" '.[$c] = $s')
+        return 0
+    fi
+    return 1
+}
+
+# Principal Traversal Loop
+for TARGET_SHA in $REVISIONS; do
+    # 1. Resolve associated PR Head SHA (the built SHA for Squash Merges)
+    if [[ -n "$GH_TOKEN" ]]; then
+        # Endpoint mirrors the exact working pattern from your Vexilon script
+        PR_HEAD_SHA=$(gh api "/repos/${REPOSITORY}/commits/${TARGET_SHA}/pulls" --jq '.[0].head.sha' 2>/dev/null || true)
+        
+        if [[ -n "$PR_HEAD_SHA" && "$PR_HEAD_SHA" != "null" && "$PR_HEAD_SHA" != "$TARGET_SHA" ]]; then
+            REFRESHED_COMPONENTS=()
+            for component in "${NOT_FOUND_COMPONENTS[@]}"; do
+                if ! check_image "$component" "$PR_HEAD_SHA" "PR Head"; then
+                    REFRESHED_COMPONENTS+=("$component")
+                fi
+            done
+            NOT_FOUND_COMPONENTS=("${REFRESHED_COMPONENTS[@]}")
         fi
-    done
+    fi
+
+    # 2. Check the commit itself (Standard Merges / Directly built commits)
+    if [[ ${#NOT_FOUND_COMPONENTS[@]} -gt 0 ]]; then
+        REFRESHED_COMPONENTS=()
+        for component in "${NOT_FOUND_COMPONENTS[@]}"; do
+            if ! check_image "$component" "$TARGET_SHA" "Commit SHA"; then
+                REFRESHED_COMPONENTS+=("$component")
+            fi
+        done
+        NOT_FOUND_COMPONENTS=("${REFRESHED_COMPONENTS[@]}")
+    fi
+
+    # Early termination if all resolved
+    if [[ ${#NOT_FOUND_COMPONENTS[@]} -eq 0 ]]; then
+        echo "  [!] Success: All components resolved."
+        break
+    fi
 done
 
-# Trim trailing comma and close JSON
-FOUND_JSON="${FOUND_JSON%, }}"
 echo "::endgroup::"
 
-# Output the result
-{
-  echo "bundle=${FOUND_JSON:-{}}"
-} >> "$GITHUB_OUTPUT"
+# Validation
+if [[ ${#NOT_FOUND_COMPONENTS[@]} -gt 0 ]]; then
+    echo "::error::History traversal failed to resolve some components after $MAX_DEPTH commits."
+    echo "  NOT FOUND: ${NOT_FOUND_COMPONENTS[*]}"
+    exit 1
+fi
+
+# Output results to GITHUB_OUTPUT
+echo "bundle=${FOUND_BUNDLE_JSON}" >> "$GITHUB_OUTPUT"
