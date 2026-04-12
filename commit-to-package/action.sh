@@ -2,7 +2,7 @@
 # Forensic Workflow Walker: Enhanced Edition
 # Traverses git history and verifies existences of images via native Docker manifest inspection.
 
-set -o pipefail
+set -eo pipefail
 
 IMAGES_MAPPING="${INPUT_IMAGES:-}"
 MAX_DEPTH="${INPUT_MAX_DEPTH:-100}"
@@ -10,7 +10,7 @@ DEBUG="${INPUT_DEBUG:-false}"
 GH_TOKEN="${GH_TOKEN:-}"
 DIR="${INPUT_DIR:-.}"
 
-cd "$DIR"
+cd "$DIR" || { echo "::error::Could not change to directory $DIR"; exit 1; }
 
 if [[ -z "$IMAGES_MAPPING" ]]; then
   echo "::error::No image mapping provided. Format: component1=repo/image1 component2=repo/image2"
