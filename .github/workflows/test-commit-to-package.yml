@@ -1,0 +1,100 @@
+name: Test Commit to Package
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  lint:
+    name: Lint (ShellCheck)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run ShellCheck
+        run: |
+          find . -name "*.sh" -print0 | xargs -0 shellcheck -s bash
+
+  unit:
+    name: Unit Tests
+    needs: lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run Unit Tests
+        run: |
+          bash commit-to-package/tests/unit.sh
+
+  validate:
+    name: Validate Action Definition
+    needs: unit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Validate action.yml exists
+        run: |
+          if [ ! -f "commit-to-package/action.yml" ]; then
+            echo "::error::commit-to-package/action.yml not found"
+            exit 1
+          fi
+          echo "✅ action.yml exists"
+
+      - name: Validate YAML syntax
+        run: |
+          pip install pyyaml -q
+          python3 -c "import yaml; yaml.safe_load(open('commit-to-package/action.yml'))"
+          echo "✅ YAML syntax valid"
+
+      - name: Verify parsing via unit tests
+        run: |
+          cd commit-to-package
+          bash tests/unit.sh
+
+  functional:
+    name: Functional Tests (Real-World)
+    needs: unit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Checkout Vexilon
+        uses: actions/checkout@v6
+        with:
+          repository: DerekRoberts/vexilon
+          path: vexilon-repo
+          fetch-depth: 100
+
+      - name: Resolve vexilon package
+        id: vexilon
+        uses: ./commit-to-package
+        with:
+          package: vexilon
+          repository: DerekRoberts/vexilon
+          dir: vexilon-repo
+          token: ${{ github.token }}
+
+      - name: Verify resolution
+        run: |
+          BUNDLE='${{ steps.vexilon.outputs.bundle }}'
+          echo "Bundle: $BUNDLE"
+          echo "$BUNDLE" | jq -e '.vexilon' > /dev/null \
+            || { echo "::error::Resolution failed"; exit 1; }
+          echo "✅ Passed: $(echo "$BUNDLE" | jq -r '.vexilon')"

@@ -4,10 +4,6 @@
 
 set -eo pipefail
 
-# ShellCheck Global Directives for GitHub Actions Execution
-# shellcheck disable=SC2154
-# shellcheck disable=SC2129
-
 TRIGGERS_STR="${INPUT_TRIGGERS:-}"
 COMPARE_REF="${INPUT_REF:-}"
 ANNOTATIONS_ENABLED="${INPUT_ANNOTATIONS:-true}"
@@ -17,52 +13,53 @@ if [[ -z "$TRIGGERS_STR" ]]; then
   exit 1
 fi
 
-# Resolve the base ref to compare against
-if [[ -z "$COMPARE_REF" ]]; then
-    # Default behavior matches original action-diff-triggers
-    if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
-        COMPARE_REF="origin/$GITHUB_BASE_REF"
-        REF_SOURCE="pull_request.base_ref"
-    else
-        COMPARE_REF="HEAD~1"
-        REF_SOURCE="HEAD~1 (default)"
-    fi
-else
-    REF_SOURCE="input.ref"
+# RESTORED: Parse triggers exactly like the original high-performance baseline
+# Handles ('./path1/' './path2/') correctly
+TRIGGERS=()
+while IFS= read -r line; do
+  [[ -n "$line" ]] && TRIGGERS+=("$line")
+done < <(grep -o "'[^']*'" <<< "$TRIGGERS_STR" | sed "s/'//g")
+
+# Fallback for unquoted formats: "./path1/ ./path2/" or "./path1/,./path2/"
+if [[ ${#TRIGGERS[@]} -eq 0 ]]; then
+  NORMALIZED="${TRIGGERS_STR//,/ }"
+  for trigger in $NORMALIZED; do
+    [[ -n "$trigger" ]] && TRIGGERS+=("$trigger")
+  done
 fi
 
-echo "Group: Diff Triggers — Analyzing | $GITHUB_REPOSITORY"
-echo "  Triggers:     $TRIGGERS_STR"
-echo "  Comparing to: $COMPARE_REF"
-echo "  Ref source:   $REF_SOURCE"
+# Resolve the base ref to compare against
+if [[ -z "$COMPARE_REF" ]]; then
+    if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+        # Use PR base if available (matching ancestor behavior)
+        COMPARE_REF="origin/$GITHUB_BASE_REF"
+    else
+        COMPARE_REF="HEAD~1"
+    fi
+fi
 
-# Split triggers and check for changes
+# Analyze changes
 MATCHED_LIST=""
-IFS=',' read -ra ADDR <<< "$TRIGGERS_STR"
-for trigger in "${ADDR[@]}"; do
-    # shellcheck disable=SC2005
-    trigger=$(echo "$trigger" | xargs) # trim
-    if git diff --quiet "$COMPARE_REF" HEAD -- "$trigger"; then
+TRIGGERED=false
+
+for t in "${TRIGGERS[@]}"; do
+    # Use a quiet diff check to detect changes for this path without printing output
+    if git diff --quiet "$COMPARE_REF" HEAD -- "$t"; then
         continue
     else
-        MATCHED_LIST="${MATCHED_LIST}${trigger} "
+        TRIGGERED=true
+        MATCHED_LIST="$MATCHED_LIST $t"
     fi
 done
 
-if [[ -n "$MATCHED_LIST" ]]; then
-    echo "  Matched:      $MATCHED_LIST"
+if [[ "$TRIGGERED" == "true" ]]; then
+    echo "triggered=true" >> "$GITHUB_OUTPUT"
     if [[ "$ANNOTATIONS_ENABLED" == "true" ]]; then
-        echo "::notice title=Diff Triggers::✅ Diff Triggers fired. ($GITHUB_REPOSITORY)"
+        echo "::notice title=Diff Triggers::✅ Diff Triggers fired. (Matched: $MATCHED_LIST)"
     fi
-    { 
-      echo "triggered=true"
-      # Exporting refs for forensic walker support (PR #13 prep)
-      echo "base_ref=$(git rev-parse "$COMPARE_REF")"
-      echo "head_ref=$(git rev-parse HEAD)"
-    } >> "$GITHUB_OUTPUT"
 else
-    if [[ "$ANNOTATIONS_ENABLED" == "true" ]]; then
-        echo "::notice title=Diff Triggers::ℹ️ Diff Triggers not fired. ($GITHUB_REPOSITORY)"
-    fi
     echo "triggered=false" >> "$GITHUB_OUTPUT"
+    if [[ "$ANNOTATIONS_ENABLED" == "true" ]]; then
+        echo "::notice title=Diff Triggers::ℹ️ Diff Triggers not fired."
+    fi
 fi

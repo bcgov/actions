@@ -16,12 +16,6 @@ outputs:
   triggered:
     description: 'Whether the build was triggered'
     value: ${{ steps.diff.outputs.triggered }}
-  base_ref:
-    description: 'The resolved base ref SHA'
-    value: ${{ steps.diff.outputs.base_ref }}
-  head_ref:
-    description: 'The resolved head ref SHA'
-    value: ${{ steps.diff.outputs.head_ref }}
 
 runs:
   using: 'composite'
