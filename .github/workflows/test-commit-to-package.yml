@@ -36,7 +36,7 @@ jobs:
         run: |
           bash commit-to-package/tests/unit.sh
 
-validate:
+  validate:
     name: Validate Action Definition
     needs: unit
     runs-on: ubuntu-latest
