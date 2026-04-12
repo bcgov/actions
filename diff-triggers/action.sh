@@ -20,6 +20,14 @@ while IFS= read -r line; do
   [[ -n "$line" ]] && TRIGGERS+=("$line")
 done < <(grep -o "'[^']*'" <<< "$TRIGGERS_STR" | sed "s/'//g")
 
+# Fallback for unquoted formats: "./path1/ ./path2/" or "./path1/,./path2/"
+if [[ ${#TRIGGERS[@]} -eq 0 ]]; then
+  NORMALIZED="${TRIGGERS_STR//,/ }"
+  for trigger in $NORMALIZED; do
+    [[ -n "$trigger" ]] && TRIGGERS+=("$trigger")
+  done
+fi
+
 # Resolve the base ref to compare against
 if [[ -z "$COMPARE_REF" ]]; then
     if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
@@ -35,7 +43,7 @@ MATCHED_LIST=""
 TRIGGERED=false
 
 for t in "${TRIGGERS[@]}"; do
-    # Use name-only check for performance parity
+    # Use a quiet diff check to detect changes for this path without printing output
     if git diff --quiet "$COMPARE_REF" HEAD -- "$t"; then
         continue
     else

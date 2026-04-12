@@ -3,10 +3,15 @@ description: 'Forensic history traversal to resolve stable image SHAs from high-
 
 inputs:
   package:
-    description: 'Simplified package name(s) (space or comma separated). Automatically resolves to ghcr.io paths.'
+    description: |
+      Package name(s) to resolve (space or comma separated). Automatically resolves to
+      ghcr.io/<owner>/<repo>[/<package>] paths. At least one of `package` or `images` is required.
+      If both are provided, explicit `images` mappings take precedence.
     required: false
   images:
-    description: 'Fallback: Explicit component to repo mapping (e.g. "frontend=ghcr.io/web")'
+    description: |
+      Explicit component=repo mappings (space or newline separated, e.g. "frontend=ghcr.io/org/app/frontend").
+      Takes precedence over `package` auto-resolution. At least one of `images` or `package` is required.
     required: false
   max_depth:
     description: 'Max commits to walk back'

@@ -33,17 +33,17 @@ if [[ -n "$IMAGES_MAPPING" ]]; then
 fi
 
 # 2. Process package names (with auto-resolution)
+# Explicit images mapping takes precedence — only auto-resolve entries not already set.
 if [[ -n "$PACKAGE_NAMES" ]]; then
     # Support space or comma separated lists
     CLEAN_PACKAGES=$(echo "$PACKAGE_NAMES" | tr ',' ' ')
+    repo_name="${REPOSITORY#*/}"
+    lc_repo=$(echo "$REPOSITORY" | tr '[:upper:]' '[:lower:]')
     for pkg in $CLEAN_PACKAGES; do
-        repo_name="${REPOSITORY#*/}"
-        
-        # Lowercase for GHCR compatibility
-        lc_repo=$(echo "$REPOSITORY" | tr '[:upper:]' '[:lower:]')
-        
+        # Skip if already set by explicit images mapping
+        [[ -n "${IMAGE_REPOS[$pkg]+x}" ]] && continue
         # Heuristic: If package name matches repo name, use the repo base path
-        if [[ "$pkg" == "$repo_name" ]]; then
+        if [[ "${pkg,,}" == "${repo_name,,}" ]]; then
              IMAGE_REPOS["$pkg"]="ghcr.io/${lc_repo}"
         else
              IMAGE_REPOS["$pkg"]="ghcr.io/${lc_repo}/${pkg,,}"
@@ -117,22 +117,33 @@ else
     echo "  Max Depth: $MAX_DEPTH"
 fi
 
+# Gather all PR mappings once (Performance: Bulk lookup instead of per-commit API calls)
+declare -A PR_MAP
+if [[ -n "$GH_TOKEN" ]]; then
+    echo "  [i] Batch-fetching PR data for $REPOSITORY..."
+    # Fetches recent PRs and maps merge commit -> head sha for squash/merge resolution
+    while IFS= read -r row; do
+        merge_sha=$(echo "$row" | cut -f1)
+        head_sha=$(echo "$row" | cut -f2)
+        if [[ -n "$merge_sha" && "$merge_sha" != "null" ]]; then
+            PR_MAP["$merge_sha"]="$head_sha"
+        fi
+    done < <(gh api "/repos/${REPOSITORY}/pulls?state=closed&per_page=100" --jq '.[] | [.merge_commit_sha, .head.sha] | @tsv' 2>/dev/null || true)
+fi
+
 # Principal Traversal Loop
 for TARGET_SHA in $REVISIONS; do
-    # 1. Resolve associated PR Head SHA (the built SHA for Squash Merges)
-    if [[ -n "$GH_TOKEN" ]]; then
-        # Endpoint mirrors the exact working pattern from your Vexilon script
-        PR_HEAD_SHA=$(gh api "/repos/${REPOSITORY}/commits/${TARGET_SHA}/pulls" --jq '.[0].head.sha' 2>/dev/null || true)
-        
-        if [[ -n "$PR_HEAD_SHA" && "$PR_HEAD_SHA" != "null" && "$PR_HEAD_SHA" != "$TARGET_SHA" ]]; then
-            REFRESHED_COMPONENTS=()
-            for component in "${NOT_FOUND_COMPONENTS[@]}"; do
-                if ! check_image "$component" "$PR_HEAD_SHA" "PR Head"; then
-                    REFRESHED_COMPONENTS+=("$component")
-                fi
-            done
-            NOT_FOUND_COMPONENTS=("${REFRESHED_COMPONENTS[@]}")
-        fi
+    # 1. Resolve associated PR Head SHA (the built SHA for Squash Merges) via local map
+    PR_HEAD_SHA="${PR_MAP[$TARGET_SHA]:-}"
+    
+    if [[ -n "$PR_HEAD_SHA" && "$PR_HEAD_SHA" != "null" && "$PR_HEAD_SHA" != "$TARGET_SHA" ]]; then
+        REFRESHED_COMPONENTS=()
+        for component in "${NOT_FOUND_COMPONENTS[@]}"; do
+            if ! check_image "$component" "$PR_HEAD_SHA" "PR Head"; then
+                REFRESHED_COMPONENTS+=("$component")
+            fi
+        done
+        NOT_FOUND_COMPONENTS=("${REFRESHED_COMPONENTS[@]}")
     fi
 
     # 2. Check the commit itself (Standard Merges / Directly built commits)
