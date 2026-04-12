@@ -1,36 +1,25 @@
 #!/usr/bin/env bash
-# Forensic Workflow Walker: Enhanced Edition
-# Traverses git history and verifies existences of images via native Docker manifest inspection.
+# Forensic Workflow Walker: Professional Edition
+# Traverses git history and resolves image SHAs via secure GitHub API PR mapping.
 
 set -eo pipefail
 
+# Mandatory inputs
 IMAGES_MAPPING="${INPUT_IMAGES:-}"
 MAX_DEPTH="${INPUT_MAX_DEPTH:-100}"
-DEBUG="${INPUT_DEBUG:-false}"
 GH_TOKEN="${GH_TOKEN:-}"
 DIR="${INPUT_DIR:-.}"
-
-cd "$DIR" || { echo "::error::Could not change to directory $DIR"; exit 1; }
+REPOSITORY="${INPUT_REPOSITORY:-$GITHUB_REPOSITORY}"
 
 if [[ -z "$IMAGES_MAPPING" ]]; then
   echo "::error::No image mapping provided. Format: component1=repo/image1 component2=repo/image2"
   exit 1
 fi
 
-# Pre-flight Checks (Forensic Safeguards)
-if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
-  echo "::error::Workflow Walker requires a git repository. Please ensure 'actions/checkout' was called before this action."
-  exit 1
-fi
+# Pre-flight setup
+cd "$DIR" || { echo "::error::Could not change to directory $DIR"; exit 1; }
 
-if ! docker version > /dev/null 2>&1; then
-  echo "::error ::Workflow Walker requires Docker. Please ensure Docker is installed and functional on the runner."
-  exit 1
-fi
-
-echo "Group: Workflow Walker — Forensic History Traversal"
-
-# Parse mapping into an associative array
+# Parse mapping into associative array
 declare -A IMAGE_REPOS
 for pair in $IMAGES_MAPPING; do
     component="${pair%%=*}"
@@ -38,100 +27,81 @@ for pair in $IMAGES_MAPPING; do
     IMAGE_REPOS["$component"]="$repo"
 done
 
-# Resolve the list of SHAs to check (Graph-aware)
-# We limit to MAX_DEPTH to avoid walking the entire history of time
+echo "Group: Workflow Walker — Forensic History Traversal"
+echo "  Target Repository: $REPOSITORY"
 echo "  Max Depth: $MAX_DEPTH"
-REVISIONS=$(git rev-list --max-count="$MAX_DEPTH" HEAD 2>/dev/null || true)
 
+# Resolve revisions (Graph-aware)
+REVISIONS=$(git rev-list --max-count="$MAX_DEPTH" HEAD 2>/dev/null || true)
 if [[ -z "$REVISIONS" ]]; then
-    # Fallback for extremely shallow clones or empty repos
-    echo "  [!] Warning: git rev-list failed. Falling back to HEAD only."
+    # Fallback to local HEAD (last resort)
     REVISIONS=$(git rev-parse HEAD)
 fi
 
-# Tracking state
+# Image verification state
 FOUND_BUNDLE_JSON="{}"
 NOT_FOUND_COMPONENTS=("${!IMAGE_REPOS[@]}")
 
+# Helper: Verify if image exists in GHCR
 check_image() {
     local component="$1"
     local sha="$2"
-    local source_desc="$3"
+    local desc="$3"
     local repo="${IMAGE_REPOS[$component]}"
     local full_image="${repo}:sha-${sha}"
 
     if docker manifest inspect "$full_image" > /dev/null 2>&1; then
-        echo "  [✓] FOUND ($source_desc): $component -> $sha"
-        # Update the JSON bundle using jq
+        echo "  [✓] FOUND ($desc): $component -> $sha"
         FOUND_BUNDLE_JSON=$(echo "$FOUND_BUNDLE_JSON" | jq --arg c "$component" --arg s "$sha" '.[$c] = $s')
         return 0
     fi
     return 1
 }
 
-# Main Traversal Loop
+# Principal Traversal Loop
 for TARGET_SHA in $REVISIONS; do
-    [[ "$DEBUG" == "true" ]] && echo "  🔍 Inspecting $TARGET_SHA..."
-
-    # Secure PR lookup: Query GitHub API for the PR associated with this commit SHA.
-    # This correctly handles squash-merges by finding the original head SHA without
-    # relying on easily-spoofable commit message metadata.
+    # 1. Resolve associated PR Head SHA (the built SHA for Squash Merges)
     if [[ -n "$GH_TOKEN" ]]; then
-        [[ "$DEBUG" == "true" ]] && echo "    [DEBUG] Querying API for PRs associated with $TARGET_SHA..."
-        if [[ "$DEBUG" == "true" ]]; then
-            PR_JSON=$(gh api "repos/${INPUT_REPOSITORY:-$GITHUB_REPOSITORY}/commits/${TARGET_SHA}/pulls" || true)
-        else
-            PR_JSON=$(gh api "repos/${INPUT_REPOSITORY:-$GITHUB_REPOSITORY}/commits/${TARGET_SHA}/pulls" 2>/dev/null || true)
-        fi
-        
-        if [[ -z "$PR_JSON" ]]; then
-            [[ "$DEBUG" == "true" ]] && echo "    [DEBUG] API returned no data (likely permission denied or repo not found)."
-            PR_HEAD_SHA="null"
-        else
-            PR_HEAD_SHA=$(echo "$PR_JSON" | jq -r '.[0].head.sha' 2>/dev/null || echo "null")
-            [[ "$DEBUG" == "true" ]] && echo "    [DEBUG] API returned PR Head SHA: $PR_HEAD_SHA"
-        fi
+        # Endpoint mirrors the exact working pattern from your Vexilon script
+        PR_HEAD_SHA=$(gh api "/repos/${REPOSITORY}/commits/${TARGET_SHA}/pulls" --jq '.[0].head.sha' 2>/dev/null || true)
         
         if [[ -n "$PR_HEAD_SHA" && "$PR_HEAD_SHA" != "null" && "$PR_HEAD_SHA" != "$TARGET_SHA" ]]; then
-            REMAINING_COMPONENTS=()
+            REFRESHED_COMPONENTS=()
             for component in "${NOT_FOUND_COMPONENTS[@]}"; do
-                if check_image "$component" "$PR_HEAD_SHA" "via PR Link"; then
-                    continue
+                if ! check_image "$component" "$PR_HEAD_SHA" "PR Head"; then
+                    REFRESHED_COMPONENTS+=("$component")
                 fi
-                REMAINING_COMPONENTS+=("$component")
             done
-            NOT_FOUND_COMPONENTS=("${REMAINING_COMPONENTS[@]}")
+            NOT_FOUND_COMPONENTS=("${REFRESHED_COMPONENTS[@]}")
         fi
     fi
 
-    # 2. Main-step: Check the commit SHA itself
+    # 2. Check the commit itself (Standard Merges / Directly built commits)
     if [[ ${#NOT_FOUND_COMPONENTS[@]} -gt 0 ]]; then
-        REMAINING_COMPONENTS=()
+        REFRESHED_COMPONENTS=()
         for component in "${NOT_FOUND_COMPONENTS[@]}"; do
-            if check_image "$component" "$TARGET_SHA" "Direct SHA"; then
-                continue
+            if ! check_image "$component" "$TARGET_SHA" "Commit SHA"; then
+                REFRESHED_COMPONENTS+=("$component")
             fi
-            REMAINING_COMPONENTS+=("$component")
         done
-        NOT_FOUND_COMPONENTS=("${REMAINING_COMPONENTS[@]}")
+        NOT_FOUND_COMPONENTS=("${REFRESHED_COMPONENTS[@]}")
     fi
 
-    # Exit early if everything is found
+    # Early termination if all resolved
     if [[ ${#NOT_FOUND_COMPONENTS[@]} -eq 0 ]]; then
-        echo "  [!] All components resolved successfully."
+        echo "  [!] Success: All components resolved."
         break
     fi
 done
 
+echo "::endgroup::"
+
+# Validation
 if [[ ${#NOT_FOUND_COMPONENTS[@]} -gt 0 ]]; then
-    echo "::error::Could not find manifests for all components after inspecting $MAX_DEPTH commits."
-    echo "  MISSING: ${NOT_FOUND_COMPONENTS[*]}"
+    echo "::error::History traversal failed to resolve some components after $MAX_DEPTH commits."
+    echo "  NOT FOUND: ${NOT_FOUND_COMPONENTS[*]}"
     exit 1
 fi
 
-echo "::endgroup::"
-
-# Output the result
-{
-  echo "bundle=${FOUND_BUNDLE_JSON}"
-} >> "$GITHUB_OUTPUT"
+# Output results to GITHUB_OUTPUT
+echo "bundle=${FOUND_BUNDLE_JSON}" >> "$GITHUB_OUTPUT"
