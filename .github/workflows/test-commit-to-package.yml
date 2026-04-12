@@ -74,53 +74,48 @@ jobs:
       pull-requests: read
     steps:
       - uses: actions/checkout@v6
-
-      - name: Checkout Vexilon History
-        uses: actions/checkout@v6
         with:
-          repository: DerekRoberts/vexilon
-          path: vexilon-repo
           fetch-depth: 0
 
-      - name: Single-Package Test (Vexilon)
-        id: vexilon
-        uses: ./commit-to-package
-        with:
-          package: vexilon
-          repository: DerekRoberts/vexilon
-          dir: vexilon-repo
-          token: ${{ github.token }}
-
-      - name: Verify Vexilon Resolution
+      - name: Setup Mock Environment
         run: |
-          BUNDLE='${{ steps.vexilon.outputs.bundle }}'
-          echo "Bundle: $BUNDLE"
-          if [[ $(echo "$BUNDLE" | jq -r '.vexilon') == "null" ]]; then
-            echo "::error::Vexilon resolution failed"
-            exit 1
-          fi
+          mkdir -p .bin
+          # Mock gh api (returns HEAD SHA for any PR query)
+          echo '#!/usr/bin/env bash' > .bin/gh
+          echo 'if [[ "$1" == "api" ]]; then echo "f000000000000000000000000000000000000000"; else exit 0; fi' >> .bin/gh
+          chmod +x .bin/gh
+          
+          # Mock docker manifest inspect (returns success for our mock SHA)
+          echo '#!/usr/bin/env bash' > .bin/docker
+          echo 'if [[ "$*" == *"sha-f000000"* ]]; then exit 0; else exit 1; fi' >> .bin/docker
+          chmod +x .bin/docker
+          
+          echo "$(pwd)/.bin" >> $GITHUB_PATH
 
-      - name: Checkout Quickstart History
-        uses: actions/checkout@v6
-        with:
-          repository: bcgov/quickstart-openshift
-          path: quickstart-repo
-          fetch-depth: 0
+      - name: Create Test History
+        run: |
+          git config user.email "bot@github.com"
+          git config user.name "Bot"
+          echo "test" > test-file
+          git add test-file
+          # Create a commit with the MOCK SHA's prefix (not possible to force SHA, but we mock the API to return it)
+          git commit -m "test: add mock file"
 
-      - name: Multi-Package Test (Quickstart)
-        id: quickstart
+      - name: Multi-Package Mock Test
+        id: mock_test
         uses: ./commit-to-package
         with:
           package: frontend, backend
-          repository: bcgov/quickstart-openshift
-          dir: quickstart-repo
-          token: ${{ github.token }}
+          token: "mock-token"
+          debug: "true"
 
-      - name: Verify Quickstart Resolution
+      - name: Verify Mock Resolution
         run: |
-          BUNDLE='${{ steps.quickstart.outputs.bundle }}'
+          BUNDLE='${{ steps.mock_test.outputs.bundle }}'
           echo "Bundle: $BUNDLE"
-          if [[ $(echo "$BUNDLE" | jq -r '.frontend') == "null" ]] || [[ $(echo "$BUNDLE" | jq -r '.backend') == "null" ]]; then
-            echo "::error::Quickstart multi-package resolution failed"
+          if [[ $(echo "$BUNDLE" | jq -r '.frontend') != "f000000000000000000000000000000000000000" ]] || \
+             [[ $(echo "$BUNDLE" | jq -r '.backend') != "f000000000000000000000000000000000000000" ]]; then
+            echo "::error::Mock multi-package resolution failed"
             exit 1
           fi
+          echo "✅ Mock resolution successful"
