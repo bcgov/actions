@@ -1,0 +1,61 @@
+name: Test Commit to Package
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'commit-to-package/**'
+      - '.github/workflows/test-commit-to-package.yml'
+
+permissions:
+  contents: read
+  packages: read
+  pull-requests: read
+
+jobs:
+  test-vexilon-resolution:
+    name: Test Vexilon Resolution
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Actions Repo
+        uses: actions/checkout@v6
+        with:
+          path: actions-repo
+
+      - name: Checkout Vexilon (Target Repo)
+        uses: actions/checkout@v6
+        with:
+          repository: DerekRoberts/vexilon
+          path: vexilon-repo
+          fetch-depth: 50
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Commit to Package
+        id: resolve
+        uses: ./actions-repo/commit-to-package
+        with:
+          images: "vexilon=ghcr.io/derekroberts/vexilon"
+          max_depth: 50
+          token: ${{ secrets.GITHUB_TOKEN }}
+          debug: true
+
+      - name: Verify Resolution
+        run: |
+          BUNDLE='${{ steps.resolve.outputs.bundle }}'
+          echo "Resolved Bundle: $BUNDLE"
+          
+          # Use jq to verify we have a valid SHA for the 'vexilon' component
+          SHA=$(echo "$BUNDLE" | jq -r '.vexilon')
+          
+          if [[ "$SHA" == "null" ]] || [[ -z "$SHA" ]]; then
+            echo "::error::Failed to resolve vexilon image SHA!"
+            exit 1
+          fi
+          
+          echo "Successfully resolved vexilon to $SHA"
