@@ -52,6 +52,37 @@ while [[ $CURRENT_DEPTH -lt $MAX_DEPTH ]] && [[ ${#NOT_FOUND_COMPONENTS[@]} -gt 
     
     [[ "$DEBUG" == "true" ]] && echo "  Checking depth $CURRENT_DEPTH (SHA: $TARGET_SHA)..."
 
+    # Squash-merge logic: If the commit message looks like a squash merge (#123),
+    # we should also check the PR's head SHA since the image was likely built there.
+    COMMIT_MSG=$(git log -1 --pretty=%B "$TARGET_SHA")
+    if [[ "$COMMIT_MSG" =~ \(#([0-9]+)\) ]]; then
+        PR_NUMBER="${BASH_REMATCH[1]}"
+        [[ "$DEBUG" == "true" ]] && echo "    [!] Detected squash merge from PR #$PR_NUMBER. Resolving head SHA..."
+        
+        # Try to resolve PR head SHA via gh CLI
+        if PR_HEAD_SHA=$(gh pr view "$PR_NUMBER" --json headRefOid -q .headRefOid 2>/dev/null); then
+            [[ "$DEBUG" == "true" ]] && echo "    [!] Resolved PR #$PR_NUMBER head -> $PR_HEAD_SHA"
+            
+            # Check PR Head SHA for each missing component
+            for component in "${NOT_FOUND_COMPONENTS[@]}"; do
+                FULL_IMAGE="${IMAGE_REPOS[$component]}:$PR_HEAD_SHA"
+                if docker manifest inspect "$FULL_IMAGE" > /dev/null 2>&1; then
+                    echo "  [✓] FOUND (via PR #$PR_NUMBER): $component -> $PR_HEAD_SHA"
+                    FOUND_BUNDLE="${FOUND_BUNDLE}${component}=${PR_HEAD_SHA} "
+                    
+                    # Update NOT_FOUND_COMPONENTS (filter out found one)
+                    NEW_NOT_FOUND=()
+                    for c in "${NOT_FOUND_COMPONENTS[@]}"; do
+                        [[ "$c" != "$component" ]] && NEW_NOT_FOUND+=("$c")
+                    done
+                    NOT_FOUND_COMPONENTS=("${NEW_NOT_FOUND[@]}")
+                fi
+            done
+        else
+            [[ "$DEBUG" == "true" ]] && echo "    [!] Could not resolve PR #$PR_NUMBER (check GH_TOKEN or PR existence)."
+        fi
+    fi
+
     REMAINING_COMPONENTS=()
     for component in "${NOT_FOUND_COMPONENTS[@]}"; do
         FULL_IMAGE="${IMAGE_REPOS[$component]}:$TARGET_SHA"

@@ -11,6 +11,9 @@ inputs:
   debug:
     description: 'Enable debug logging'
     default: 'false'
+  token:
+    description: 'GitHub token for API access (required for squash-merge resolution)'
+    default: ${{ github.token }}
 
 outputs:
   bundle:
@@ -26,4 +29,5 @@ runs:
         INPUT_IMAGES: ${{ inputs.images }}
         INPUT_MAX_DEPTH: ${{ inputs.max_depth }}
         INPUT_DEBUG: ${{ inputs.debug }}
+        GH_TOKEN: ${{ inputs.token }}
       run: bash ${{ github.action_path }}/action.sh
