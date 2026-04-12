@@ -1,18 +1,13 @@
 name: 'Commit to Package'
-description: 'Forensic history traversal to resolve stable image SHAs from high-order repositories.'
+description: 'Forensic history traversal to resolve stable image SHAs from squash-merged commits.'
 
 inputs:
-  package:
-    description: |
-      Package name(s) to resolve (space or comma separated). Automatically resolves to
-      ghcr.io/<owner>/<repo>[/<package>] paths. At least one of `package` or `images` is required.
-      If both are provided, explicit `images` mappings take precedence.
-    required: false
   images:
     description: |
-      Explicit component=repo mappings (space or newline separated, e.g. "frontend=ghcr.io/org/app/frontend").
-      Takes precedence over `package` auto-resolution. At least one of `images` or `package` is required.
-    required: false
+      Package names or explicit component=repo mappings (space or newline separated).
+      Bare names (e.g. "frontend") auto-resolve to ghcr.io/<owner>/<repo>[/<name>].
+      Explicit mappings (e.g. "frontend=ghcr.io/org/app/frontend") are used as-is.
+    required: true
   max_depth:
     description: 'Max commits to walk back'
     default: '100'
@@ -20,10 +15,10 @@ inputs:
     description: 'Enable debug logging'
     default: 'false'
   token:
-    description: 'Specify token (GH or PAT)'
+    description: 'GitHub token (defaults to github.token)'
     default: ${{ github.token }}
   repository:
-    description: 'Non-default repo to clone'
+    description: 'Repository to resolve against (defaults to current repo)'
     default: ${{ github.repository }}
   dir:
     description: 'Directory containing the git repository'
@@ -31,7 +26,7 @@ inputs:
 
 outputs:
   bundle:
-    description: 'JSON object mapping components to verified SHAs'
+    description: 'JSON object mapping components to verified image tags (e.g. {"frontend":"sha-abc123"})'
     value: ${{ steps.walk.outputs.bundle }}
 
 runs:
@@ -40,7 +35,6 @@ runs:
     - id: walk
       shell: bash
       env:
-        INPUT_PACKAGE: ${{ inputs.package }}
         INPUT_IMAGES: ${{ inputs.images }}
         INPUT_MAX_DEPTH: ${{ inputs.max_depth }}
         INPUT_DEBUG: ${{ inputs.debug }}

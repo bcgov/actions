@@ -75,32 +75,52 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Checkout Quickstart History
+      - name: Checkout Quickstart History (multi-package)
         uses: actions/checkout@v6
         with:
           repository: bcgov/quickstart-openshift
           path: quickstart-repo
-          fetch-depth: 0
+          fetch-depth: 100
 
-      - name: Multi-Package Real-World Test (Quickstart)
+      - name: Multi-Package Test — explicit mapping (Quickstart)
         id: quickstart
         uses: ./commit-to-package
         with:
-          # Using explicit mapping to ensure we hit the right public packages
           images: |
             frontend=ghcr.io/bcgov/quickstart-openshift/frontend
             backend=ghcr.io/bcgov/quickstart-openshift/backend
           repository: bcgov/quickstart-openshift
           dir: quickstart-repo
           token: ${{ github.token }}
-          debug: "true"
 
       - name: Verify Quickstart Resolution
         run: |
           BUNDLE='${{ steps.quickstart.outputs.bundle }}'
           echo "Bundle: $BUNDLE"
-          if [[ $(echo "$BUNDLE" | jq -r '.frontend') == "null" ]] || [[ $(echo "$BUNDLE" | jq -r '.backend') == "null" ]]; then
-            echo "::error::Quickstart multi-package resolution failed"
-            exit 1
-          fi
-          echo "✅ Real-world resolution successful"
+          echo "$BUNDLE" | jq -e '.frontend and .backend' > /dev/null \
+            || { echo "::error::Quickstart multi-package resolution failed"; exit 1; }
+          echo "✅ Multi-package (explicit mapping) passed"
+
+      - name: Checkout Vexilon History (single-package, bare name)
+        uses: actions/checkout@v6
+        with:
+          repository: DerekRoberts/vexilon
+          path: vexilon-repo
+          fetch-depth: 100
+
+      - name: Single-Package Test — bare name (Vexilon)
+        id: vexilon
+        uses: ./commit-to-package
+        with:
+          images: vexilon
+          repository: DerekRoberts/vexilon
+          dir: vexilon-repo
+          token: ${{ github.token }}
+
+      - name: Verify Vexilon Resolution
+        run: |
+          BUNDLE='${{ steps.vexilon.outputs.bundle }}'
+          echo "Bundle: $BUNDLE"
+          echo "$BUNDLE" | jq -e '.vexilon' > /dev/null \
+            || { echo "::error::Vexilon single-package resolution failed"; exit 1; }
+          echo "✅ Single-package (bare name) passed"
