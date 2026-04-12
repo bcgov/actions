@@ -155,7 +155,8 @@ test_auto_resolve_mapping() {
     declare -A IMAGE_REPOS
     for pkg in $CLEAN_PACKAGES; do
         local repo_name="${REPOSITORY#*/}"
-        local lc_repo=$(echo "$REPOSITORY" | tr '[:upper:]' '[:lower:]')
+        local lc_repo
+        lc_repo=$(echo "$REPOSITORY" | tr '[:upper:]' '[:lower:]')
         # Logic from action.sh
         if [[ "$pkg" == "$repo_name" ]]; then
              IMAGE_REPOS["$pkg"]="ghcr.io/${lc_repo}"
