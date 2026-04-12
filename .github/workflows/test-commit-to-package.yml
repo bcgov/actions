@@ -74,48 +74,33 @@ jobs:
       pull-requests: read
     steps:
       - uses: actions/checkout@v6
+
+      - name: Checkout Quickstart History
+        uses: actions/checkout@v6
         with:
+          repository: bcgov/quickstart-openshift
+          path: quickstart-repo
           fetch-depth: 0
 
-      - name: Setup Mock Environment
-        run: |
-          mkdir -p .bin
-          # Mock gh (Always return a fixed SHA)
-          echo '#!/usr/bin/env bash' > .bin/gh
-          echo 'echo "f000000000000000000000000000000000000000"' >> .bin/gh
-          chmod +x .bin/gh
-          
-          # Mock docker (Always return success)
-          echo '#!/usr/bin/env bash' > .bin/docker
-          echo 'exit 0' >> .bin/docker
-          chmod +x .bin/docker
-          
-          echo "$(pwd)/.bin" >> $GITHUB_PATH
-
-      - name: Create Test History
-        run: |
-          git config user.email "bot@github.com"
-          git config user.name "Bot"
-          # Ensure at least one commit exists to walk
-          echo "test" > test-file
-          git add test-file
-          git commit -m "test: add mock file"
-
-      - name: Multi-Package Mock Test
-        id: mock_test
+      - name: Multi-Package Real-World Test (Quickstart)
+        id: quickstart
         uses: ./commit-to-package
         with:
-          package: frontend, backend
-          token: "mock-token"
+          # Using explicit mapping to ensure we hit the right public packages
+          images: |
+            frontend=ghcr.io/bcgov/quickstart-openshift/frontend
+            backend=ghcr.io/bcgov/quickstart-openshift/backend
+          repository: bcgov/quickstart-openshift
+          dir: quickstart-repo
+          token: ${{ github.token }}
           debug: "true"
 
-      - name: Verify Mock Resolution
+      - name: Verify Quickstart Resolution
         run: |
-          BUNDLE='${{ steps.mock_test.outputs.bundle }}'
+          BUNDLE='${{ steps.quickstart.outputs.bundle }}'
           echo "Bundle: $BUNDLE"
-          if [[ $(echo "$BUNDLE" | jq -r '.frontend') != "f000000000000000000000000000000000000000" ]] || \
-             [[ $(echo "$BUNDLE" | jq -r '.backend') != "f000000000000000000000000000000000000000" ]]; then
-            echo "::error::Mock multi-package resolution failed"
+          if [[ $(echo "$BUNDLE" | jq -r '.frontend') == "null" ]] || [[ $(echo "$BUNDLE" | jq -r '.backend') == "null" ]]; then
+            echo "::error::Quickstart multi-package resolution failed"
             exit 1
           fi
-          echo "✅ Mock resolution successful"
+          echo "✅ Real-world resolution successful"
