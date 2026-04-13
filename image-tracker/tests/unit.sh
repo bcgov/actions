@@ -3,12 +3,6 @@
 
 set -eo pipefail
 
-# Color codes for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
-
 passed=0
 failed=0
 
@@ -36,19 +30,19 @@ parse_packages() {
     done < <(echo "$package_input" | tr ',' '\n')
 }
 
-# Test framework
+# Test framework (simplified for CI compatibility)
 assert_eq() {
     local actual="$1"
     local expected="$2"
     local name="$3"
     
     if [[ "$actual" == "$expected" ]]; then
-        printf "%b ✓ %b %s\n" "${GREEN}" "${NC}" "$name"
+        echo "✓ $name"
         passed=$((passed + 1))
     else
-        printf "%b ✗ %b %s\n" "${RED}" "${NC}" "$name"
-        printf "  Expected: '%s'\n" "$expected"
-        printf "  Actual:   '%s'\n" "$actual"
+        echo "✗ $name"
+        echo "  Expected: '$expected'"
+        echo "  Actual:   '$actual'"
         failed=$((failed + 1))
     fi
 }
@@ -183,7 +177,7 @@ test_revision_resolution() {
        echo "DEBUG: head_minus_one='${head_minus_one}' RESOLVED='${RESOLVED}'"
        assert_eq "$RESOLVED" "$head_minus_one" "HEAD~1 resolves to current parent SHA"
     else
-       printf "%b i %b %s\n" "${YELLOW}" "${NC}" "Skipping revision test (need at least 2 commits)"
+       echo "ℹ Skipping revision test (need at least 2 commits)"
        passed=$((passed + 1))
     fi
 }
