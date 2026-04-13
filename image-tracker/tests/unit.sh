@@ -216,7 +216,9 @@ test_auto_resolve_mapping_newline() {
 
 # Run tests
 echo "Running image-tracker unit tests..."
-echo
+echo "Bash version: $BASH_VERSION"
+echo "Shell: $SHELL"
+echo ""
 test_auto_resolve_mapping
 test_auto_resolve_mapping_newline
 test_parse_image_mapping_single
