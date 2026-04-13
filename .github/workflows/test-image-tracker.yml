@@ -34,7 +34,11 @@ jobs:
 
       - name: Run Unit Tests
         run: |
-          bash image-tracker/tests/unit.sh
+          echo "Bash executable: $(which bash)"
+          echo "Bash version: $BASH_VERSION"
+          bash --version
+          echo "---"
+          bash -x image-tracker/tests/unit.sh
 
   validate:
     name: Validate Action Definition
