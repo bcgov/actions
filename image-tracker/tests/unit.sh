@@ -1,11 +1,7 @@
 #!/bin/bash
 # Unit tests for image-tracker logic (non-Docker parts)
 
-echo "Starting unit test script..." >&2
-
 set -eo pipefail
-
-echo "Set error handling..." >&2
 
 passed=0
 failed=0
@@ -174,14 +170,14 @@ test_revision_resolution() {
     local head_minus_one
     head_minus_one=$(git rev-parse HEAD~1 2>/dev/null || echo "")
     
-    if [[ -n "$head_minus_one" ]]; then
+    # Check if HEAD~1 is a valid 40-character SHA (full commit hash)
+    if [[ -n "$head_minus_one" ]] && [[ "$head_minus_one" =~ ^[a-f0-9]{40}$ ]]; then
        local REVISION="HEAD~1"
        local RESOLVED
        RESOLVED=$(git rev-list --max-count=1 "$REVISION" 2>/dev/null || true)
-       echo "DEBUG: head_minus_one='${head_minus_one}' RESOLVED='${RESOLVED}'"
        assert_eq "$RESOLVED" "$head_minus_one" "HEAD~1 resolves to current parent SHA"
     else
-       echo "ℹ Skipping revision test (need at least 2 commits)"
+       echo "ℹ Skipping revision test (need at least 2 commits or shallow clone detected)"
        passed=$((passed + 1))
     fi
 }
