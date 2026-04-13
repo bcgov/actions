@@ -1,7 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 set -x # X-Ray Vision: ON
-set -x # Enable X-ray vision for debugging
 
 # Helper functions for consistency across all actions
 function log_debug() {
@@ -69,8 +68,8 @@ else
 fi
 
 echo "Summary ---"
-echo -e "\tIssue: #${ISSUE_NUM}"
-echo -e "\tURL:   ${ISSUE_URL}"
+printf "\tIssue: #%s\n" "${ISSUE_NUM}"
+printf "\tURL:   %s\n" "${ISSUE_URL}"
 
 # Write outputs (useful even in dry runs)
 echo "issue_number=${ISSUE_NUM}" >> "${GITHUB_OUTPUT}"

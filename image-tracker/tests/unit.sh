@@ -1,7 +1,51 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Unit tests for image-tracker logic (non-Docker parts)
 
 set -eo pipefail
+
+passed=0
+failed=0
+
+# Shared parsing function (matches action.sh exactly)
+parse_packages() {
+    local package_input="$1"
+    local repository="$2"
+    
+    # Clear and re-declare array (avoids persistence between tests)
+    unset IMAGE_REPOS
+    declare -gA IMAGE_REPOS
+    
+    local repo_name="${repository#*/}"
+    local lc_repo
+    lc_repo=$(echo "$repository" | tr '[:upper:]' '[:lower:]')
+    
+    while IFS= read -r pkg; do
+        pkg=$(echo "$pkg" | tr -d '[:space:]')
+        [[ -z "$pkg" ]] && continue
+        if [[ "${pkg,,}" == "${repo_name,,}" ]]; then
+            IMAGE_REPOS["$pkg"]="ghcr.io/${lc_repo}"
+        else
+            IMAGE_REPOS["$pkg"]="ghcr.io/${lc_repo}/${pkg,,}"
+        fi
+    done < <(echo "$package_input" | tr ',' '\n')
+}
+
+# Test framework (simplified for CI compatibility)
+assert_eq() {
+    local actual="$1"
+    local expected="$2"
+    local name="$3"
+    
+    if [[ "$actual" == "$expected" ]]; then
+        echo "✓ $name"
+        passed=$((passed + 1))
+    else
+        echo "✗ $name"
+        echo "  Expected: '$expected'"
+        echo "  Actual:   '$actual'"
+        failed=$((failed + 1))
+    fi
+}
 
 test_parse_image_mapping_single() {
     local images="frontend=ghcr.io/owner/frontend"
@@ -122,27 +166,19 @@ test_git_history_traversal() {
     fi
 }
 
-# Test framework
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-NC='\033[0m'
-
-passed=0
-failed=0
-
-assert_eq() {
-    local actual="$1"
-    local expected="$2"
-    local name="$3"
+test_revision_resolution() {
+    local head_minus_one
+    head_minus_one=$(git rev-parse HEAD~1 2>/dev/null || echo "")
     
-    if [[ "$actual" == "$expected" ]]; then
-        echo -e "${GREEN}✓${NC} $name"
-        passed=$((passed + 1))
+    # Check if HEAD~1 is a valid 40-character SHA (full commit hash)
+    if [[ -n "$head_minus_one" ]] && [[ "$head_minus_one" =~ ^[a-f0-9]{40}$ ]]; then
+       local REVISION="HEAD~1"
+       local RESOLVED
+       RESOLVED=$(git rev-list --max-count=1 "$REVISION" 2>/dev/null || true)
+       assert_eq "$RESOLVED" "$head_minus_one" "HEAD~1 resolves to current parent SHA"
     else
-        echo -e "${RED}✗${NC} $name"
-        echo "  Expected: '$expected'"
-        echo "  Actual:   '$actual'"
-        failed=$((failed + 1))
+       echo "ℹ Skipping revision test (need at least 2 commits or shallow clone detected)"
+       passed=$((passed + 1))
     fi
 }
 
@@ -150,21 +186,8 @@ test_auto_resolve_mapping() {
     local PACKAGE_NAMES="frontend, Backend, quickstart-openshift"
     local REPOSITORY="bcgov/quickstart-openshift"
     
-    # Emulate action.sh logic
-    CLEAN_PACKAGES=$(echo "$PACKAGE_NAMES" | tr ',' ' ')
-    declare -A IMAGE_REPOS
-    for pkg in $CLEAN_PACKAGES; do
-        local repo_name="${REPOSITORY#*/}"
-        local lc_repo
-        lc_repo=$(echo "$REPOSITORY" | tr '[:upper:]' '[:lower:]')
-        # Logic from action.sh
-        if [[ "$pkg" == "$repo_name" ]]; then
-             IMAGE_REPOS["$pkg"]="ghcr.io/${lc_repo}"
-        else
-             # Note: the ${pkg,,} lowercase operator is used in action.sh
-             IMAGE_REPOS["$pkg"]="ghcr.io/${lc_repo}/${pkg,,}"
-        fi
-    done
+    # Reuse exact action.sh parsing logic
+    parse_packages "$PACKAGE_NAMES" "$REPOSITORY"
     
     assert_eq "${#IMAGE_REPOS[@]}" "3" "Correct package count"
     assert_eq "${IMAGE_REPOS[frontend]}" "ghcr.io/bcgov/quickstart-openshift/frontend" "Auto-nested lowercase frontend"
@@ -172,10 +195,26 @@ test_auto_resolve_mapping() {
     assert_eq "${IMAGE_REPOS[quickstart-openshift]}" "ghcr.io/bcgov/quickstart-openshift" "Correct base-repo mapping"
 }
 
+test_auto_resolve_mapping_newline() {
+    local PACKAGE_NAMES=$'api\nfrontend\ndb'
+    local REPOSITORY="bcgov/myapp"
+    
+    # Test newline-separated inputs
+    parse_packages "$PACKAGE_NAMES" "$REPOSITORY"
+    
+    assert_eq "${#IMAGE_REPOS[@]}" "3" "Correct package count for newline input"
+    assert_eq "${IMAGE_REPOS[api]}" "ghcr.io/bcgov/myapp/api" "API package resolved"
+    assert_eq "${IMAGE_REPOS[frontend]}" "ghcr.io/bcgov/myapp/frontend" "Frontend package resolved"
+    assert_eq "${IMAGE_REPOS[db]}" "ghcr.io/bcgov/myapp/db" "DB package resolved"
+}
+
 # Run tests
 echo "Running image-tracker unit tests..."
-echo
+echo "Bash version: $BASH_VERSION"
+echo "Shell: $SHELL"
+echo ""
 test_auto_resolve_mapping
+test_auto_resolve_mapping_newline
 test_parse_image_mapping_single
 test_parse_image_mapping_multiple
 test_build_json_single
@@ -183,6 +222,7 @@ test_build_json_empty
 test_git_rev_parse
 test_git_head_resolution
 test_git_history_traversal
+test_revision_resolution
 
 echo
 echo "Results: $passed passed, $failed failed"

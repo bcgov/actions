@@ -2,7 +2,7 @@
 # Forensic extraction of core logic from bcgov/action-diff-triggers baseline
 # Migrated to mono-repo to support atomic, same-commit orchestration.
 
-set -eo pipefail
+set -euo pipefail
 
 TRIGGERS_STR="${INPUT_TRIGGERS:-}"
 COMPARE_REF="${INPUT_REF:-}"
@@ -23,7 +23,7 @@ done < <(grep -o "'[^']*'" <<< "$TRIGGERS_STR" | sed "s/'//g")
 # Fallback for unquoted formats: "./path1/ ./path2/" or "./path1/,./path2/"
 if [[ ${#TRIGGERS[@]} -eq 0 ]]; then
   NORMALIZED="${TRIGGERS_STR//,/ }"
-  for trigger in $NORMALIZED; do
+  for trigger in ${NORMALIZED}; do
     [[ -n "$trigger" ]] && TRIGGERS+=("$trigger")
   done
 fi

@@ -17,8 +17,19 @@ To maintain "Boss Level" consistency across all our actions, every PR should:
 
 ### [workflow-notifier](./workflow-notifier/)
 Find `CODEOWNERS` and coordinate notifications (GitHub Issues) on job failures.
-- **Icon:** `alert-circle` (red)
-- **Uses:** `bcgov/actions/workflow-notifier@v1`
+- **Uses:** `bcgov/actions/workflow-notifier@main`
+
+### [image-tracker](./image-tracker/)
+Forensic history traversal to resolve stable image SHAs from Tags or SHAs.
+- **Uses:** `bcgov/actions/image-tracker@main`
+
+### [diff-triggers](./diff-triggers/)
+Resolve file-based change triggers for multi-package repositories.
+- **Uses:** `bcgov/actions/diff-triggers@main`
+
+### [builder-ghcr](./builder-ghcr/)
+Generic GHCR container builder with automatic tag management.
+- **Uses:** `bcgov/actions/builder-ghcr@main`
 
 ---
 

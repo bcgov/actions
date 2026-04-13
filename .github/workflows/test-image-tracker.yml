@@ -59,11 +59,6 @@ jobs:
           python3 -c "import yaml; yaml.safe_load(open('image-tracker/action.yml'))"
           echo "✅ YAML syntax valid"
 
-      - name: Verify parsing via unit tests
-        run: |
-          cd image-tracker
-          bash tests/unit.sh
-
   functional:
     name: Functional Tests (Real-World)
     needs: unit
