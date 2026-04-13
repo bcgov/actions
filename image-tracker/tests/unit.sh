@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Unit tests for image-tracker logic (non-Docker parts)
 
 set -eo pipefail
@@ -122,9 +122,24 @@ test_git_history_traversal() {
     fi
 }
 
+test_revision_resolution() {
+    local head_minus_one
+    head_minus_one=$(git rev-parse HEAD~1 2>/dev/null || echo "")
+    
+    if [[ -n "$head_minus_one" ]]; then
+       local REVISION="HEAD~1"
+       local RESOLVED=$(git rev-list --max-count=1 "$REVISION" 2>/dev/null || true)
+       assert_eq "$RESOLVED" "$head_minus_one" "HEAD~1 resolves to current parent SHA"
+    else
+       echo -e "${YELLOW}i${NC} Skipping revision test (need at least 2 commits)"
+       passed=$((passed + 1))
+    fi
+}
+
 # Test framework
 RED='\033[0;31m'
 GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
 NC='\033[0m'
 
 passed=0
@@ -158,10 +173,9 @@ test_auto_resolve_mapping() {
         local lc_repo
         lc_repo=$(echo "$REPOSITORY" | tr '[:upper:]' '[:lower:]')
         # Logic from action.sh
-        if [[ "$pkg" == "$repo_name" ]]; then
+        if [[ "${pkg,,}" == "${repo_name,,}" ]]; then
              IMAGE_REPOS["$pkg"]="ghcr.io/${lc_repo}"
         else
-             # Note: the ${pkg,,} lowercase operator is used in action.sh
              IMAGE_REPOS["$pkg"]="ghcr.io/${lc_repo}/${pkg,,}"
         fi
     done
@@ -183,6 +197,7 @@ test_build_json_empty
 test_git_rev_parse
 test_git_head_resolution
 test_git_history_traversal
+test_revision_resolution
 
 echo
 echo "Results: $passed passed, $failed failed"

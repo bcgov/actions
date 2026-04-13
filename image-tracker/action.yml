@@ -20,6 +20,9 @@ inputs:
   dir:
     description: 'Directory containing the git repository'
     default: '.'
+  revision:
+    description: 'Starting revision to walk back from (Tag, Branch, or SHA)'
+    default: 'HEAD'
 
 outputs:
   bundle:
@@ -36,5 +39,6 @@ runs:
         INPUT_MAX_DEPTH: ${{ inputs.max_depth }}
         INPUT_DIR: ${{ inputs.dir }}
         INPUT_REPOSITORY: ${{ inputs.repository }}
+        INPUT_REVISION: ${{ inputs.revision }}
         GH_TOKEN: ${{ inputs.token }}
       run: bash ${{ github.action_path }}/action.sh

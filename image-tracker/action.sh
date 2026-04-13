@@ -10,6 +10,7 @@ MAX_DEPTH="${INPUT_MAX_DEPTH:-100}"
 GH_TOKEN="${GH_TOKEN:-}"
 DIR="${INPUT_DIR:-.}"
 REPOSITORY="${INPUT_REPOSITORY:-$GITHUB_REPOSITORY}"
+REVISION="${INPUT_REVISION:-HEAD}"
 
 if [[ -z "$PACKAGE_INPUT" ]]; then
   echo "::error::No packages provided. Set the 'package' input."
@@ -37,13 +38,14 @@ done < <(echo "$PACKAGE_INPUT" | tr ',' '\n')
 
 echo "Group: Workflow Walker — Forensic History Traversal"
 echo "  Target Repository: $REPOSITORY"
+echo "  Starting Revision: $REVISION"
 echo "  Max Depth: $MAX_DEPTH"
 echo "  Packages: ${!IMAGE_REPOS[*]}"
 
 # Resolve revisions
-REVISIONS=$(git rev-list --max-count="$MAX_DEPTH" HEAD 2>/dev/null || true)
+REVISIONS=$(git rev-list --max-count="$MAX_DEPTH" "$REVISION" 2>/dev/null || true)
 if [[ -z "$REVISIONS" ]]; then
-    REVISIONS=$(git rev-parse HEAD)
+    REVISIONS=$(git rev-parse "$REVISION" 2>/dev/null || echo "$REVISION")
 fi
 
 # Verification state
