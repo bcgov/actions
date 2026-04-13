@@ -1,7 +1,11 @@
 #!/bin/bash
 # Unit tests for image-tracker logic (non-Docker parts)
 
+echo "Starting unit test script..." >&2
+
 set -eo pipefail
+
+echo "Set error handling..." >&2
 
 passed=0
 failed=0
