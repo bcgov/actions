@@ -128,10 +128,12 @@ test_revision_resolution() {
     
     if [[ -n "$head_minus_one" ]]; then
        local REVISION="HEAD~1"
-       local RESOLVED=$(git rev-list --max-count=1 "$REVISION" 2>/dev/null || true)
+       local RESOLVED
+       RESOLVED=$(git rev-list --max-count=1 "$REVISION" 2>/dev/null || true)
+       echo "DEBUG: head_minus_one='${head_minus_one}' RESOLVED='${RESOLVED}'"
        assert_eq "$RESOLVED" "$head_minus_one" "HEAD~1 resolves to current parent SHA"
     else
-       echo -e "${YELLOW}i${NC} Skipping revision test (need at least 2 commits)"
+       printf "%b i %b %s\n" "${YELLOW}" "${NC}" "Skipping revision test (need at least 2 commits)"
        passed=$((passed + 1))
     fi
 }
@@ -151,12 +153,12 @@ assert_eq() {
     local name="$3"
     
     if [[ "$actual" == "$expected" ]]; then
-        echo -e "${GREEN}✓${NC} $name"
+        printf "%b ✓ %b %s\n" "${GREEN}" "${NC}" "$name"
         passed=$((passed + 1))
     else
-        echo -e "${RED}✗${NC} $name"
-        echo "  Expected: '$expected'"
-        echo "  Actual:   '$actual'"
+        printf "%b ✗ %b %s\n" "${RED}" "${NC}" "$name"
+        printf "  Expected: '%s'\n" "$expected"
+        printf "  Actual:   '%s'\n" "$actual"
         failed=$((failed + 1))
     fi
 }
@@ -165,20 +167,22 @@ test_auto_resolve_mapping() {
     local PACKAGE_NAMES="frontend, Backend, quickstart-openshift"
     local REPOSITORY="bcgov/quickstart-openshift"
     
-    # Emulate action.sh logic
-    CLEAN_PACKAGES=$(echo "$PACKAGE_NAMES" | tr ',' ' ')
+    # Emulate action.sh logic exactly (comma -> newline -> clean)
     declare -A IMAGE_REPOS
-    for pkg in $CLEAN_PACKAGES; do
+    while IFS= read -r pkg; do
+        pkg=$(echo "$pkg" | tr -d '[:space:]')
+        [[ -z "$pkg" ]] && continue
+        
         local repo_name="${REPOSITORY#*/}"
         local lc_repo
         lc_repo=$(echo "$REPOSITORY" | tr '[:upper:]' '[:lower:]')
-        # Logic from action.sh
+        
         if [[ "${pkg,,}" == "${repo_name,,}" ]]; then
              IMAGE_REPOS["$pkg"]="ghcr.io/${lc_repo}"
         else
              IMAGE_REPOS["$pkg"]="ghcr.io/${lc_repo}/${pkg,,}"
         fi
-    done
+    done < <(echo "$PACKAGE_NAMES" | tr ',' '\n')
     
     assert_eq "${#IMAGE_REPOS[@]}" "3" "Correct package count"
     assert_eq "${IMAGE_REPOS[frontend]}" "ghcr.io/bcgov/quickstart-openshift/frontend" "Auto-nested lowercase frontend"

@@ -36,16 +36,25 @@ while IFS= read -r pkg; do
     fi
 done < <(echo "$PACKAGE_INPUT" | tr ',' '\n')
 
-echo "Group: Workflow Walker — Forensic History Traversal"
+echo "::group::Workflow Walker — Forensic History Traversal"
 echo "  Target Repository: $REPOSITORY"
 echo "  Starting Revision: $REVISION"
 echo "  Max Depth: $MAX_DEPTH"
 echo "  Packages: ${!IMAGE_REPOS[*]}"
+echo ""
 
-# Resolve revisions
-REVISIONS=$(git rev-list --max-count="$MAX_DEPTH" "$REVISION" 2>/dev/null || true)
+# Resolve starting commit (support Tags/Branches/SHAs)
+START_SHA=$(git rev-parse --verify --quiet "${REVISION}^{commit}" 2>/dev/null || true)
+if [[ -z "$START_SHA" ]]; then
+    # Fallback: if we can't find the commit, try original HEAD for safety
+    START_SHA=$(git rev-parse --verify --quiet "HEAD^{commit}")
+    echo "  [!] Warning: Revision '$REVISION' not found. Defaulting to HEAD."
+fi
+
+REVISIONS=$(git rev-list --max-count="$MAX_DEPTH" "$START_SHA" 2>/dev/null || true)
 if [[ -z "$REVISIONS" ]]; then
-    REVISIONS=$(git rev-parse "$REVISION" 2>/dev/null || echo "$REVISION")
+    # Final fallback: just the single SHA
+    REVISIONS="$START_SHA"
 fi
 
 # Verification state
