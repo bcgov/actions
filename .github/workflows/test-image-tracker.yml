@@ -1,4 +1,4 @@
-name: Test Commit to Package
+name: Test Image Tracker
 
 on:
   pull_request:
@@ -34,7 +34,7 @@ jobs:
 
       - name: Run Unit Tests
         run: |
-          bash commit-to-package/tests/unit.sh
+          bash image-tracker/tests/unit.sh
 
   validate:
     name: Validate Action Definition
@@ -47,8 +47,8 @@ jobs:
 
       - name: Validate action.yml exists
         run: |
-          if [ ! -f "commit-to-package/action.yml" ]; then
-            echo "::error::commit-to-package/action.yml not found"
+          if [ ! -f "image-tracker/action.yml" ]; then
+            echo "::error::image-tracker/action.yml not found"
             exit 1
           fi
           echo "✅ action.yml exists"
@@ -56,12 +56,12 @@ jobs:
       - name: Validate YAML syntax
         run: |
           pip install pyyaml -q
-          python3 -c "import yaml; yaml.safe_load(open('commit-to-package/action.yml'))"
+          python3 -c "import yaml; yaml.safe_load(open('image-tracker/action.yml'))"
           echo "✅ YAML syntax valid"
 
       - name: Verify parsing via unit tests
         run: |
-          cd commit-to-package
+          cd image-tracker
           bash tests/unit.sh
 
   functional:
@@ -84,7 +84,7 @@ jobs:
 
       - name: Resolve vexilon package
         id: vexilon
-        uses: ./commit-to-package
+        uses: ./image-tracker
         with:
           package: vexilon
           repository: DerekRoberts/vexilon

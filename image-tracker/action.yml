@@ -1,4 +1,4 @@
-name: 'Commit to Package'
+name: 'Image Tracker'
 description: 'Forensic history traversal to resolve stable image SHAs from squash-merged commits.'
 
 inputs:
