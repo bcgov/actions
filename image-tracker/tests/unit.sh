@@ -3,6 +3,56 @@
 
 set -eo pipefail
 
+# Color codes for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+passed=0
+failed=0
+
+# Shared parsing function (matches action.sh exactly)
+parse_packages() {
+    local package_input="$1"
+    local repository="$2"
+    
+    # Clear and re-declare array (avoids persistence between tests)
+    unset IMAGE_REPOS
+    declare -gA IMAGE_REPOS
+    
+    local repo_name="${repository#*/}"
+    local lc_repo
+    lc_repo=$(echo "$repository" | tr '[:upper:]' '[:lower:]')
+    
+    while IFS= read -r pkg; do
+        pkg=$(echo "$pkg" | tr -d '[:space:]')
+        [[ -z "$pkg" ]] && continue
+        if [[ "${pkg,,}" == "${repo_name,,}" ]]; then
+            IMAGE_REPOS["$pkg"]="ghcr.io/${lc_repo}"
+        else
+            IMAGE_REPOS["$pkg"]="ghcr.io/${lc_repo}/${pkg,,}"
+        fi
+    done < <(echo "$package_input" | tr ',' '\n')
+}
+
+# Test framework
+assert_eq() {
+    local actual="$1"
+    local expected="$2"
+    local name="$3"
+    
+    if [[ "$actual" == "$expected" ]]; then
+        printf "%b ✓ %b %s\n" "${GREEN}" "${NC}" "$name"
+        passed=$((passed + 1))
+    else
+        printf "%b ✗ %b %s\n" "${RED}" "${NC}" "$name"
+        printf "  Expected: '%s'\n" "$expected"
+        printf "  Actual:   '%s'\n" "$actual"
+        failed=$((failed + 1))
+    fi
+}
+
 test_parse_image_mapping_single() {
     local images="frontend=ghcr.io/owner/frontend"
     local component repo
@@ -138,51 +188,12 @@ test_revision_resolution() {
     fi
 }
 
-# Test framework
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
-
-passed=0
-failed=0
-
-assert_eq() {
-    local actual="$1"
-    local expected="$2"
-    local name="$3"
-    
-    if [[ "$actual" == "$expected" ]]; then
-        printf "%b ✓ %b %s\n" "${GREEN}" "${NC}" "$name"
-        passed=$((passed + 1))
-    else
-        printf "%b ✗ %b %s\n" "${RED}" "${NC}" "$name"
-        printf "  Expected: '%s'\n" "$expected"
-        printf "  Actual:   '%s'\n" "$actual"
-        failed=$((failed + 1))
-    fi
-}
-
 test_auto_resolve_mapping() {
     local PACKAGE_NAMES="frontend, Backend, quickstart-openshift"
     local REPOSITORY="bcgov/quickstart-openshift"
     
-    # Emulate action.sh logic exactly (comma -> newline -> clean)
-    declare -A IMAGE_REPOS
-    while IFS= read -r pkg; do
-        pkg=$(echo "$pkg" | tr -d '[:space:]')
-        [[ -z "$pkg" ]] && continue
-        
-        local repo_name="${REPOSITORY#*/}"
-        local lc_repo
-        lc_repo=$(echo "$REPOSITORY" | tr '[:upper:]' '[:lower:]')
-        
-        if [[ "${pkg,,}" == "${repo_name,,}" ]]; then
-             IMAGE_REPOS["$pkg"]="ghcr.io/${lc_repo}"
-        else
-             IMAGE_REPOS["$pkg"]="ghcr.io/${lc_repo}/${pkg,,}"
-        fi
-    done < <(echo "$PACKAGE_NAMES" | tr ',' '\n')
+    # Reuse exact action.sh parsing logic
+    parse_packages "$PACKAGE_NAMES" "$REPOSITORY"
     
     assert_eq "${#IMAGE_REPOS[@]}" "3" "Correct package count"
     assert_eq "${IMAGE_REPOS[frontend]}" "ghcr.io/bcgov/quickstart-openshift/frontend" "Auto-nested lowercase frontend"
@@ -190,10 +201,24 @@ test_auto_resolve_mapping() {
     assert_eq "${IMAGE_REPOS[quickstart-openshift]}" "ghcr.io/bcgov/quickstart-openshift" "Correct base-repo mapping"
 }
 
+test_auto_resolve_mapping_newline() {
+    local PACKAGE_NAMES=$'api\nfrontend\ndb'
+    local REPOSITORY="bcgov/myapp"
+    
+    # Test newline-separated inputs
+    parse_packages "$PACKAGE_NAMES" "$REPOSITORY"
+    
+    assert_eq "${#IMAGE_REPOS[@]}" "3" "Correct package count for newline input"
+    assert_eq "${IMAGE_REPOS[api]}" "ghcr.io/bcgov/myapp/api" "API package resolved"
+    assert_eq "${IMAGE_REPOS[frontend]}" "ghcr.io/bcgov/myapp/frontend" "Frontend package resolved"
+    assert_eq "${IMAGE_REPOS[db]}" "ghcr.io/bcgov/myapp/db" "DB package resolved"
+}
+
 # Run tests
 echo "Running image-tracker unit tests..."
 echo
 test_auto_resolve_mapping
+test_auto_resolve_mapping_newline
 test_parse_image_mapping_single
 test_parse_image_mapping_multiple
 test_build_json_single
