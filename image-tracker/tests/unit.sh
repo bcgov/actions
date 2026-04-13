@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Unit tests for commit-to-package logic (non-Docker parts)
+# Unit tests for image-tracker logic (non-Docker parts)
 
 set -eo pipefail
 
@@ -173,7 +173,7 @@ test_auto_resolve_mapping() {
 }
 
 # Run tests
-echo "Running commit-to-package unit tests..."
+echo "Running image-tracker unit tests..."
 echo
 test_auto_resolve_mapping
 test_parse_image_mapping_single
