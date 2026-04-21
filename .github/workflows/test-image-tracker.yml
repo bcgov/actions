@@ -68,22 +68,13 @@ jobs:
       packages: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@v6
-
-      - name: Checkout Vexilon
-        uses: actions/checkout@v6
-        with:
-          repository: DerekRoberts/vexilon
-          path: vexilon-repo
-          fetch-depth: 100
-
       - name: Resolve vexilon package
         id: vexilon
         uses: ./image-tracker
         with:
           package: vexilon
           repository: DerekRoberts/vexilon
-          dir: vexilon-repo
+          fetch-depth: 100
           token: ${{ github.token }}
 
       - name: Verify resolution

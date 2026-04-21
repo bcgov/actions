@@ -23,6 +23,9 @@ inputs:
   revision:
     description: 'Starting revision to walk back from (Tag, Branch, or SHA)'
     default: 'HEAD'
+  fetch_depth:
+    description: 'Number of commits to fetch (default: 100)'
+    default: '100'
 
 outputs:
   packages:
@@ -32,6 +35,15 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ inputs.repository }}
+        path: ${{ inputs.dir }}
+        ref: ${{ inputs.revision }}
+        fetch-depth: ${{ inputs.fetch_depth }}
+        token: ${{ inputs.token }}
+
     - id: walk
       shell: bash
       env:
