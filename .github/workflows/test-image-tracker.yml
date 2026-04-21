@@ -76,6 +76,7 @@ jobs:
         with:
           package: vexilon
           repository: DerekRoberts/vexilon
+          ref: main
           token: ${{ github.token }}
 
       - name: Verify resolution
