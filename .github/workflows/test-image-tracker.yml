@@ -68,6 +68,8 @@ jobs:
       packages: read
       pull-requests: read
     steps:
+      - uses: actions/checkout@v6
+
       - name: Resolve vexilon package
         id: vexilon
         uses: ./image-tracker
