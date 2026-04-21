@@ -10,7 +10,7 @@ MAX_DEPTH="${INPUT_MAX_DEPTH:-100}"
 GH_TOKEN="${GH_TOKEN:-}"
 DIR="${INPUT_DIR:-.}"
 REPOSITORY="${INPUT_REPOSITORY:-$GITHUB_REPOSITORY}"
-REVISION="${INPUT_REVISION:-HEAD}"
+REVISION="${INPUT_REF:-HEAD}"
 
 if [[ -z "$PACKAGE_INPUT" ]]; then
   echo "::error::No packages provided. Set the 'package' input."
