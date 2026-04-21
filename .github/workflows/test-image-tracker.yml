@@ -74,7 +74,6 @@ jobs:
         with:
           package: vexilon
           repository: DerekRoberts/vexilon
-          fetch-depth: 100
           token: ${{ github.token }}
 
       - name: Verify resolution

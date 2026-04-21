@@ -24,8 +24,8 @@ inputs:
     description: 'Directory to check out into (defaults to repo name)'
     default: ${{ github.event.repository.name }}
   fetch_depth:
-    description: 'Number of commits to fetch (default: 100)'
-    default: '100'
+    description: 'Number of commits to fetch (default: 0 for full history)'
+    default: '0'
 
 outputs:
   packages:
