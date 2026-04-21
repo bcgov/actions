@@ -58,7 +58,7 @@ if [[ -z "$REVISIONS" ]]; then
 fi
 
 # Verification state
-FOUND_BUNDLE_JSON="{}"
+FOUND_PACKAGES_JSON="{}"
 NOT_FOUND_COMPONENTS=("${!IMAGE_REPOS[@]}")
 
 check_image() {
@@ -69,7 +69,7 @@ check_image() {
 
     if docker manifest inspect "$full_image" > /dev/null 2>&1; then
         echo "  [✓] FOUND ($desc): $component -> sha-${sha}"
-        FOUND_BUNDLE_JSON=$(echo "$FOUND_BUNDLE_JSON" | jq -c --arg c "$component" --arg s "sha-${sha}" '.[$c] = $s')
+        FOUND_PACKAGES_JSON=$(echo "$FOUND_PACKAGES_JSON" | jq -c --arg c "$component" --arg s "sha-${sha}" '.[$c] = $s')
         return 0
     fi
     return 1
@@ -120,4 +120,4 @@ if [[ ${#NOT_FOUND_COMPONENTS[@]} -gt 0 ]]; then
     exit 1
 fi
 
-echo "packages=${FOUND_BUNDLE_JSON}" >> "$GITHUB_OUTPUT"
+echo "packages=${FOUND_PACKAGES_JSON}" >> "$GITHUB_OUTPUT"
