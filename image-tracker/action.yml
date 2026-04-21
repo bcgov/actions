@@ -25,9 +25,9 @@ inputs:
     default: 'HEAD'
 
 outputs:
-  bundle:
+  packages:
     description: 'JSON object mapping package names to verified image tags (e.g. {"frontend":"sha-abc123"})'
-    value: ${{ steps.walk.outputs.bundle }}
+    value: ${{ steps.walk.outputs.packages }}
 
 runs:
   using: 'composite'

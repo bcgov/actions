@@ -120,4 +120,4 @@ if [[ ${#NOT_FOUND_COMPONENTS[@]} -gt 0 ]]; then
     exit 1
 fi
 
-echo "bundle=${FOUND_BUNDLE_JSON}" >> "$GITHUB_OUTPUT"
+echo "packages=${FOUND_BUNDLE_JSON}" >> "$GITHUB_OUTPUT"

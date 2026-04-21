@@ -88,8 +88,8 @@ jobs:
 
       - name: Verify resolution
         run: |
-          BUNDLE='${{ steps.vexilon.outputs.bundle }}'
-          echo "Bundle: $BUNDLE"
-          echo "$BUNDLE" | jq -e '.vexilon' > /dev/null \
+          PACKAGES='${{ steps.vexilon.outputs.packages }}'
+          echo "Packages: $PACKAGES"
+          echo "$PACKAGES" | jq -e '.vexilon' > /dev/null \
             || { echo "::error::Resolution failed"; exit 1; }
-          echo "✅ Passed: $(echo "$BUNDLE" | jq -r '.vexilon')"
+          echo "✅ Passed: $(echo "$PACKAGES" | jq -r '.vexilon')"
