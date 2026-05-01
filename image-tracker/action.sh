@@ -43,6 +43,14 @@ echo "  Max Depth: $MAX_DEPTH"
 echo "  Packages: ${!IMAGE_REPOS[*]}"
 echo ""
 
+# Ensure we have enough local history to walk back
+if [[ "$(git rev-parse --is-shallow-repository 2>/dev/null || echo false)" == "true" ]]; then
+    echo "  [i] Fetching git history (depth: $MAX_DEPTH)..."
+    git fetch --depth="$MAX_DEPTH" 2>/dev/null || true
+else
+    echo "  [i] Repository is not shallow; skipping history fetch."
+fi
+
 # Resolve starting commit (support Tags/Branches/SHAs)
 START_SHA=$(git rev-parse --verify --quiet "${REVISION}^{commit}" 2>/dev/null || true)
 if [[ -z "$START_SHA" ]]; then
@@ -87,7 +95,9 @@ if [[ -n "$GH_TOKEN" ]]; then
 fi
 
 # Traversal loop: for each commit, check PR head SHA then commit SHA
+ACTUAL_COMMIT_COUNT=0
 for TARGET_SHA in $REVISIONS; do
+    ACTUAL_COMMIT_COUNT=$((ACTUAL_COMMIT_COUNT + 1))
     # 1. Check associated PR head SHA (covers squash merges)
     PR_HEAD_SHA="${PR_MAP[$TARGET_SHA]:-}"
     if [[ -n "$PR_HEAD_SHA" && "$PR_HEAD_SHA" != "null" && "$PR_HEAD_SHA" != "$TARGET_SHA" ]]; then
@@ -116,8 +126,9 @@ done
 echo "::endgroup::"
 
 if [[ ${#NOT_FOUND_COMPONENTS[@]} -gt 0 ]]; then
-    echo "::error::Failed to resolve packages after $MAX_DEPTH commits: ${NOT_FOUND_COMPONENTS[*]}"
+    echo "::error::Failed to resolve packages after checking $ACTUAL_COMMIT_COUNT commit(s) (Max limit: $MAX_DEPTH): ${NOT_FOUND_COMPONENTS[*]}"
     exit 1
 fi
 
+echo "packages=${FOUND_BUNDLE_JSON}" >> "$GITHUB_OUTPUT"
 echo "bundle=${FOUND_BUNDLE_JSON}" >> "$GITHUB_OUTPUT"
