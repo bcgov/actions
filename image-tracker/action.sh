@@ -51,6 +51,10 @@ if [[ -z "$START_SHA" ]]; then
     echo "  [!] Warning: Revision '$REVISION' not found. Defaulting to HEAD."
 fi
 
+# Ensure we have enough local history to walk back
+echo "  [i] Fetching git history (depth: $MAX_DEPTH)..."
+git fetch --deepen="$MAX_DEPTH" 2>/dev/null || true
+
 REVISIONS=$(git rev-list --max-count="$MAX_DEPTH" "$START_SHA" 2>/dev/null || true)
 if [[ -z "$REVISIONS" ]]; then
     # Final fallback: just the single SHA
@@ -87,7 +91,9 @@ if [[ -n "$GH_TOKEN" ]]; then
 fi
 
 # Traversal loop: for each commit, check PR head SHA then commit SHA
+ACTUAL_COMMIT_COUNT=0
 for TARGET_SHA in $REVISIONS; do
+    ACTUAL_COMMIT_COUNT=$((ACTUAL_COMMIT_COUNT + 1))
     # 1. Check associated PR head SHA (covers squash merges)
     PR_HEAD_SHA="${PR_MAP[$TARGET_SHA]:-}"
     if [[ -n "$PR_HEAD_SHA" && "$PR_HEAD_SHA" != "null" && "$PR_HEAD_SHA" != "$TARGET_SHA" ]]; then
@@ -116,7 +122,7 @@ done
 echo "::endgroup::"
 
 if [[ ${#NOT_FOUND_COMPONENTS[@]} -gt 0 ]]; then
-    echo "::error::Failed to resolve packages after $MAX_DEPTH commits: ${NOT_FOUND_COMPONENTS[*]}"
+    echo "::error::Failed to resolve packages after checking $ACTUAL_COMMIT_COUNT commit(s) (Max limit: $MAX_DEPTH): ${NOT_FOUND_COMPONENTS[*]}"
     exit 1
 fi
 
