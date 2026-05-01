@@ -28,6 +28,9 @@ outputs:
   packages:
     description: 'JSON object mapping package names to verified image tags (e.g. {"frontend":"sha-abc123"})'
     value: ${{ steps.walk.outputs.packages }}
+  bundle:
+    description: 'Backward-compatible alias for packages; JSON object mapping package names to verified image tags'
+    value: ${{ steps.walk.outputs.packages }}
 
 runs:
   using: 'composite'

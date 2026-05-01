@@ -43,6 +43,14 @@ echo "  Max Depth: $MAX_DEPTH"
 echo "  Packages: ${!IMAGE_REPOS[*]}"
 echo ""
 
+# Ensure we have enough local history to walk back
+if [[ "$(git rev-parse --is-shallow-repository 2>/dev/null || echo false)" == "true" ]]; then
+    echo "  [i] Fetching git history (depth: $MAX_DEPTH)..."
+    git fetch --depth="$MAX_DEPTH" 2>/dev/null || true
+else
+    echo "  [i] Repository is not shallow; skipping history fetch."
+fi
+
 # Resolve starting commit (support Tags/Branches/SHAs)
 START_SHA=$(git rev-parse --verify --quiet "${REVISION}^{commit}" 2>/dev/null || true)
 if [[ -z "$START_SHA" ]]; then
@@ -50,10 +58,6 @@ if [[ -z "$START_SHA" ]]; then
     START_SHA=$(git rev-parse --verify --quiet "HEAD^{commit}")
     echo "  [!] Warning: Revision '$REVISION' not found. Defaulting to HEAD."
 fi
-
-# Ensure we have enough local history to walk back
-echo "  [i] Fetching git history (depth: $MAX_DEPTH)..."
-git fetch --deepen="$MAX_DEPTH" 2>/dev/null || true
 
 REVISIONS=$(git rev-list --max-count="$MAX_DEPTH" "$START_SHA" 2>/dev/null || true)
 if [[ -z "$REVISIONS" ]]; then
@@ -127,3 +131,4 @@ if [[ ${#NOT_FOUND_COMPONENTS[@]} -gt 0 ]]; then
 fi
 
 echo "packages=${FOUND_BUNDLE_JSON}" >> "$GITHUB_OUTPUT"
+echo "bundle=${FOUND_BUNDLE_JSON}" >> "$GITHUB_OUTPUT"
