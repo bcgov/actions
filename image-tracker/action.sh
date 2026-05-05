@@ -93,19 +93,19 @@ check_image() {
     return 1
 }
 
-# Batch-fetch closed PR data once: merge_commit_sha -> head_sha
-# This replaces per-commit API calls (N calls -> 1 call)
 declare -A PR_MAP
+declare -A PR_NUM_MAP
 if [[ -n "$GH_TOKEN" ]]; then
     echo "  [i] Batch-fetching PR merge map for $REPOSITORY..."
-    PR_DATA=$(gh api "/repos/${REPOSITORY}/pulls?state=closed&per_page=100" \
-        --jq '.[] | [.merge_commit_sha, .head.sha] | @tsv' 2>/dev/null || true)
+    PR_DATA=$(gh api "/repos/${REPOSITORY}/pulls?state=all&per_page=100" \
+        --jq '.[] | [.merge_commit_sha, .head.sha, .number] | @tsv' 2>/dev/null || true)
     
     if [[ -n "$PR_DATA" ]]; then
-        while IFS=$'\t' read -r merge_sha head_sha; do
+        while IFS=$'\t' read -r merge_sha head_sha pr_num; do
             [[ -n "$merge_sha" && "$merge_sha" != "null" ]] && PR_MAP["$merge_sha"]="$head_sha"
+            [[ -n "$merge_sha" && "$merge_sha" != "null" ]] && PR_NUM_MAP["$merge_sha"]="$pr_num"
         done <<< "$PR_DATA"
-        echo "  [i] Loaded ${#PR_MAP[@]} PR mappings."
+        echo "  [i] Loaded ${#PR_MAP[@]} PR mappings (including open PRs)."
     else
         echo "  [!] Warning: Could not fetch PR mappings. Squash merges may not be resolvable."
     fi
@@ -117,10 +117,11 @@ for TARGET_SHA in $REVISIONS; do
     ACTUAL_COMMIT_COUNT=$((ACTUAL_COMMIT_COUNT + 1))
     # 1. Check associated PR head SHA (covers squash merges)
     PR_HEAD_SHA="${PR_MAP[$TARGET_SHA]:-}"
+    PR_NUM="${PR_NUM_MAP[$TARGET_SHA]:-}"
     if [[ -n "$PR_HEAD_SHA" && "$PR_HEAD_SHA" != "null" && "$PR_HEAD_SHA" != "$TARGET_SHA" ]]; then
         REFRESHED=()
         for component in "${NOT_FOUND_COMPONENTS[@]}"; do
-            check_image "$component" "$PR_HEAD_SHA" "PR Head" || REFRESHED+=("$component")
+            check_image "$component" "$PR_HEAD_SHA" "PR #$PR_NUM Head" || REFRESHED+=("$component")
         done
         NOT_FOUND_COMPONENTS=("${REFRESHED[@]}")
     fi
