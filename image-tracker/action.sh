@@ -181,7 +181,7 @@ check_image() {
         fi
     done
 
-    echo "  [x] MISSING ($desc): $component -> sha-${sha:0:7} (and long fallback)"
+    echo "  [x] MISSING ($desc): $component -> SHA: ${sha:0:7}... (Checked raw & prefixed)"
     return 1
 }
 
