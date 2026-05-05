@@ -51,13 +51,15 @@ echo "  Pattern: sha-<short-sha> (metadata-action default)"
 
 # Forensic Setup
 cd "$DIR"
+echo "  [i] Deepening history (depth: $MAX_DEPTH)..."
 git fetch --quiet --deepen="$MAX_DEPTH" origin "$TARGET_REV" 2>/dev/null || true
 
-# Fetch PR mappings for the traversal
-PR_MAP_JSON=$(gh api -H "Accept: application/vnd.github+json" \
+echo "  [i] Mapping PRs from GitHub API..."
+PR_MAP_JSON=$(gh api --hostname github.com -H "Accept: application/vnd.github+json" \
     "/repos/${REPOSITORY}/pulls?state=all&per_page=100" \
     --jq '[.[] | {number: .number, head: .head.sha, merge: .merge_commit_sha}]')
 
+echo "  [i] Starting forensic walk..."
 # Traversal Loop
 REVISIONS=$(git rev-list --max-count="$MAX_DEPTH" "$TARGET_REV")
 for TARGET_SHA in $REVISIONS; do
