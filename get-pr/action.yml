@@ -1,0 +1,35 @@
+name: Get PR Number
+description: Get PR number for merge queues, squash merges, and releases
+branding:
+  icon: package
+  color: blue
+
+inputs:
+  token:
+    description: "Specify token (GH or PAT), instead of inheriting one from the calling workflow"
+    required: false
+    default: "${{ github.token }}"
+  debug:
+    description: "Enable debug logging"
+    required: false
+    default: 'false'
+
+outputs:
+  pr:
+    description: "Associated pull request number"
+    value: "${{ steps.run_script.outputs.pr }}"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run Notifier
+      id: run_script
+      shell: bash
+      env:
+        INPUT_TOKEN: "${{ inputs.token }}"
+        INPUT_DEBUG: "${{ inputs.debug }}"
+        MERGE_GROUP_HEAD_REF: "${{ github.event.merge_group.head_ref }}"
+        GITHUB_EVENT_AFTER: "${{ github.event.after }}"
+        GITHUB_EVENT_NUMBER: "${{ github.event.number }}"
+      run: |
+        "${{ github.action_path }}/action.sh"
