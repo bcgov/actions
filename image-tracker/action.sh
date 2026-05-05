@@ -87,6 +87,9 @@ fi
 FOUND_BUNDLE_JSON="{}"
 INVENTORY_JSON="[]"
 NOT_FOUND_COMPONENTS=("${!IMAGE_REPOS[@]}")
+# Track what was found at least once during the walk (for inventory mode success)
+EVER_FOUND_COUNT=0
+declare -A COMPONENT_FOUND_MAP
 
 check_image() {
     local component="$1"
@@ -109,6 +112,12 @@ check_image() {
         fi
 
         FOUND_BUNDLE_JSON=$(echo "$FOUND_BUNDLE_JSON" | jq -c --arg c "$component" --arg s "sha-${sha}" '.[$c] = $s')
+        
+        if [[ -z "${COMPONENT_FOUND_MAP[$component]:-}" ]]; then
+            COMPONENT_FOUND_MAP["$component"]="true"
+            EVER_FOUND_COUNT=$((EVER_FOUND_COUNT + 1))
+        fi
+        
         return 0
     fi
     echo "  [x] MISSING ($desc): $component -> $full_image"
@@ -185,8 +194,22 @@ fi
 
 echo "::endgroup::"
 
-if [[ ${#NOT_FOUND_COMPONENTS[@]} -gt 0 ]]; then
-    echo "::error::Failed to resolve packages after checking $ACTUAL_COMMIT_COUNT commit(s) (Max limit: $MAX_DEPTH): ${NOT_FOUND_COMPONENTS[*]}"
+# Success/Failure criteria
+# Standard mode: fail if any component is still in NOT_FOUND_COMPONENTS
+# Inventory mode: fail only if any component was NEVER found
+FAILED_COMPONENTS=()
+if [[ "$INVENTORY_MODE" == "true" ]]; then
+    for component in "${!IMAGE_REPOS[@]}"; do
+        if [[ -z "${COMPONENT_FOUND_MAP[$component]:-}" ]]; then
+            FAILED_COMPONENTS+=("$component")
+        fi
+    done
+else
+    FAILED_COMPONENTS=("${NOT_FOUND_COMPONENTS[@]}")
+fi
+
+if [[ ${#FAILED_COMPONENTS[@]} -gt 0 ]]; then
+    echo "::error::Failed to resolve packages after checking $ACTUAL_COMMIT_COUNT commit(s) (Max limit: $MAX_DEPTH): ${FAILED_COMPONENTS[*]}"
     exit 1
 fi
 
