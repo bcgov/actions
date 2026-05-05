@@ -45,8 +45,10 @@ echo ""
 
 # Ensure we have enough local history to walk back
 if [[ "$(git rev-parse --is-shallow-repository 2>/dev/null || echo false)" == "true" ]]; then
-    echo "  [i] Fetching git history (depth: $MAX_DEPTH)..."
-    git fetch --depth="$MAX_DEPTH" 2>/dev/null || true
+    echo "  [i] Fetching git history (depth: $MAX_DEPTH) for $REVISION..."
+    # Fetch specifically the revision we care about to ensure it exists locally
+    git fetch --depth="$MAX_DEPTH" origin "+refs/heads/*:refs/remotes/origin/*" 2>/dev/null || true
+    git fetch --depth="$MAX_DEPTH" origin "$REVISION" 2>/dev/null || true
 else
     echo "  [i] Repository is not shallow; skipping history fetch."
 fi
@@ -80,6 +82,7 @@ check_image() {
         FOUND_BUNDLE_JSON=$(echo "$FOUND_BUNDLE_JSON" | jq -c --arg c "$component" --arg s "sha-${sha}" '.[$c] = $s')
         return 0
     fi
+    echo "  [x] MISSING ($desc): sha-${sha}"
     return 1
 }
 
@@ -88,10 +91,17 @@ check_image() {
 declare -A PR_MAP
 if [[ -n "$GH_TOKEN" ]]; then
     echo "  [i] Batch-fetching PR merge map for $REPOSITORY..."
-    while IFS=$'\t' read -r merge_sha head_sha; do
-        [[ -n "$merge_sha" && "$merge_sha" != "null" ]] && PR_MAP["$merge_sha"]="$head_sha"
-    done < <(gh api "/repos/${REPOSITORY}/pulls?state=closed&per_page=100" \
+    PR_DATA=$(gh api "/repos/${REPOSITORY}/pulls?state=closed&per_page=100" \
         --jq '.[] | [.merge_commit_sha, .head.sha] | @tsv' 2>/dev/null || true)
+    
+    if [[ -n "$PR_DATA" ]]; then
+        while IFS=$'\t' read -r merge_sha head_sha; do
+            [[ -n "$merge_sha" && "$merge_sha" != "null" ]] && PR_MAP["$merge_sha"]="$head_sha"
+        done <<< "$PR_DATA"
+        echo "  [i] Loaded ${#PR_MAP[@]} PR mappings."
+    else
+        echo "  [!] Warning: Could not fetch PR mappings. Squash merges may not be resolvable."
+    fi
 fi
 
 # Traversal loop: for each commit, check PR head SHA then commit SHA
