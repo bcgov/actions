@@ -125,6 +125,10 @@ jobs:
           echo "expected=${expected_digest}" >> "$GITHUB_OUTPUT"
           echo "Ground truth: commit=${revision}, expected_digest=${expected_digest}"
 
+          # Ensure the commit is locally reachable for `git rev-parse` inside
+          # image-tracker. Commits on branches/PRs aren't always fetched.
+          ( cd target && git fetch --quiet origin "${revision}" || true )
+
       - name: Resolve via image-tracker
         id: tracker
         uses: ./image-tracker
