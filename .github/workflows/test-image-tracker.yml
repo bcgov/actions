@@ -89,14 +89,25 @@ jobs:
       - name: Verify resolution
         run: |
           PACKAGES='${{ steps.quickstart.outputs.packages }}'
+          TAG='${{ steps.quickstart.outputs.tag }}'
           echo "Packages: $PACKAGES"
+          echo "Tag: $TAG"
+          
+          # Verify individual packages in JSON
           echo "$PACKAGES" | jq -e '.frontend' > /dev/null \
             || { echo "::error::Frontend resolution failed"; exit 1; }
           echo "$PACKAGES" | jq -e '.backend' > /dev/null \
             || { echo "::error::Backend resolution failed"; exit 1; }
           echo "$PACKAGES" | jq -e '."quickstart-openshift"' > /dev/null \
             || { echo "::error::Base repo resolution failed"; exit 1; }
-          echo "✅ Passed: All packages resolved"
+          
+          # Verify 'tag' matches 'frontend' (the first package)
+          FRONTEND_SHA=$(echo "$PACKAGES" | jq -r '.frontend')
+          if [[ "$TAG" != "$FRONTEND_SHA" ]]; then
+            echo "::error::'tag' output ($TAG) does not match 'frontend' SHA ($FRONTEND_SHA)"; exit 1;
+          fi
+          
+          echo "✅ Passed: All packages and 'tag' output verified"
 
       - name: Test Inventory Audit
         id: inventory
