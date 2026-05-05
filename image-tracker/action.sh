@@ -100,11 +100,17 @@ check_image() {
     local target_commit="$4"
     local pr_num="$5"
 
-    local full_sha_tag="${IMAGE_REPOS[$component]}:sha-${sha}"
-    local short_sha_tag="${IMAGE_REPOS[$component]}:sha-${sha:0:7}"
-
-    # Try tags in order of specificity (Long SHA then Short SHA)
-    local tags_to_check=("$full_sha_tag" "$short_sha_tag")
+    # Try tags in order of specificity:
+    # 1. Full SHA with 'sha-' prefix
+    # 2. Short SHA with 'sha-' prefix
+    # 3. Raw Full SHA
+    # 4. Raw Short SHA
+    local tags_to_check=(
+        "${IMAGE_REPOS[$component]}:sha-${sha}"
+        "${IMAGE_REPOS[$component]}:sha-${sha:0:7}"
+        "${IMAGE_REPOS[$component]}:${sha}"
+        "${IMAGE_REPOS[$component]}:${sha:0:7}"
+    )
 
     for tag in "${tags_to_check[@]}"; do
         local is_valid="false"
