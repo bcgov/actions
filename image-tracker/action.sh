@@ -45,10 +45,17 @@ echo ""
 
 # Ensure we have enough local history to walk back
 if [[ "$(git rev-parse --is-shallow-repository 2>/dev/null || echo false)" == "true" ]]; then
-    echo "  [i] Fetching git history (depth: $MAX_DEPTH) for $REVISION..."
-    # Fetch specifically the revision we care about to ensure it exists locally
-    git fetch --depth="$MAX_DEPTH" origin "+refs/heads/*:refs/remotes/origin/*" 2>/dev/null || true
-    git fetch --depth="$MAX_DEPTH" origin "$REVISION" 2>/dev/null || true
+    echo "  [i] Deepening git history (depth: $MAX_DEPTH) for $REVISION..."
+    PRIMARY_REMOTE="$(git remote 2>/dev/null | head -n 1 || echo "origin")"
+    
+    # Try deepening the history first
+    git fetch --deepen="$MAX_DEPTH" "$PRIMARY_REMOTE" 2>/dev/null || \
+    git fetch --unshallow "$PRIMARY_REMOTE" 2>/dev/null || true
+    
+    # If the target revision is still not available locally, fetch that specific ref
+    if ! git rev-parse --verify --quiet "${REVISION}^{commit}" >/dev/null 2>&1; then
+        git fetch --depth="$MAX_DEPTH" "$PRIMARY_REMOTE" "$REVISION" 2>/dev/null || true
+    fi
 else
     echo "  [i] Repository is not shallow; skipping history fetch."
 fi
