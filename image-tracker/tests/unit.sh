@@ -195,6 +195,20 @@ test_auto_resolve_mapping() {
     assert_eq "${IMAGE_REPOS[quickstart-openshift]}" "ghcr.io/bcgov/quickstart-openshift" "Correct base-repo mapping"
 }
 
+test_tag_pattern_generation() {
+    local sha="aa5e49c2bf629b2504dcae521ef596ca52a5f14f"
+    local pr_num="440"
+    local repo="ghcr.io/owner/repo"
+    
+    local full_sha_tag="${repo}:sha-${sha}"
+    local short_sha_tag="${repo}:sha-${sha:0:7}"
+    local pr_tag="${repo}:pr-${pr_num}"
+    
+    assert_eq "$full_sha_tag" "ghcr.io/owner/repo:sha-aa5e49c2bf629b2504dcae521ef596ca52a5f14f" "Full SHA tag pattern"
+    assert_eq "$short_sha_tag" "ghcr.io/owner/repo:sha-aa5e49c" "Short SHA tag pattern"
+    assert_eq "$pr_tag" "ghcr.io/owner/repo:pr-440" "PR tag pattern"
+}
+
 test_auto_resolve_mapping_newline() {
     local PACKAGE_NAMES=$'api\nfrontend\ndb'
     local REPOSITORY="bcgov/myapp"
@@ -215,6 +229,7 @@ echo "Shell: $SHELL"
 echo ""
 test_auto_resolve_mapping
 test_auto_resolve_mapping_newline
+test_tag_pattern_generation
 test_parse_image_mapping_single
 test_parse_image_mapping_multiple
 test_build_json_single

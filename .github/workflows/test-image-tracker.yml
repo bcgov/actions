@@ -93,3 +93,40 @@ jobs:
           echo "$PACKAGES" | jq -e '.vexilon' > /dev/null \
             || { echo "::error::Resolution failed"; exit 1; }
           echo "✅ Passed: $(echo "$PACKAGES" | jq -r '.vexilon')"
+
+      - name: Test Inventory Audit
+        id: inventory
+        uses: ./image-tracker
+        with:
+          package: vexilon
+          repository: DerekRoberts/vexilon
+          dir: vexilon-repo
+          inventory_depth: 5
+          token: ${{ github.token }}
+
+      - name: Verify Inventory Output
+        run: |
+          INVENTORY='${{ steps.inventory.outputs.inventory }}'
+          echo "Inventory size: $(echo "$INVENTORY" | jq '. | length')"
+          if [[ $(echo "$INVENTORY" | jq '. | length') -eq 0 ]]; then
+            echo "::error::Inventory is empty"; exit 1;
+          fi
+          echo "✅ Passed: Inventory populated"
+
+      - name: Test PR Resolver (Dumb Walk)
+        id: pr_resolver
+        uses: ./image-tracker
+        with:
+          repository: DerekRoberts/vexilon
+          dir: vexilon-repo
+          max_depth: 10
+          token: ${{ github.token }}
+
+      - name: Verify PR Output
+        run: |
+          PR='${{ steps.pr_resolver.outputs.pr }}'
+          echo "Resolved PR: $PR"
+          if [[ -z "$PR" || "$PR" == "null" ]]; then
+            echo "::error::PR resolution failed"; exit 1;
+          fi
+          echo "✅ Passed: PR #$PR resolved"
