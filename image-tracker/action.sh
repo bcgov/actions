@@ -100,12 +100,9 @@ check_image() {
 
     local full_sha_tag="${IMAGE_REPOS[$component]}:sha-${sha}"
     local short_sha_tag="${IMAGE_REPOS[$component]}:sha-${sha:0:7}"
-    local pr_tag=""
-    [[ -n "$pr_num" && "$pr_num" != "N/A" ]] && pr_tag="${IMAGE_REPOS[$component]}:pr-${pr_num}"
 
-    # Try tags in order of specificity/reliability
+    # Try tags in order of specificity (Long SHA then Short SHA)
     local tags_to_check=("$full_sha_tag" "$short_sha_tag")
-    [[ -n "$pr_tag" ]] && tags_to_check+=("$pr_tag")
 
     for tag in "${tags_to_check[@]}"; do
         if docker manifest inspect "$tag" > /dev/null 2>&1; then
@@ -141,7 +138,7 @@ check_image() {
         fi
     done
 
-    echo "  [x] MISSING ($desc): $component -> sha-${sha:0:7} (and fallbacks)"
+    echo "  [x] MISSING ($desc): $component -> sha-${sha:0:7} (and long fallback)"
     return 1
 }
 
