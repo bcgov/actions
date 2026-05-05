@@ -235,8 +235,7 @@ for TARGET_SHA in $REVISIONS; do
         else
             # Pure PR resolution mode: just track the metadata for inventory
             if [[ "$INVENTORY_MODE" == "true" ]]; then
-                local merge_date
-                local ts
+                merge_date=""
                 ts=$(git log -1 --format=%at "$TARGET_SHA" 2>/dev/null || echo "")
                 if [[ -n "$ts" ]]; then
                     merge_date=$(date -u -d "@$ts" "+%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -r "$ts" "+%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "unknown")
