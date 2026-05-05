@@ -96,31 +96,52 @@ check_image() {
     local sha="$2"
     local desc="$3"
     local target_commit="$4"
-    local full_image="${IMAGE_REPOS[$component]}:sha-${sha}"
+    local pr_num="$5"
 
-    if docker manifest inspect "$full_image" > /dev/null 2>&1; then
-        echo "  [✓] FOUND ($desc): $component -> sha-${sha}"
-        echo "::notice title=Image Resolved::Package '$component' resolved to sha-${sha} ($desc)"
-        
-        # In inventory mode, we track EVERYTHING found
-        if [[ "$INVENTORY_MODE" == "true" ]]; then
-            local merge_date
-            merge_date=$(git log -1 --format=%cI "$target_commit" 2>/dev/null || echo "unknown")
-            local pr_num="${PR_NUM_MAP[$target_commit]:-N/A}"
-            INVENTORY_JSON=$(echo "$INVENTORY_JSON" | jq -c --arg c "$component" --arg s "sha-${sha}" --arg d "$merge_date" --arg p "$pr_num" \
-                '. += [{"package": $c, "tag": $s, "merged_at": $d, "pr": $p}]')
-        fi
+    local full_sha_tag="${IMAGE_REPOS[$component]}:sha-${sha}"
+    local short_sha_tag="${IMAGE_REPOS[$component]}:sha-${sha:0:7}"
+    local pr_tag=""
+    [[ -n "$pr_num" && "$pr_num" != "N/A" ]] && pr_tag="${IMAGE_REPOS[$component]}:pr-${pr_num}"
 
-        FOUND_BUNDLE_JSON=$(echo "$FOUND_BUNDLE_JSON" | jq -c --arg c "$component" --arg s "sha-${sha}" '.[$c] = $s')
-        
-        if [[ -z "${COMPONENT_FOUND_MAP[$component]:-}" ]]; then
-            COMPONENT_FOUND_MAP["$component"]="true"
-            EVER_FOUND_COUNT=$((EVER_FOUND_COUNT + 1))
+    # Try tags in order of specificity/reliability
+    local tags_to_check=("$full_sha_tag" "$short_sha_tag")
+    [[ -n "$pr_tag" ]] && tags_to_check+=("$pr_tag")
+
+    for tag in "${tags_to_check[@]}"; do
+        if docker manifest inspect "$tag" > /dev/null 2>&1; then
+            local tag_only="${tag##*:}"
+            echo "  [✓] FOUND ($desc): $component -> $tag_only"
+            echo "::notice title=Image Resolved::Package '$component' resolved to $tag_only ($desc)"
+            
+            # In inventory mode, we track EVERYTHING found
+            if [[ "$INVENTORY_MODE" == "true" ]]; then
+                local merge_date
+                # Convert to UTC (Zulu) time
+                local ts
+                ts=$(git log -1 --format=%at "$target_commit" 2>/dev/null || echo "")
+                if [[ -n "$ts" ]]; then
+                    merge_date=$(date -u -d "@$ts" "+%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -r "$ts" "+%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "unknown")
+                else
+                    merge_date="unknown"
+                fi
+                
+                local current_pr="${PR_NUM_MAP[$target_commit]:-N/A}"
+                INVENTORY_JSON=$(echo "$INVENTORY_JSON" | jq -c --arg c "$component" --arg s "$tag_only" --arg d "$merge_date" --arg p "$current_pr" \
+                    '. += [{"package": $c, "tag": $s, "merged_at": $d, "pr": $p}]')
+            fi
+
+            FOUND_BUNDLE_JSON=$(echo "$FOUND_BUNDLE_JSON" | jq -c --arg c "$component" --arg s "$tag_only" '.[$c] = $s')
+            
+            if [[ -z "${COMPONENT_FOUND_MAP[$component]:-}" ]]; then
+                COMPONENT_FOUND_MAP["$component"]="true"
+                EVER_FOUND_COUNT=$((EVER_FOUND_COUNT + 1))
+            fi
+            
+            return 0
         fi
-        
-        return 0
-    fi
-    echo "  [x] MISSING ($desc): $component -> $full_image"
+    done
+
+    echo "  [x] MISSING ($desc): $component -> sha-${sha:0:7} (and fallbacks)"
     return 1
 }
 
@@ -152,7 +173,7 @@ for TARGET_SHA in $REVISIONS; do
     if [[ -n "$PR_HEAD_SHA" && "$PR_HEAD_SHA" != "null" && "$PR_HEAD_SHA" != "$TARGET_SHA" ]]; then
         REFRESHED=()
         for component in "${NOT_FOUND_COMPONENTS[@]}"; do
-            check_image "$component" "$PR_HEAD_SHA" "PR #$PR_NUM Head" "$TARGET_SHA" || REFRESHED+=("$component")
+            check_image "$component" "$PR_HEAD_SHA" "PR #$PR_NUM Head" "$TARGET_SHA" "$PR_NUM" || REFRESHED+=("$component")
         done
         # Only update NOT_FOUND if we aren't in inventory mode (in inventory mode, we keep searching)
         if [[ "$INVENTORY_MODE" != "true" ]]; then
@@ -164,7 +185,7 @@ for TARGET_SHA in $REVISIONS; do
     if [[ ${#NOT_FOUND_COMPONENTS[@]} -gt 0 || "$INVENTORY_MODE" == "true" ]]; then
         REFRESHED=()
         for component in "${NOT_FOUND_COMPONENTS[@]}"; do
-            check_image "$component" "$TARGET_SHA" "Commit SHA" "$TARGET_SHA" || REFRESHED+=("$component")
+            check_image "$component" "$TARGET_SHA" "Commit SHA" "$TARGET_SHA" "$PR_NUM" || REFRESHED+=("$component")
         done
         if [[ "$INVENTORY_MODE" != "true" ]]; then
             NOT_FOUND_COMPONENTS=("${REFRESHED[@]}")
