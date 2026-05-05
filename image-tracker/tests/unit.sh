@@ -31,6 +31,7 @@ map_packages() {
     local repo_name="${repository#*/}"
     local lc_repo="${repository,,}"
     local pkg
+    # Normalize separators: turn commas and whitespace into newlines, then read line by line
     while IFS= read -r pkg; do
         pkg="${pkg//[[:space:]]/}"
         [[ -z "$pkg" ]] && continue
@@ -39,7 +40,7 @@ map_packages() {
         else
             IMAGE_PATHS["$pkg"]="${lc_repo}/${pkg,,}"
         fi
-    done < <(echo "$package_input" | tr ',' '\n')
+    done < <(echo "$package_input" | tr ',' '\n' | tr -s '[:space:]' '\n')
 }
 
 test_single_package_nested() {

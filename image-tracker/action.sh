@@ -43,18 +43,24 @@ echo "  Revision:   $REVISION -> $TARGET_SHA"
 # Convention: if package name matches the repo name, image lives at the repo
 # root path (ghcr.io/<owner>/<repo>); otherwise nested under the package name.
 declare -A IMAGE_PATHS
+declare -a PKG_ORDER  # to preserve input order for first-package outputs
 repo_name="${REPOSITORY#*/}"
 lc_repo="${REPOSITORY,,}"
 
+# Normalize separators: turn commas and whitespace into newlines, then read line by line
 while IFS= read -r pkg; do
     pkg="${pkg//[[:space:]]/}"
     [[ -z "$pkg" ]] && continue
+    # If the package name matches the repo name, image lives at the repo
+    # root path (ghcr.io/<owner>/<repo>); otherwise nested under the package name.
     if [[ "${pkg,,}" == "${repo_name,,}" ]]; then
         IMAGE_PATHS["$pkg"]="${lc_repo}"
+        PKG_ORDER+=("$pkg")
     else
         IMAGE_PATHS["$pkg"]="${lc_repo}/${pkg,,}"
+        PKG_ORDER+=("$pkg")
     fi
-done < <(echo "$PACKAGE_INPUT" | tr ',' '\n')
+done < <(echo "$PACKAGE_INPUT" | tr ',' '\n' | tr -s '[:space:]' '\n')
 
 echo "  Packages:   ${!IMAGE_PATHS[*]}"
 echo ""
@@ -123,11 +129,16 @@ resolve_digest() {
             # Descend into amd64 child if this is a multi-arch index.
             local config_digest
             if [[ "$mtype" == *"index"* || "$mtype" == *"manifest.list"* ]]; then
+                # Try to find any valid child (amd64 preferred, then any)
                 local child
                 child=$(printf '%s' "$mbody" | jq -r '
                     .manifests[]
                     | select(.platform.architecture == "amd64" and (.platform.os // "") != "unknown")
                     | .digest' 2>/dev/null | head -1)
+                if [[ -z "$child" ]]; then
+                    # Fallback: pick the first child regardless of arch/os
+                    child=$(printf '%s' "$mbody" | jq -r '.manifests[0].digest' 2>/dev/null | head -1)
+                fi
                 [[ -z "$child" ]] && continue
                 local child_body
                 child_body=$(curl -sS -H "Authorization: Bearer ${bearer}" -H "Accept: ${accept_manifest}" "${base}/manifests/${child}")
@@ -174,7 +185,9 @@ FIRST_IMAGE=""
 FIRST_DIGEST=""
 MISSING=()
 
-for pkg in "${!IMAGE_PATHS[@]}"; do
+# Iterate in input order so that FIRST_IMAGE/FIRST_DIGEST correspond to the
+# first successfully resolved package in the input list.
+for pkg in "${PKG_ORDER[@]}"; do
     image_path="${IMAGE_PATHS[$pkg]}"
     bearer=$(registry_token "$image_path")
     if [[ -z "$bearer" || "$bearer" == "null" ]]; then
@@ -193,8 +206,11 @@ for pkg in "${!IMAGE_PATHS[@]}"; do
     echo "  [✓] HIT:  $pkg -> $image_ref"
     IMAGES_JSON=$(printf '%s' "$IMAGES_JSON"  | jq -c --arg k "$pkg" --arg v "$image_ref" '.[$k] = $v')
     DIGESTS_JSON=$(printf '%s' "$DIGESTS_JSON" | jq -c --arg k "$pkg" --arg v "$digest"    '.[$k] = $v')
-    [[ -z "$FIRST_IMAGE"  ]] && FIRST_IMAGE="$image_ref"
-    [[ -z "$FIRST_DIGEST" ]] && FIRST_DIGEST="$digest"
+    # Set first-package outputs on the first successful hit
+    if [[ -z "$FIRST_IMAGE" ]]; then
+        FIRST_IMAGE="$image_ref"
+        FIRST_DIGEST="$digest"
+    fi
 done
 
 echo "::endgroup::"
