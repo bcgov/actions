@@ -1,0 +1,243 @@
+deploy-test	Set up job	﻿2026-05-05T15:44:04.1664682Z Current runner version: '2.334.0'
+deploy-test	Set up job	2026-05-05T15:44:04.1690393Z ##[group]Runner Image Provisioner
+deploy-test	Set up job	2026-05-05T15:44:04.1691284Z Hosted Compute Agent
+deploy-test	Set up job	2026-05-05T15:44:04.1691772Z Version: 20260213.493
+deploy-test	Set up job	2026-05-05T15:44:04.1692322Z Commit: 5c115507f6dd24b8de37d8bbe0bb4509d0cc0fa3
+deploy-test	Set up job	2026-05-05T15:44:04.1693041Z Build Date: 2026-02-13T00:28:41Z
+deploy-test	Set up job	2026-05-05T15:44:04.1693618Z Worker ID: {8efbc844-5d12-4ea4-ad4e-f56d6dc1580c}
+deploy-test	Set up job	2026-05-05T15:44:04.1694253Z Azure Region: westcentralus
+deploy-test	Set up job	2026-05-05T15:44:04.1694827Z ##[endgroup]
+deploy-test	Set up job	2026-05-05T15:44:04.1696719Z ##[group]Operating System
+deploy-test	Set up job	2026-05-05T15:44:04.1697305Z Ubuntu
+deploy-test	Set up job	2026-05-05T15:44:04.1697769Z 24.04.4
+deploy-test	Set up job	2026-05-05T15:44:04.1698190Z LTS
+deploy-test	Set up job	2026-05-05T15:44:04.1698605Z ##[endgroup]
+deploy-test	Set up job	2026-05-05T15:44:04.1699077Z ##[group]Runner Image
+deploy-test	Set up job	2026-05-05T15:44:04.1699585Z Image: ubuntu-24.04
+deploy-test	Set up job	2026-05-05T15:44:04.1700047Z Version: 20260413.86.1
+deploy-test	Set up job	2026-05-05T15:44:04.1700966Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260413.86/images/ubuntu/Ubuntu2404-Readme.md
+deploy-test	Set up job	2026-05-05T15:44:04.1702389Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260413.86
+deploy-test	Set up job	2026-05-05T15:44:04.1703214Z ##[endgroup]
+deploy-test	Set up job	2026-05-05T15:44:04.1704398Z ##[group]GITHUB_TOKEN Permissions
+deploy-test	Set up job	2026-05-05T15:44:04.1706768Z Contents: read
+deploy-test	Set up job	2026-05-05T15:44:04.1707299Z Issues: write
+deploy-test	Set up job	2026-05-05T15:44:04.1707737Z Metadata: read
+deploy-test	Set up job	2026-05-05T15:44:04.1708251Z Packages: read
+deploy-test	Set up job	2026-05-05T15:44:04.1708695Z PullRequests: read
+deploy-test	Set up job	2026-05-05T15:44:04.1709206Z ##[endgroup]
+deploy-test	Set up job	2026-05-05T15:44:04.1711775Z Secret source: Actions
+deploy-test	Set up job	2026-05-05T15:44:04.1712431Z Prepare workflow directory
+deploy-test	Set up job	2026-05-05T15:44:04.2056745Z Prepare all required actions
+deploy-test	Set up job	2026-05-05T15:44:04.2096071Z Getting action download info
+deploy-test	Set up job	2026-05-05T15:44:04.7338907Z Download action repository 'actions/checkout@v6' (SHA:de0fac2e4500dabe0009e67214ff5f5447ce83dd)
+deploy-test	Set up job	2026-05-05T15:44:04.8609787Z Download action repository 'bcgov/actions@feat/image-tracker-robust-fetch' (SHA:0b96ac1e5c17bb6a16a75426e7ea382f90d5a3bd)
+deploy-test	Set up job	2026-05-05T15:44:05.1978538Z Download action repository 'bcgov/actions@main' (SHA:ac5d0ea37d0cb806cc2ec422f57d0d42d8ff047f)
+deploy-test	Set up job	2026-05-05T15:44:05.6293528Z Complete job name: deploy-test
+deploy-test	Checkout	﻿2026-05-05T15:44:05.7211458Z ##[group]Run actions/checkout@v6
+deploy-test	Checkout	2026-05-05T15:44:05.7212825Z with:
+deploy-test	Checkout	2026-05-05T15:44:05.7213620Z   repository: MinionTech/vexilon
+deploy-test	Checkout	2026-05-05T15:44:05.7215005Z   token: ***
+deploy-test	Checkout	2026-05-05T15:44:05.7215900Z   ssh-strict: true
+deploy-test	Checkout	2026-05-05T15:44:05.7216691Z   ssh-user: git
+deploy-test	Checkout	2026-05-05T15:44:05.7217470Z   persist-credentials: true
+deploy-test	Checkout	2026-05-05T15:44:05.7218332Z   clean: true
+deploy-test	Checkout	2026-05-05T15:44:05.7219127Z   sparse-checkout-cone-mode: true
+deploy-test	Checkout	2026-05-05T15:44:05.7220083Z   fetch-depth: 1
+deploy-test	Checkout	2026-05-05T15:44:05.7220845Z   fetch-tags: false
+deploy-test	Checkout	2026-05-05T15:44:05.7221698Z   show-progress: true
+deploy-test	Checkout	2026-05-05T15:44:05.7222485Z   lfs: false
+deploy-test	Checkout	2026-05-05T15:44:05.7223222Z   submodules: false
+deploy-test	Checkout	2026-05-05T15:44:05.7224029Z   set-safe-directory: true
+deploy-test	Checkout	2026-05-05T15:44:05.7225575Z ##[endgroup]
+deploy-test	Checkout	2026-05-05T15:44:05.8233622Z Syncing repository: MinionTech/vexilon
+deploy-test	Checkout	2026-05-05T15:44:05.8236572Z ##[group]Getting Git version info
+deploy-test	Checkout	2026-05-05T15:44:05.8237827Z Working directory is '/home/runner/work/vexilon/vexilon'
+deploy-test	Checkout	2026-05-05T15:44:05.8239662Z [command]/usr/bin/git version
+deploy-test	Checkout	2026-05-05T15:44:05.8240640Z git version 2.53.0
+deploy-test	Checkout	2026-05-05T15:44:05.8255521Z ##[endgroup]
+deploy-test	Checkout	2026-05-05T15:44:05.8269127Z Temporarily overriding HOME='/home/runner/work/_temp/d144b204-690c-44be-aef8-47afd5fc4f14' before making global git config changes
+deploy-test	Checkout	2026-05-05T15:44:05.8272034Z Adding repository directory to the temporary git global config as a safe directory
+deploy-test	Checkout	2026-05-05T15:44:05.8274620Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/vexilon/vexilon
+deploy-test	Checkout	2026-05-05T15:44:05.8303048Z Deleting the contents of '/home/runner/work/vexilon/vexilon'
+deploy-test	Checkout	2026-05-05T15:44:05.8306942Z ##[group]Initializing the repository
+deploy-test	Checkout	2026-05-05T15:44:05.8310692Z [command]/usr/bin/git init /home/runner/work/vexilon/vexilon
+deploy-test	Checkout	2026-05-05T15:44:05.8392961Z hint: Using 'master' as the name for the initial branch. This default branch name
+deploy-test	Checkout	2026-05-05T15:44:05.8396484Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+deploy-test	Checkout	2026-05-05T15:44:05.8398564Z hint: to use in all of your new repositories, which will suppress this warning,
+deploy-test	Checkout	2026-05-05T15:44:05.8399923Z hint: call:
+deploy-test	Checkout	2026-05-05T15:44:05.8400988Z hint:
+deploy-test	Checkout	2026-05-05T15:44:05.8402404Z hint: 	git config --global init.defaultBranch <name>
+deploy-test	Checkout	2026-05-05T15:44:05.8403499Z hint:
+deploy-test	Checkout	2026-05-05T15:44:05.8404526Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+deploy-test	Checkout	2026-05-05T15:44:05.8406393Z hint: 'development'. The just-created branch can be renamed via this command:
+deploy-test	Checkout	2026-05-05T15:44:05.8407897Z hint:
+deploy-test	Checkout	2026-05-05T15:44:05.8408621Z hint: 	git branch -m <name>
+deploy-test	Checkout	2026-05-05T15:44:05.8409464Z hint:
+deploy-test	Checkout	2026-05-05T15:44:05.8410566Z hint: Disable this message with "git config set advice.defaultBranchName false"
+deploy-test	Checkout	2026-05-05T15:44:05.8412424Z Initialized empty Git repository in /home/runner/work/vexilon/vexilon/.git/
+deploy-test	Checkout	2026-05-05T15:44:05.8415586Z [command]/usr/bin/git remote add origin https://github.com/MinionTech/vexilon
+deploy-test	Checkout	2026-05-05T15:44:05.8430354Z ##[endgroup]
+deploy-test	Checkout	2026-05-05T15:44:05.8431828Z ##[group]Disabling automatic garbage collection
+deploy-test	Checkout	2026-05-05T15:44:05.8433451Z [command]/usr/bin/git config --local gc.auto 0
+deploy-test	Checkout	2026-05-05T15:44:05.8460716Z ##[endgroup]
+deploy-test	Checkout	2026-05-05T15:44:05.8462864Z ##[group]Setting up auth
+deploy-test	Checkout	2026-05-05T15:44:05.8464470Z Removing SSH command configuration
+deploy-test	Checkout	2026-05-05T15:44:05.8468428Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+deploy-test	Checkout	2026-05-05T15:44:05.8497029Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+deploy-test	Checkout	2026-05-05T15:44:05.8731292Z Removing HTTP extra header
+deploy-test	Checkout	2026-05-05T15:44:05.8737745Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+deploy-test	Checkout	2026-05-05T15:44:05.8766202Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+deploy-test	Checkout	2026-05-05T15:44:05.8936819Z Removing includeIf entries pointing to credentials config files
+deploy-test	Checkout	2026-05-05T15:44:05.8943569Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+deploy-test	Checkout	2026-05-05T15:44:05.8974291Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+deploy-test	Checkout	2026-05-05T15:44:05.9157173Z [command]/usr/bin/git config --file /home/runner/work/_temp/git-credentials-2b93b24a-1f18-4d2f-84ee-e58124bc34a5.config http.https://github.com/.extraheader AUTHORIZATION: basic ***
+deploy-test	Checkout	2026-05-05T15:44:05.9190470Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/vexilon/vexilon/.git.path /home/runner/work/_temp/git-credentials-2b93b24a-1f18-4d2f-84ee-e58124bc34a5.config
+deploy-test	Checkout	2026-05-05T15:44:05.9216595Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/vexilon/vexilon/.git/worktrees/*.path /home/runner/work/_temp/git-credentials-2b93b24a-1f18-4d2f-84ee-e58124bc34a5.config
+deploy-test	Checkout	2026-05-05T15:44:05.9242338Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-2b93b24a-1f18-4d2f-84ee-e58124bc34a5.config
+deploy-test	Checkout	2026-05-05T15:44:05.9266836Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-2b93b24a-1f18-4d2f-84ee-e58124bc34a5.config
+deploy-test	Checkout	2026-05-05T15:44:05.9288485Z ##[endgroup]
+deploy-test	Checkout	2026-05-05T15:44:05.9289767Z ##[group]Fetching the repository
+deploy-test	Checkout	2026-05-05T15:44:05.9297387Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +f28ace2ce7c0fd9f30842a931d7b1f7f0a759992:refs/remotes/pull/440/merge
+deploy-test	Checkout	2026-05-05T15:44:07.4499474Z From https://github.com/MinionTech/vexilon
+deploy-test	Checkout	2026-05-05T15:44:07.4500956Z  * [new ref]         f28ace2ce7c0fd9f30842a931d7b1f7f0a759992 -> pull/440/merge
+deploy-test	Checkout	2026-05-05T15:44:07.4526243Z ##[endgroup]
+deploy-test	Checkout	2026-05-05T15:44:07.4527073Z ##[group]Determining the checkout info
+deploy-test	Checkout	2026-05-05T15:44:07.4527854Z ##[endgroup]
+deploy-test	Checkout	2026-05-05T15:44:07.4531933Z [command]/usr/bin/git sparse-checkout disable
+deploy-test	Checkout	2026-05-05T15:44:07.4563372Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+deploy-test	Checkout	2026-05-05T15:44:07.4587800Z ##[group]Checking out the ref
+deploy-test	Checkout	2026-05-05T15:44:07.4591173Z [command]/usr/bin/git checkout --progress --force refs/remotes/pull/440/merge
+deploy-test	Checkout	2026-05-05T15:44:07.5950945Z Note: switching to 'refs/remotes/pull/440/merge'.
+deploy-test	Checkout	2026-05-05T15:44:07.5951596Z 
+deploy-test	Checkout	2026-05-05T15:44:07.5952019Z You are in 'detached HEAD' state. You can look around, make experimental
+deploy-test	Checkout	2026-05-05T15:44:07.5952952Z changes and commit them, and you can discard any commits you make in this
+deploy-test	Checkout	2026-05-05T15:44:07.5953867Z state without impacting any branches by switching back to a branch.
+deploy-test	Checkout	2026-05-05T15:44:07.5954436Z 
+deploy-test	Checkout	2026-05-05T15:44:07.5954835Z If you want to create a new branch to retain commits you create, you may
+deploy-test	Checkout	2026-05-05T15:44:07.5955975Z do so (now or later) by using -c with the switch command. Example:
+deploy-test	Checkout	2026-05-05T15:44:07.5956382Z 
+deploy-test	Checkout	2026-05-05T15:44:07.5956599Z   git switch -c <new-branch-name>
+deploy-test	Checkout	2026-05-05T15:44:07.5956982Z 
+deploy-test	Checkout	2026-05-05T15:44:07.5957193Z Or undo this operation with:
+deploy-test	Checkout	2026-05-05T15:44:07.5957499Z 
+deploy-test	Checkout	2026-05-05T15:44:07.5957679Z   git switch -
+deploy-test	Checkout	2026-05-05T15:44:07.5957918Z 
+deploy-test	Checkout	2026-05-05T15:44:07.5958375Z Turn off this advice by setting config variable advice.detachedHead to false
+deploy-test	Checkout	2026-05-05T15:44:07.5958943Z 
+deploy-test	Checkout	2026-05-05T15:44:07.5959481Z HEAD is now at f28ace2 Merge 5206ac434fd4260b4d02d5bc4a0b4eb1978cdd85 into 212122aa4f760ff9b60a2044125f8d5d69979d53
+deploy-test	Checkout	2026-05-05T15:44:07.5964606Z ##[endgroup]
+deploy-test	Checkout	2026-05-05T15:44:07.5998544Z [command]/usr/bin/git log -1 --format=%H
+deploy-test	Checkout	2026-05-05T15:44:07.6020237Z f28ace2ce7c0fd9f30842a931d7b1f7f0a759992
+deploy-test	Resolve image	﻿2026-05-05T15:44:07.6286901Z ##[group]Run bcgov/actions/image-tracker@feat/image-tracker-robust-fetch
+deploy-test	Resolve image	2026-05-05T15:44:07.6287592Z with:
+deploy-test	Resolve image	2026-05-05T15:44:07.6287824Z   package: agnav
+deploy-test	Resolve image	2026-05-05T15:44:07.6288400Z   token: ***
+deploy-test	Resolve image	2026-05-05T15:44:07.6288630Z   max_depth: 100
+deploy-test	Resolve image	2026-05-05T15:44:07.6288882Z   repository: MinionTech/vexilon
+deploy-test	Resolve image	2026-05-05T15:44:07.6289142Z   dir: .
+deploy-test	Resolve image	2026-05-05T15:44:07.6289355Z   revision: HEAD
+deploy-test	Resolve image	2026-05-05T15:44:07.6289598Z ##[endgroup]
+deploy-test	Resolve image	2026-05-05T15:44:07.6420449Z ##[group]Run bash /home/runner/work/_actions/bcgov/actions/feat/image-tracker-robust-fetch/image-tracker/action.sh
+deploy-test	Resolve image	2026-05-05T15:44:07.6421549Z ^[[36;1mbash /home/runner/work/_actions/bcgov/actions/feat/image-tracker-robust-fetch/image-tracker/action.sh^[[0m
+deploy-test	Resolve image	2026-05-05T15:44:07.6440727Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+deploy-test	Resolve image	2026-05-05T15:44:07.6441156Z env:
+deploy-test	Resolve image	2026-05-05T15:44:07.6441381Z   INPUT_PACKAGE: agnav
+deploy-test	Resolve image	2026-05-05T15:44:07.6441641Z   INPUT_MAX_DEPTH: 100
+deploy-test	Resolve image	2026-05-05T15:44:07.6441889Z   INPUT_DIR: .
+deploy-test	Resolve image	2026-05-05T15:44:07.6442141Z   INPUT_REPOSITORY: MinionTech/vexilon
+deploy-test	Resolve image	2026-05-05T15:44:07.6442502Z   INPUT_REVISION: HEAD
+deploy-test	Resolve image	2026-05-05T15:44:07.6442995Z   GH_TOKEN: ***
+deploy-test	Resolve image	2026-05-05T15:44:07.6443238Z ##[endgroup]
+deploy-test	Resolve image	2026-05-05T15:44:07.6549593Z ##[group]Workflow Walker — Forensic History Traversal
+deploy-test	Resolve image	2026-05-05T15:44:07.6550154Z   Target Repository: MinionTech/vexilon
+deploy-test	Resolve image	2026-05-05T15:44:07.6550579Z   Starting Revision: HEAD
+deploy-test	Resolve image	2026-05-05T15:44:07.6550849Z   Max Depth: 100
+deploy-test	Resolve image	2026-05-05T15:44:07.6551092Z   Packages: agnav
+deploy-test	Resolve image	2026-05-05T15:44:07.6551266Z 
+deploy-test	Resolve image	2026-05-05T15:44:07.6566988Z   [i] Deepening git history (depth: 100) for HEAD...
+deploy-test	Resolve image	2026-05-05T15:44:09.3893159Z   [i] Batch-fetching PR merge map for MinionTech/vexilon...
+deploy-test	Resolve image	2026-05-05T15:44:11.6444906Z   [i] Loaded 100 PR mappings.
+deploy-test	Resolve image	2026-05-05T15:44:13.5840589Z   [x] MISSING (Commit SHA): sha-f28ace2ce7c0fd9f30842a931d7b1f7f0a759992
+deploy-test	Resolve image	2026-05-05T15:44:14.9760315Z   [x] MISSING (Commit SHA): sha-5206ac434fd4260b4d02d5bc4a0b4eb1978cdd85
+deploy-test	Resolve image	2026-05-05T15:44:16.3916008Z   [x] MISSING (Commit SHA): sha-71388db27046a998540495fdc62e821a237872f7
+deploy-test	Resolve image	2026-05-05T15:44:17.8906049Z   [x] MISSING (PR Head): sha-b46ccfecda2abc6c880e4c8943f26fa13932b99f
+deploy-test	Resolve image	2026-05-05T15:44:22.0712069Z   [x] MISSING (Commit SHA): sha-212122aa4f760ff9b60a2044125f8d5d69979d53
+deploy-test	Resolve image	2026-05-05T15:44:24.6732121Z   [x] MISSING (PR Head): sha-c0b427bd4e25fcad1e91a2e33e78a3d07948c19d
+deploy-test	Resolve image	2026-05-05T15:44:26.2457130Z   [x] MISSING (Commit SHA): sha-1eb286bbe537b2ef363079fc16fffd898bf1599f
+deploy-test	Resolve image	2026-05-05T15:44:27.9384814Z   [x] MISSING (PR Head): sha-9d095aecc554a5adf2e00dd659929e490a6d291b
+deploy-test	Resolve image	2026-05-05T15:44:29.7791859Z   [x] MISSING (Commit SHA): sha-bfece6fb5b58bd602254417e2c251048421fc45a
+deploy-test	Resolve image	2026-05-05T15:44:31.4533343Z   [x] MISSING (PR Head): sha-79c882e9006bb8bca83a1293bf5f60227797f448
+deploy-test	Resolve image	2026-05-05T15:44:34.3274750Z   [x] MISSING (Commit SHA): sha-34400d6148ba6a49a416ee05ee6d8f0f8e09633e
+deploy-test	Resolve image	2026-05-05T15:44:35.8908448Z   [x] MISSING (PR Head): sha-d5587fb9076723f5d86882e120bcb476de8119c2
+deploy-test	Resolve image	2026-05-05T15:44:37.3724295Z   [x] MISSING (Commit SHA): sha-7339165e2475a4519743c758cf7cd54dc1e85707
+deploy-test	Resolve image	2026-05-05T15:44:40.8578466Z   [✓] FOUND (PR Head): agnav -> sha-22652e0f5d41569dee9bd21f7fb3710dd13ecc35
+deploy-test	Resolve image	2026-05-05T15:44:40.8612416Z   [!] Success: All packages resolved.
+deploy-test	Resolve image	2026-05-05T15:44:40.8617801Z ##[endgroup]
+deploy-test	Push image-based stub to Hugging Face Space	﻿2026-05-05T15:44:40.8704448Z ##[group]Run TAG=""
+deploy-test	Push image-based stub to Hugging Face Space	2026-05-05T15:44:40.8704717Z ^[[36;1mTAG=""^[[0m
+deploy-test	Push image-based stub to Hugging Face Space	2026-05-05T15:44:40.8704923Z ^[[36;1mif [ -z "$TAG" ]; then^[[0m
+deploy-test	Push image-based stub to Hugging Face Space	2026-05-05T15:44:40.8705331Z ^[[36;1m  TAG=$(echo "$BUNDLE" | jq -r '.agnav')^[[0m
+deploy-test	Push image-based stub to Hugging Face Space	2026-05-05T15:44:40.8705601Z ^[[36;1mfi^[[0m
+deploy-test	Push image-based stub to Hugging Face Space	2026-05-05T15:44:40.8705858Z ^[[36;1m./.github/scripts/deploy.sh "DerekRoberts/landru" "$TAG"^[[0m
+deploy-test	Push image-based stub to Hugging Face Space	2026-05-05T15:44:40.8720025Z shell: /usr/bin/bash -e {0}
+deploy-test	Push image-based stub to Hugging Face Space	2026-05-05T15:44:40.8720281Z env:
+deploy-test	Push image-based stub to Hugging Face Space	2026-05-05T15:44:40.8720654Z   HF_TOKEN: ***
+deploy-test	Push image-based stub to Hugging Face Space	2026-05-05T15:44:40.8720922Z   BUNDLE: {"agnav":"sha-22652e0f5d41569dee9bd21f7fb3710dd13ecc35"}
+deploy-test	Push image-based stub to Hugging Face Space	2026-05-05T15:44:40.8721261Z ##[endgroup]
+deploy-test	Push image-based stub to Hugging Face Space	2026-05-05T15:44:40.9910355Z Switched to a new branch 'hf-snapshot'
+deploy-test	Push image-based stub to Hugging Face Space	2026-05-05T15:44:41.0050861Z [hf-snapshot (root-commit) 0d25fb0] promote: sha-22652e0f5d41569dee9bd21f7fb3710dd13ecc35 from f28ace2ce7c0fd9f30842a931d7b1f7f0a759992
+deploy-test	Push image-based stub to Hugging Face Space	2026-05-05T15:44:41.0051624Z  3 files changed, 1132 insertions(+)
+deploy-test	Push image-based stub to Hugging Face Space	2026-05-05T15:44:41.0052084Z  create mode 100644 Dockerfile
+deploy-test	Push image-based stub to Hugging Face Space	2026-05-05T15:44:41.0052452Z  create mode 100644 README.md
+deploy-test	Push image-based stub to Hugging Face Space	2026-05-05T15:44:41.0052846Z  create mode 100644 app.py
+deploy-test	Push image-based stub to Hugging Face Space	2026-05-05T15:44:41.8237791Z To https://huggingface.co/spaces/DerekRoberts/landru
+deploy-test	Push image-based stub to Hugging Face Space	2026-05-05T15:44:41.8238378Z  + d9a22c9...0d25fb0 hf-snapshot -> main (forced update)
+deploy-test	Push image-based stub to Hugging Face Space	2026-05-05T15:44:41.8270390Z Deployment to DerekRoberts/landru complete!
+deploy-test	Push image-based stub to Hugging Face Space	2026-05-05T15:44:41.8271226Z [cleanup] Returning to f28ace2ce7c0fd9f30842a931d7b1f7f0a759992...
+deploy-test	Push image-based stub to Hugging Face Space	2026-05-05T15:44:41.9696764Z Deleted branch hf-snapshot (was 0d25fb0).
+deploy-test	Verify Space boots successfully	﻿2026-05-05T15:44:41.9759056Z ##[group]Run ./.github/scripts/verify_deployment.sh "DerekRoberts/landru"
+deploy-test	Verify Space boots successfully	2026-05-05T15:44:41.9759571Z ^[[36;1m./.github/scripts/verify_deployment.sh "DerekRoberts/landru"^[[0m
+deploy-test	Verify Space boots successfully	2026-05-05T15:44:41.9772375Z shell: /usr/bin/bash -e {0}
+deploy-test	Verify Space boots successfully	2026-05-05T15:44:41.9772612Z env:
+deploy-test	Verify Space boots successfully	2026-05-05T15:44:41.9773102Z   HF_TOKEN: ***
+deploy-test	Verify Space boots successfully	2026-05-05T15:44:41.9773288Z ##[endgroup]
+deploy-test	Verify Space boots successfully	2026-05-05T15:44:41.9815938Z [verify] Monitoring Hugging Face Space: DerekRoberts/landru
+deploy-test	Verify Space boots successfully	2026-05-05T15:44:41.9816432Z [verify] Timeout: 900 seconds
+deploy-test	Verify Space boots successfully	2026-05-05T15:44:42.2061114Z [verify] Current status: running_building (1s)
+deploy-test	Verify Space boots successfully	2026-05-05T15:45:12.3852225Z [verify] Current status: running_building (31s)
+deploy-test	Verify Space boots successfully	2026-05-05T15:45:42.5689544Z [verify] Current status: running_app_starting (61s)
+deploy-test	Verify Space boots successfully	2026-05-05T15:46:12.7524578Z [verify] Current status: running (91s)
+deploy-test	Verify Space boots successfully	2026-05-05T15:46:12.7525582Z ✅ Success: Space DerekRoberts/landru is running!
+deploy-test	Post Checkout	﻿2026-05-05T15:46:12.7622347Z Post job cleanup.
+deploy-test	Post Checkout	2026-05-05T15:46:12.8431734Z [command]/usr/bin/git version
+deploy-test	Post Checkout	2026-05-05T15:46:12.8465913Z git version 2.53.0
+deploy-test	Post Checkout	2026-05-05T15:46:12.8503692Z Temporarily overriding HOME='/home/runner/work/_temp/f419e1c8-9f74-4278-abeb-eadadd475294' before making global git config changes
+deploy-test	Post Checkout	2026-05-05T15:46:12.8505414Z Adding repository directory to the temporary git global config as a safe directory
+deploy-test	Post Checkout	2026-05-05T15:46:12.8510107Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/vexilon/vexilon
+deploy-test	Post Checkout	2026-05-05T15:46:12.8540078Z Removing SSH command configuration
+deploy-test	Post Checkout	2026-05-05T15:46:12.8546241Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+deploy-test	Post Checkout	2026-05-05T15:46:12.8579486Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+deploy-test	Post Checkout	2026-05-05T15:46:12.8755749Z Removing HTTP extra header
+deploy-test	Post Checkout	2026-05-05T15:46:12.8760898Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+deploy-test	Post Checkout	2026-05-05T15:46:12.8794615Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+deploy-test	Post Checkout	2026-05-05T15:46:12.8985832Z Removing includeIf entries pointing to credentials config files
+deploy-test	Post Checkout	2026-05-05T15:46:12.8986807Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+deploy-test	Post Checkout	2026-05-05T15:46:12.9009930Z includeif.gitdir:/home/runner/work/vexilon/vexilon/.git.path
+deploy-test	Post Checkout	2026-05-05T15:46:12.9010561Z includeif.gitdir:/home/runner/work/vexilon/vexilon/.git/worktrees/*.path
+deploy-test	Post Checkout	2026-05-05T15:46:12.9010950Z includeif.gitdir:/github/workspace/.git.path
+deploy-test	Post Checkout	2026-05-05T15:46:12.9011399Z includeif.gitdir:/github/workspace/.git/worktrees/*.path
+deploy-test	Post Checkout	2026-05-05T15:46:12.9018339Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/vexilon/vexilon/.git.path
+deploy-test	Post Checkout	2026-05-05T15:46:12.9039676Z /home/runner/work/_temp/git-credentials-2b93b24a-1f18-4d2f-84ee-e58124bc34a5.config
+deploy-test	Post Checkout	2026-05-05T15:46:12.9049920Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/vexilon/vexilon/.git.path /home/runner/work/_temp/git-credentials-2b93b24a-1f18-4d2f-84ee-e58124bc34a5.config
+deploy-test	Post Checkout	2026-05-05T15:46:12.9084996Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/vexilon/vexilon/.git/worktrees/*.path
+deploy-test	Post Checkout	2026-05-05T15:46:12.9106653Z /home/runner/work/_temp/git-credentials-2b93b24a-1f18-4d2f-84ee-e58124bc34a5.config
+deploy-test	Post Checkout	2026-05-05T15:46:12.9114349Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/vexilon/vexilon/.git/worktrees/*.path /home/runner/work/_temp/git-credentials-2b93b24a-1f18-4d2f-84ee-e58124bc34a5.config
+deploy-test	Post Checkout	2026-05-05T15:46:12.9141926Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git.path
+deploy-test	Post Checkout	2026-05-05T15:46:12.9162079Z /github/runner_temp/git-credentials-2b93b24a-1f18-4d2f-84ee-e58124bc34a5.config
+deploy-test	Post Checkout	2026-05-05T15:46:12.9168435Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-2b93b24a-1f18-4d2f-84ee-e58124bc34a5.config
+deploy-test	Post Checkout	2026-05-05T15:46:12.9196186Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path
+deploy-test	Post Checkout	2026-05-05T15:46:12.9215698Z /github/runner_temp/git-credentials-2b93b24a-1f18-4d2f-84ee-e58124bc34a5.config
+deploy-test	Post Checkout	2026-05-05T15:46:12.9223450Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-2b93b24a-1f18-4d2f-84ee-e58124bc34a5.config
+deploy-test	Post Checkout	2026-05-05T15:46:12.9252052Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+deploy-test	Post Checkout	2026-05-05T15:46:12.9426359Z Removing credentials config '/home/runner/work/_temp/git-credentials-2b93b24a-1f18-4d2f-84ee-e58124bc34a5.config'
+deploy-test	Complete job	﻿2026-05-05T15:46:12.9559338Z Cleaning up orphan processes

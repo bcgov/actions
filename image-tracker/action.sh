@@ -241,7 +241,7 @@ if [[ "$INVENTORY_MODE" == "true" ]]; then
     # Add to GitHub Step Summary
     {
         echo "### 🔍 Image Inventory Audit"
-        echo "| Package | Tag | PR | Merged At | Signed | SBOM |"
+        echo "| Package | Tag | PR | Merged (UDT) | Signed | SBOM |"
         echo "| --- | --- | --- | --- | --- | --- |"
         echo "$INVENTORY_JSON" | jq -r '.[] | "| \(.package) | `\(.tag)` | #\(.pr) | \(.merged_at) | \(.signed) | \(.sbom) |"'
     } >> "$GITHUB_STEP_SUMMARY"
