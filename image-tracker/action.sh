@@ -1,134 +1,215 @@
 #!/usr/bin/env bash
-# Forensic Workflow Walker
-# Traverses git history and resolves image SHAs via secure GitHub API PR mapping.
+# Image Tracker — Digest-via-OCI-label resolver
+#
+# Given a git commit SHA and a GHCR repository, find image manifests whose
+# `org.opencontainers.image.revision` OCI label matches the commit, and
+# return their immutable manifest digests.
+#
+# This is format-agnostic: the tag name (`sha-<7>`, `pr-N`, `latest`, whatever)
+# is irrelevant. What matters is the label embedded in the image at build time,
+# which `docker/metadata-action` sets by default.
 
-set -eo pipefail
+set -euo pipefail
 
-# Inputs
+# ---- Inputs ----------------------------------------------------------------
 PACKAGE_INPUT="${INPUT_PACKAGE:-}"
-MAX_DEPTH="${INPUT_MAX_DEPTH:-100}"
-GH_TOKEN="${GH_TOKEN:-}"
-DIR="${INPUT_DIR:-.}"
-REPOSITORY="${INPUT_REPOSITORY:-$GITHUB_REPOSITORY}"
 REVISION="${INPUT_REVISION:-HEAD}"
+REPOSITORY="${INPUT_REPOSITORY:-$GITHUB_REPOSITORY}"
+DIR="${INPUT_DIR:-.}"
+TOKEN="${INPUT_TOKEN:-${GITHUB_TOKEN:-}}"
+MAX_TAGS="${INPUT_MAX_TAGS:-500}"
 
 if [[ -z "$PACKAGE_INPUT" ]]; then
-  echo "::error::No packages provided. Set the 'package' input."
-  exit 1
+    echo "::error::Missing required input 'package'."
+    exit 1
+fi
+if [[ -z "$TOKEN" ]]; then
+    echo "::error::No token available. Pass 'token' input or set GITHUB_TOKEN."
+    exit 1
 fi
 
-cd "$DIR" || { echo "::error::Could not change to directory $DIR"; exit 1; }
+# ---- Resolve git revision to a 40-char commit SHA --------------------------
+cd "$DIR"
+TARGET_SHA=$(git rev-parse --verify --quiet "${REVISION}^{commit}" 2>/dev/null || true)
+if [[ -z "$TARGET_SHA" ]]; then
+    echo "::error::Could not resolve git revision '$REVISION' in '$DIR'."
+    exit 1
+fi
+echo "::group::Image Tracker — resolving commit $TARGET_SHA"
+echo "  Repository: $REPOSITORY"
+echo "  Revision:   $REVISION -> $TARGET_SHA"
 
-# Parse one or more package names (space, comma, or newline separated)
-# and resolve each to its GHCR image path.
-declare -A IMAGE_REPOS
+# ---- Map package names to GHCR image paths ---------------------------------
+# Convention: if package name matches the repo name, image lives at the repo
+# root path (ghcr.io/<owner>/<repo>); otherwise nested under the package name.
+declare -A IMAGE_PATHS
 repo_name="${REPOSITORY#*/}"
-lc_repo=$(echo "$REPOSITORY" | tr '[:upper:]' '[:lower:]')
+lc_repo="${REPOSITORY,,}"
 
 while IFS= read -r pkg; do
-    pkg=$(echo "$pkg" | tr -d '[:space:]')
+    pkg="${pkg//[[:space:]]/}"
     [[ -z "$pkg" ]] && continue
-    # If the package name matches the repo name, image lives at the repo root path
     if [[ "${pkg,,}" == "${repo_name,,}" ]]; then
-        IMAGE_REPOS["$pkg"]="ghcr.io/${lc_repo}"
+        IMAGE_PATHS["$pkg"]="${lc_repo}"
     else
-        IMAGE_REPOS["$pkg"]="ghcr.io/${lc_repo}/${pkg,,}"
+        IMAGE_PATHS["$pkg"]="${lc_repo}/${pkg,,}"
     fi
 done < <(echo "$PACKAGE_INPUT" | tr ',' '\n')
 
-echo "::group::Workflow Walker — Forensic History Traversal"
-echo "  Target Repository: $REPOSITORY"
-echo "  Starting Revision: $REVISION"
-echo "  Max Depth: $MAX_DEPTH"
-echo "  Packages: ${!IMAGE_REPOS[*]}"
+echo "  Packages:   ${!IMAGE_PATHS[*]}"
 echo ""
 
-# Ensure we have enough local history to walk back
-if [[ "$(git rev-parse --is-shallow-repository 2>/dev/null || echo false)" == "true" ]]; then
-    echo "  [i] Fetching git history (depth: $MAX_DEPTH)..."
-    git fetch --depth="$MAX_DEPTH" 2>/dev/null || true
-else
-    echo "  [i] Repository is not shallow; skipping history fetch."
-fi
+# ---- Per-package registry auth ---------------------------------------------
+# GHCR issues tokens scoped to one repository at a time. We fetch a fresh
+# token per image path. Uses the Bearer pattern documented by the v2 API.
+registry_token() {
+    local image_path="$1"
+    curl -sS -u "x:${TOKEN}" \
+        "https://ghcr.io/token?scope=repository:${image_path}:pull" \
+        | jq -r '.token'
+}
 
-# Resolve starting commit (support Tags/Branches/SHAs)
-START_SHA=$(git rev-parse --verify --quiet "${REVISION}^{commit}" 2>/dev/null || true)
-if [[ -z "$START_SHA" ]]; then
-    # Fallback: if we can't find the commit, try original HEAD for safety
-    START_SHA=$(git rev-parse --verify --quiet "HEAD^{commit}")
-    echo "  [!] Warning: Revision '$REVISION' not found. Defaulting to HEAD."
-fi
+# ---- Look up the manifest digest whose config carries our commit SHA -------
+# Returns "sha256:...<manifest-digest>" on stdout, empty string on miss.
+# Strategy:
+#   1. List tags (paginated).
+#   2. For each tag, fetch manifest (index or single).
+#     - If index: pick amd64 child manifest.
+#     - Else: use the manifest directly.
+#   3. Fetch config blob. If its `org.opencontainers.image.revision` matches
+#      the target commit, emit the ORIGINAL (top-level) manifest digest.
+resolve_digest() {
+    local image_path="$1"
+    local bearer="$2"
+    local base="https://ghcr.io/v2/${image_path}"
+    local tags_seen=0
 
-REVISIONS=$(git rev-list --max-count="$MAX_DEPTH" "$START_SHA" 2>/dev/null || true)
-if [[ -z "$REVISIONS" ]]; then
-    # Final fallback: just the single SHA
-    REVISIONS="$START_SHA"
-fi
+    # Accept headers
+    local accept_index="application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json"
+    local accept_manifest="application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json"
 
-# Verification state
-FOUND_BUNDLE_JSON="{}"
-NOT_FOUND_COMPONENTS=("${!IMAGE_REPOS[@]}")
+    # Paginate tags
+    local url="${base}/tags/list?n=100"
+    while [[ -n "$url" ]]; do
+        local raw
+        raw=$(curl -sS -i -H "Authorization: Bearer ${bearer}" "$url")
+        local body
+        body=$(printf '%s' "$raw" | awk 'BEGIN{p=0} /^\r?$/{p=1; next} p{print}')
+        local link_hdr
+        link_hdr=$(printf '%s' "$raw" | awk 'BEGIN{IGNORECASE=1} /^link:/ {print; exit}')
 
-check_image() {
-    local component="$1"
-    local sha="$2"
-    local desc="$3"
-    local full_image="${IMAGE_REPOS[$component]}:sha-${sha}"
+        local tag
+        while IFS= read -r tag; do
+            [[ -z "$tag" ]] && continue
+            # Skip cosign/SBOM helper tags (they are not images we want to resolve).
+            [[ "$tag" == sha256-*.sig ]] && continue
+            [[ "$tag" == sha256-*.sbom ]] && continue
+            [[ "$tag" == sha256-*.att ]] && continue
 
-    if docker manifest inspect "$full_image" > /dev/null 2>&1; then
-        echo "  [✓] FOUND ($desc): $component -> sha-${sha}"
-        FOUND_BUNDLE_JSON=$(echo "$FOUND_BUNDLE_JSON" | jq -c --arg c "$component" --arg s "sha-${sha}" '.[$c] = $s')
-        return 0
-    fi
+            tags_seen=$((tags_seen + 1))
+            if [[ "$tags_seen" -gt "$MAX_TAGS" ]]; then
+                echo "  [!] Reached MAX_TAGS=$MAX_TAGS; stopping search." >&2
+                return 1
+            fi
+
+            # Fetch top-level manifest + its digest header.
+            local manifest_url="${base}/manifests/${tag}"
+            local mresp mbody mdigest mtype
+            mresp=$(curl -sS -i -H "Authorization: Bearer ${bearer}" -H "Accept: ${accept_index}" "$manifest_url")
+            mbody=$(printf '%s' "$mresp" | awk 'BEGIN{p=0} /^\r?$/{p=1; next} p{print}')
+            mdigest=$(printf '%s' "$mresp" | awk 'BEGIN{IGNORECASE=1} /^docker-content-digest:/ {gsub(/\r/,""); print $2; exit}')
+            mtype=$(printf '%s' "$mbody" | jq -r '.mediaType // empty' 2>/dev/null || true)
+
+            # Descend into amd64 child if this is a multi-arch index.
+            local config_digest
+            if [[ "$mtype" == *"index"* || "$mtype" == *"manifest.list"* ]]; then
+                local child
+                child=$(printf '%s' "$mbody" | jq -r '
+                    .manifests[]
+                    | select(.platform.architecture == "amd64" and (.platform.os // "") != "unknown")
+                    | .digest' 2>/dev/null | head -1)
+                [[ -z "$child" ]] && continue
+                local child_body
+                child_body=$(curl -sS -H "Authorization: Bearer ${bearer}" -H "Accept: ${accept_manifest}" "${base}/manifests/${child}")
+                config_digest=$(printf '%s' "$child_body" | jq -r '.config.digest // empty' 2>/dev/null || true)
+            else
+                config_digest=$(printf '%s' "$mbody" | jq -r '.config.digest // empty' 2>/dev/null || true)
+            fi
+
+            [[ -z "$config_digest" ]] && continue
+
+            # Fetch config blob and check the revision label.
+            local revision
+            revision=$(curl -sSL -H "Authorization: Bearer ${bearer}" "${base}/blobs/${config_digest}" \
+                | jq -r '.config.Labels["org.opencontainers.image.revision"] // empty' 2>/dev/null || true)
+
+            if [[ "$revision" == "$TARGET_SHA" ]]; then
+                printf '%s' "$mdigest"
+                return 0
+            fi
+        done < <(printf '%s' "$body" | jq -r '.tags[]?' 2>/dev/null)
+
+        # Follow RFC 5988 Link: rel="next"
+        if [[ -n "$link_hdr" ]]; then
+            local next
+            next=$(printf '%s' "$link_hdr" | grep -oE '<[^>]+>' | head -1 | tr -d '<>')
+            if [[ -n "$next" ]]; then
+                if [[ "$next" == /* ]]; then
+                    url="https://ghcr.io${next}"
+                else
+                    url="$next"
+                fi
+                continue
+            fi
+        fi
+        url=""
+    done
     return 1
 }
 
-# Batch-fetch closed PR data once: merge_commit_sha -> head_sha
-# This replaces per-commit API calls (N calls -> 1 call)
-declare -A PR_MAP
-if [[ -n "$GH_TOKEN" ]]; then
-    echo "  [i] Batch-fetching PR merge map for $REPOSITORY..."
-    while IFS=$'\t' read -r merge_sha head_sha; do
-        [[ -n "$merge_sha" && "$merge_sha" != "null" ]] && PR_MAP["$merge_sha"]="$head_sha"
-    done < <(gh api "/repos/${REPOSITORY}/pulls?state=closed&per_page=100" \
-        --jq '.[] | [.merge_commit_sha, .head.sha] | @tsv' 2>/dev/null || true)
-fi
+# ---- Resolve each package --------------------------------------------------
+IMAGES_JSON='{}'
+DIGESTS_JSON='{}'
+FIRST_IMAGE=""
+FIRST_DIGEST=""
+MISSING=()
 
-# Traversal loop: for each commit, check PR head SHA then commit SHA
-ACTUAL_COMMIT_COUNT=0
-for TARGET_SHA in $REVISIONS; do
-    ACTUAL_COMMIT_COUNT=$((ACTUAL_COMMIT_COUNT + 1))
-    # 1. Check associated PR head SHA (covers squash merges)
-    PR_HEAD_SHA="${PR_MAP[$TARGET_SHA]:-}"
-    if [[ -n "$PR_HEAD_SHA" && "$PR_HEAD_SHA" != "null" && "$PR_HEAD_SHA" != "$TARGET_SHA" ]]; then
-        REFRESHED=()
-        for component in "${NOT_FOUND_COMPONENTS[@]}"; do
-            check_image "$component" "$PR_HEAD_SHA" "PR Head" || REFRESHED+=("$component")
-        done
-        NOT_FOUND_COMPONENTS=("${REFRESHED[@]}")
+for pkg in "${!IMAGE_PATHS[@]}"; do
+    image_path="${IMAGE_PATHS[$pkg]}"
+    bearer=$(registry_token "$image_path")
+    if [[ -z "$bearer" || "$bearer" == "null" ]]; then
+        echo "::error::Failed to obtain registry token for ${image_path}."
+        MISSING+=("$pkg")
+        continue
     fi
-
-    # 2. Check the commit SHA itself (covers standard merges)
-    if [[ ${#NOT_FOUND_COMPONENTS[@]} -gt 0 ]]; then
-        REFRESHED=()
-        for component in "${NOT_FOUND_COMPONENTS[@]}"; do
-            check_image "$component" "$TARGET_SHA" "Commit SHA" || REFRESHED+=("$component")
-        done
-        NOT_FOUND_COMPONENTS=("${REFRESHED[@]}")
+    echo "  [>] Searching ghcr.io/${image_path} for commit ${TARGET_SHA:0:12}..."
+    digest=$(resolve_digest "$image_path" "$bearer" || true)
+    if [[ -z "$digest" ]]; then
+        echo "  [x] MISS: $pkg (no image labeled with this commit)"
+        MISSING+=("$pkg")
+        continue
     fi
-
-    if [[ ${#NOT_FOUND_COMPONENTS[@]} -eq 0 ]]; then
-        echo "  [!] Success: All packages resolved."
-        break
-    fi
+    image_ref="ghcr.io/${image_path}@${digest}"
+    echo "  [✓] HIT:  $pkg -> $image_ref"
+    IMAGES_JSON=$(printf '%s' "$IMAGES_JSON"  | jq -c --arg k "$pkg" --arg v "$image_ref" '.[$k] = $v')
+    DIGESTS_JSON=$(printf '%s' "$DIGESTS_JSON" | jq -c --arg k "$pkg" --arg v "$digest"    '.[$k] = $v')
+    [[ -z "$FIRST_IMAGE"  ]] && FIRST_IMAGE="$image_ref"
+    [[ -z "$FIRST_DIGEST" ]] && FIRST_DIGEST="$digest"
 done
 
 echo "::endgroup::"
 
-if [[ ${#NOT_FOUND_COMPONENTS[@]} -gt 0 ]]; then
-    echo "::error::Failed to resolve packages after checking $ACTUAL_COMMIT_COUNT commit(s) (Max limit: $MAX_DEPTH): ${NOT_FOUND_COMPONENTS[*]}"
+# ---- Outputs ---------------------------------------------------------------
+{
+    echo "images=${IMAGES_JSON}"
+    echo "digests=${DIGESTS_JSON}"
+    echo "image=${FIRST_IMAGE}"
+    echo "digest=${FIRST_DIGEST}"
+} >> "$GITHUB_OUTPUT"
+
+if [[ ${#MISSING[@]} -gt 0 ]]; then
+    echo "::error::Failed to resolve the following package(s) for commit ${TARGET_SHA}: ${MISSING[*]}"
     exit 1
 fi
 
-echo "packages=${FOUND_BUNDLE_JSON}" >> "$GITHUB_OUTPUT"
-echo "bundle=${FOUND_BUNDLE_JSON}" >> "$GITHUB_OUTPUT"
+echo "Resolved ${#IMAGE_PATHS[@]} package(s) for commit ${TARGET_SHA}."
