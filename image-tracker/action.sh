@@ -97,6 +97,7 @@ check_image() {
 
     if docker manifest inspect "$full_image" > /dev/null 2>&1; then
         echo "  [✓] FOUND ($desc): $component -> sha-${sha}"
+        echo "::notice title=Image Resolved::Package '$component' resolved to sha-${sha} ($desc)"
         
         # In inventory mode, we track EVERYTHING found
         if [[ "$INVENTORY_MODE" == "true" ]]; then
@@ -172,6 +173,14 @@ if [[ "$INVENTORY_MODE" == "true" ]]; then
     echo "  [i] Inventory Summary:"
     echo "$INVENTORY_JSON" | jq -r '["PACKAGE", "TAG", "PR", "MERGED_AT"], (.[] | [.package, .tag, .pr, .merged_at]) | @tsv' | column -t -s $'\t' || true
     echo ""
+    
+    # Add to GitHub Step Summary
+    {
+        echo "### 🔍 Image Inventory Audit"
+        echo "| Package | Tag | PR | Merged At |"
+        echo "| --- | --- | --- | --- |"
+        echo "$INVENTORY_JSON" | jq -r '.[] | "| \(.package) | `\(.tag)` | #\(.pr) | \(.merged_at) |"'
+    } >> "$GITHUB_STEP_SUMMARY"
 fi
 
 echo "::endgroup::"
