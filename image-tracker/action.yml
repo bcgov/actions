@@ -26,6 +26,12 @@ inputs:
   inventory_depth:
     description: 'If set, the action performs an audit walk of exactly this many commits and reports all found images. (Walks back X commits; does not stop at first match).'
     required: false
+  cosign:
+    description: 'If true, verifies image signatures using Cosign.'
+    default: 'false'
+  cosign_public_key:
+    description: 'The public key for Cosign verification. If empty, uses keyless verification (requires OIDC/Sigstore).'
+    required: false
 
 outputs:
   packages:
@@ -53,5 +59,7 @@ runs:
         INPUT_REPOSITORY: ${{ inputs.repository }}
         INPUT_REVISION: ${{ inputs.revision }}
         INPUT_INVENTORY_DEPTH: ${{ inputs.inventory_depth }}
+        INPUT_COSIGN: ${{ inputs.cosign }}
+        INPUT_COSIGN_PUBLIC_KEY: ${{ inputs.cosign_public_key }}
         GH_TOKEN: ${{ inputs.token }}
       run: bash ${{ github.action_path }}/action.sh

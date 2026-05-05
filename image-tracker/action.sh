@@ -18,6 +18,8 @@ else
     MAX_DEPTH="${INPUT_MAX_DEPTH:-100}"
     INVENTORY_MODE="false"
 fi
+COSIGN_ENABLED="${INPUT_COSIGN:-false}"
+COSIGN_PUB_KEY="${INPUT_COSIGN_PUBLIC_KEY:-}"
 
 if [[ -z "$PACKAGE_INPUT" ]]; then
   echo "::error::No packages provided. Set the 'package' input."
@@ -105,7 +107,26 @@ check_image() {
     local tags_to_check=("$full_sha_tag" "$short_sha_tag")
 
     for tag in "${tags_to_check[@]}"; do
-        if docker manifest inspect "$tag" > /dev/null 2>&1; then
+        local is_valid="false"
+        if [[ "$COSIGN_ENABLED" == "true" ]]; then
+            if [[ -n "$COSIGN_PUB_KEY" ]]; then
+                echo "$COSIGN_PUB_KEY" > /tmp/cosign.pub
+                if cosign verify --key /tmp/cosign.pub "$tag" > /dev/null 2>&1; then
+                    is_valid="true"
+                fi
+            else
+                # Keyless verification
+                if cosign verify "$tag" > /dev/null 2>&1; then
+                    is_valid="true"
+                fi
+            fi
+        else
+            if docker manifest inspect "$tag" > /dev/null 2>&1; then
+                is_valid="true"
+            fi
+        fi
+
+        if [[ "$is_valid" == "true" ]]; then
             local tag_only="${tag##*:}"
             echo "  [✓] FOUND ($desc): $component -> $tag_only"
             echo "::notice title=Image Resolved::Package '$component' resolved to $tag_only ($desc)"
