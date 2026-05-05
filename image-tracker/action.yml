@@ -23,9 +23,9 @@ inputs:
   revision:
     description: 'Starting revision to walk back from (Tag, Branch, or SHA)'
     default: 'HEAD'
-  inventory:
-    description: 'If true, walk all commits and report all found images instead of stopping.'
-    default: 'false'
+  inventory_depth:
+    description: 'If set, walks this many commits and reports all found images instead of stopping.'
+    required: false
 
 outputs:
   packages:
@@ -49,6 +49,6 @@ runs:
         INPUT_DIR: ${{ inputs.dir }}
         INPUT_REPOSITORY: ${{ inputs.repository }}
         INPUT_REVISION: ${{ inputs.revision }}
-        INPUT_INVENTORY: ${{ inputs.inventory }}
+        INPUT_INVENTORY_DEPTH: ${{ inputs.inventory_depth }}
         GH_TOKEN: ${{ inputs.token }}
       run: bash ${{ github.action_path }}/action.sh
