@@ -190,9 +190,11 @@ if [[ ${#NOT_FOUND_COMPONENTS[@]} -gt 0 ]]; then
     exit 1
 fi
 
-echo "packages=${FOUND_BUNDLE_JSON}" >> "$GITHUB_OUTPUT"
-echo "bundle=${FOUND_BUNDLE_JSON}" >> "$GITHUB_OUTPUT"
-echo "inventory=${INVENTORY_JSON}" >> "$GITHUB_OUTPUT"
+{
+    echo "packages=${FOUND_BUNDLE_JSON}"
+    echo "bundle=${FOUND_BUNDLE_JSON}"
+    echo "inventory=${INVENTORY_JSON}"
+} >> "$GITHUB_OUTPUT"
 
 # Simplified single tag output (first package)
 if [[ -n "$FIRST_PKG" ]]; then
@@ -200,7 +202,7 @@ if [[ -n "$FIRST_PKG" ]]; then
     if [[ -n "$FIRST_TAG" ]]; then
         echo "tag=${FIRST_TAG}" >> "$GITHUB_OUTPUT"
         # If there were multiple packages, let the user know which one 'tag' refers to
-        if [[ $(echo "$PACKAGE_INPUT" | tr ',' '\n' | grep -v '^$' | wc -l) -gt 1 ]]; then
+        if [[ $(echo "$PACKAGE_INPUT" | tr ',' '\n' | grep -vc '^$' || echo 0) -gt 1 ]]; then
             echo "  [i] Note: Multiple packages resolved. 'tag' output set to first package: $FIRST_PKG"
         fi
     fi
