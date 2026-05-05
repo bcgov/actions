@@ -24,7 +24,7 @@ inputs:
     description: 'Starting revision to walk back from (Tag, Branch, or SHA)'
     default: 'HEAD'
   inventory_depth:
-    description: 'If set, walks this many commits and reports all found images instead of stopping.'
+    description: 'If set, the action performs an audit walk of exactly this many commits and reports all found images. (Walks back X commits; does not stop at first match).'
     required: false
 
 outputs:
@@ -35,10 +35,10 @@ outputs:
     description: 'Backward-compatible alias for packages; JSON object mapping package names to verified image tags'
     value: ${{ steps.walk.outputs.packages }}
   tag:
-    description: 'The resolved SHA for the first package in the list (simplified output)'
+    description: 'The resolved SHA for the first (or only) package in the list. Simplifies workflows by removing the need for jq.'
     value: ${{ steps.walk.outputs.tag }}
   inventory:
-    description: 'JSON array of all found images and their metadata (only populated if inventory mode is enabled)'
+    description: 'JSON array of all found images and their metadata (PR number, merge date, etc.). Only populated if inventory_depth is set.'
     value: ${{ steps.walk.outputs.inventory }}
 
 runs:
