@@ -21,37 +21,37 @@ fi
 COSIGN_ENABLED="${INPUT_COSIGN:-false}"
 COSIGN_PUB_KEY="${INPUT_COSIGN_PUBLIC_KEY:-}"
 
-if [[ -z "$PACKAGE_INPUT" ]]; then
-  echo "::error::No packages provided. Set the 'package' input."
-  exit 1
-fi
-
-cd "$DIR" || { echo "::error::Could not change to directory $DIR"; exit 1; }
-
-# Parse one or more package names (space, comma, or newline separated)
-# and resolve each to its GHCR image path.
+# Parse package names if provided
 declare -A IMAGE_REPOS
 FIRST_PKG=""
 repo_name="${REPOSITORY#*/}"
 lc_repo=$(echo "$REPOSITORY" | tr '[:upper:]' '[:lower:]')
 
-while IFS= read -r pkg; do
-    pkg=$(echo "$pkg" | tr -d '[:space:]')
-    [[ -z "$pkg" ]] && continue
-    [[ -z "$FIRST_PKG" ]] && FIRST_PKG="$pkg"
-    # If the package name matches the repo name, image lives at the repo root path
-    if [[ "${pkg,,}" == "${repo_name,,}" ]]; then
-        IMAGE_REPOS["$pkg"]="ghcr.io/${lc_repo}"
-    else
-        IMAGE_REPOS["$pkg"]="ghcr.io/${lc_repo}/${pkg,,}"
-    fi
-done < <(echo "$PACKAGE_INPUT" | tr ',' '\n')
+if [[ -n "$PACKAGE_INPUT" ]]; then
+    while IFS= read -r pkg; do
+        pkg=$(echo "$pkg" | tr -d '[:space:]')
+        [[ -z "$pkg" ]] && continue
+        [[ -z "$FIRST_PKG" ]] && FIRST_PKG="$pkg"
+        # If the package name matches the repo name, image lives at the repo root path
+        if [[ "${pkg,,}" == "${repo_name,,}" ]]; then
+            IMAGE_REPOS["$pkg"]="ghcr.io/${lc_repo}"
+        else
+            IMAGE_REPOS["$pkg"]="ghcr.io/${lc_repo}/${pkg,,}"
+        fi
+    done < <(echo "$PACKAGE_INPUT" | tr ',' '\n')
+fi
+
+cd "$DIR" || { echo "::error::Could not change to directory $DIR"; exit 1; }
 
 echo "::group::Workflow Walker — Forensic History Traversal"
 echo "  Target Repository: $REPOSITORY"
 echo "  Starting Revision: $REVISION"
 echo "  Max Depth: $MAX_DEPTH"
-echo "  Packages: ${!IMAGE_REPOS[*]}"
+if [[ ${#IMAGE_REPOS[@]} -gt 0 ]]; then
+    echo "  Packages: ${!IMAGE_REPOS[*]}"
+else
+    echo "  Mode: PR Metadata Resolution (Dumb Walk)"
+fi
 echo ""
 
 # Ensure we have enough local history to walk back
@@ -179,6 +179,9 @@ check_image() {
     return 1
 }
 
+# Track top-level resolved PR
+RESOLVED_PR=""
+
 declare -A PR_MAP
 declare -A PR_NUM_MAP
 if [[ -n "$GH_TOKEN" ]]; then
@@ -201,33 +204,60 @@ fi
 ACTUAL_COMMIT_COUNT=0
 for TARGET_SHA in $REVISIONS; do
     ACTUAL_COMMIT_COUNT=$((ACTUAL_COMMIT_COUNT + 1))
-    # 1. Check associated PR head SHA (covers squash merges)
+    
+    # 1. Resolve PR metadata
     PR_HEAD_SHA="${PR_MAP[$TARGET_SHA]:-}"
     PR_NUM="${PR_NUM_MAP[$TARGET_SHA]:-}"
+    [[ -z "$RESOLVED_PR" ]] && [[ -n "$PR_NUM" && "$PR_NUM" != "null" ]] && RESOLVED_PR="$PR_NUM"
+
+    # 2. Check associated PR head SHA (covers squash merges)
     if [[ -n "$PR_HEAD_SHA" && "$PR_HEAD_SHA" != "null" && "$PR_HEAD_SHA" != "$TARGET_SHA" ]]; then
         REFRESHED=()
-        for component in "${NOT_FOUND_COMPONENTS[@]}"; do
-            check_image "$component" "$PR_HEAD_SHA" "PR #$PR_NUM Head" "$TARGET_SHA" "$PR_NUM" || REFRESHED+=("$component")
-        done
+        if [[ ${#IMAGE_REPOS[@]} -gt 0 ]]; then
+            for component in "${NOT_FOUND_COMPONENTS[@]}"; do
+                check_image "$component" "$PR_HEAD_SHA" "PR #$PR_NUM Head" "$TARGET_SHA" "$PR_NUM" || REFRESHED+=("$component")
+            done
+        fi
         # Only update NOT_FOUND if we aren't in inventory mode (in inventory mode, we keep searching)
         if [[ "$INVENTORY_MODE" != "true" ]]; then
             NOT_FOUND_COMPONENTS=("${REFRESHED[@]}")
         fi
     fi
 
-    # 2. Check the commit SHA itself (covers standard merges)
-    if [[ ${#NOT_FOUND_COMPONENTS[@]} -gt 0 || "$INVENTORY_MODE" == "true" ]]; then
+    # 3. Check the commit SHA itself (covers standard merges)
+    # If in pure PR mode, we still "check" once to populate inventory if requested
+    if [[ "$INVENTORY_MODE" == "true" || ${#NOT_FOUND_COMPONENTS[@]} -gt 0 || ${#IMAGE_REPOS[@]} -eq 0 ]]; then
         REFRESHED=()
-        for component in "${NOT_FOUND_COMPONENTS[@]}"; do
-            check_image "$component" "$TARGET_SHA" "Commit SHA" "$TARGET_SHA" "$PR_NUM" || REFRESHED+=("$component")
-        done
+        if [[ ${#IMAGE_REPOS[@]} -gt 0 ]]; then
+            for component in "${NOT_FOUND_COMPONENTS[@]}"; do
+                check_image "$component" "$TARGET_SHA" "Commit SHA" "$TARGET_SHA" "$PR_NUM" || REFRESHED+=("$component")
+            done
+        else
+            # Pure PR resolution mode: just track the metadata for inventory
+            if [[ "$INVENTORY_MODE" == "true" ]]; then
+                local merge_date
+                local ts
+                ts=$(git log -1 --format=%at "$TARGET_SHA" 2>/dev/null || echo "")
+                if [[ -n "$ts" ]]; then
+                    merge_date=$(date -u -d "@$ts" "+%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -r "$ts" "+%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || echo "unknown")
+                else
+                    merge_date="unknown"
+                fi
+                INVENTORY_JSON=$(echo "$INVENTORY_JSON" | jq -c --arg d "$merge_date" --arg p "${PR_NUM:-N/A}" \
+                    '. += [{"package": "N/A", "tag": "N/A", "merged_at": $d, "pr": $p, "signed": "N/A", "sbom": "N/A"}]')
+            fi
+        fi
         if [[ "$INVENTORY_MODE" != "true" ]]; then
             NOT_FOUND_COMPONENTS=("${REFRESHED[@]}")
         fi
     fi
 
-    if [[ "$INVENTORY_MODE" != "true" && ${#NOT_FOUND_COMPONENTS[@]} -eq 0 ]]; then
+    if [[ "$INVENTORY_MODE" != "true" && ${#IMAGE_REPOS[@]} -gt 0 && ${#NOT_FOUND_COMPONENTS[@]} -eq 0 ]]; then
         echo "  [!] Success: All packages resolved."
+        break
+    fi
+    # If in pure PR mode and not inventory, we only need the first commit's PR
+    if [[ "$INVENTORY_MODE" != "true" && ${#IMAGE_REPOS[@]} -eq 0 ]]; then
         break
     fi
 done
@@ -235,32 +265,42 @@ done
 if [[ "$INVENTORY_MODE" == "true" ]]; then
     echo ""
     echo "  [i] Inventory Summary:"
-    echo "$INVENTORY_JSON" | jq -r '["PACKAGE", "TAG", "PR", "MERGED_AT", "SIGNED", "SBOM"], (.[] | [.package, .tag, .pr, .merged_at, .signed, .sbom]) | @tsv' | column -t -s $'\t' || true
+    if [[ ${#IMAGE_REPOS[@]} -gt 0 ]]; then
+        echo "$INVENTORY_JSON" | jq -r '["PACKAGE", "TAG", "PR", "MERGED_AT", "SIGNED", "SBOM"], (.[] | [.package, .tag, .pr, .merged_at, .signed, .sbom]) | @tsv' | column -t -s $'\t' || true
+    else
+        echo "$INVENTORY_JSON" | jq -r '["PR", "MERGED_AT"], (.[] | [.pr, .merged_at]) | @tsv' | column -t -s $'\t' || true
+    fi
     echo ""
     
     # Add to GitHub Step Summary
     {
         echo "### 🔍 Image Inventory Audit"
-        echo "| Package | Tag | PR | Merged (UDT) | Signed | SBOM |"
-        echo "| --- | --- | --- | --- | --- | --- |"
-        echo "$INVENTORY_JSON" | jq -r '.[] | "| \(.package) | `\(.tag)` | #\(.pr) | \(.merged_at) | \(.signed) | \(.sbom) |"'
+        if [[ ${#IMAGE_REPOS[@]} -gt 0 ]]; then
+            echo "| Package | Tag | PR | Merged (UDT) | Signed | SBOM |"
+            echo "| --- | --- | --- | --- | --- | --- |"
+            echo "$INVENTORY_JSON" | jq -r '.[] | "| \(.package) | `\(.tag)` | #\(.pr) | \(.merged_at) | \(.signed) | \(.sbom) |"'
+        else
+            echo "| PR | Merged (UDT) |"
+            echo "| --- | --- |"
+            echo "$INVENTORY_JSON" | jq -r '.[] | "| #\(.pr) | \(.merged_at) |"'
+        fi
     } >> "$GITHUB_STEP_SUMMARY"
 fi
 
 echo "::endgroup::"
 
 # Success/Failure criteria
-# Standard mode: fail if any component is still in NOT_FOUND_COMPONENTS
-# Inventory mode: fail only if any component was NEVER found
 FAILED_COMPONENTS=()
-if [[ "$INVENTORY_MODE" == "true" ]]; then
-    for component in "${!IMAGE_REPOS[@]}"; do
-        if [[ -z "${COMPONENT_FOUND_MAP[$component]:-}" ]]; then
-            FAILED_COMPONENTS+=("$component")
-        fi
-    done
-else
-    FAILED_COMPONENTS=("${NOT_FOUND_COMPONENTS[@]}")
+if [[ ${#IMAGE_REPOS[@]} -gt 0 ]]; then
+    if [[ "$INVENTORY_MODE" == "true" ]]; then
+        for component in "${!IMAGE_REPOS[@]}"; do
+            if [[ -z "${COMPONENT_FOUND_MAP[$component]:-}" ]]; then
+                FAILED_COMPONENTS+=("$component")
+            fi
+        done
+    else
+        FAILED_COMPONENTS=("${NOT_FOUND_COMPONENTS[@]}")
+    fi
 fi
 
 if [[ ${#FAILED_COMPONENTS[@]} -gt 0 ]]; then
@@ -272,6 +312,7 @@ fi
     echo "packages=${FOUND_BUNDLE_JSON}"
     echo "bundle=${FOUND_BUNDLE_JSON}"
     echo "inventory=${INVENTORY_JSON}"
+    echo "pr=${RESOLVED_PR}"
 } >> "$GITHUB_OUTPUT"
 
 # Simplified single tag output (first package)

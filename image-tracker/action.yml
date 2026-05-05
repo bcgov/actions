@@ -5,9 +5,8 @@ inputs:
   package:
     description: |
       One or more package names (space, comma, or newline separated).
-      Each resolves to ghcr.io/<owner>/<repo>/<package>, except when the package
-      name matches the repo name, in which case it resolves to ghcr.io/<owner>/<repo>.
-    required: true
+      If omitted, the action only resolves PR metadata.
+    required: false
   max_depth:
     description: 'Max commits to walk back'
     default: '100'
@@ -46,6 +45,9 @@ outputs:
   inventory:
     description: 'JSON array of all found images and their metadata (PR number, merge date, etc.). Only populated if inventory_depth is set.'
     value: ${{ steps.walk.outputs.inventory }}
+  pr:
+    description: 'The resolved PR number for the starting revision (or the first match in history).'
+    value: ${{ steps.walk.outputs.pr }}
 
 runs:
   using: 'composite'
