@@ -108,16 +108,26 @@ check_image() {
 
     for tag in "${tags_to_check[@]}"; do
         local is_valid="false"
+        local has_sbom="false"
         if [[ "$COSIGN_ENABLED" == "true" ]]; then
             if [[ -n "$COSIGN_PUB_KEY" ]]; then
                 echo "$COSIGN_PUB_KEY" > /tmp/cosign.pub
                 if cosign verify --key /tmp/cosign.pub "$tag" > /dev/null 2>&1; then
                     is_valid="true"
+                    # Also check for SBOM attestations (CycloneDX or SPDX)
+                    if cosign verify-attestation --key /tmp/cosign.pub --type cyclonedx "$tag" > /dev/null 2>&1 || \
+                       cosign verify-attestation --key /tmp/cosign.pub --type spdxjson "$tag" > /dev/null 2>&1; then
+                        has_sbom="true"
+                    fi
                 fi
             else
                 # Keyless verification
                 if cosign verify "$tag" > /dev/null 2>&1; then
                     is_valid="true"
+                    if cosign verify-attestation --type cyclonedx "$tag" > /dev/null 2>&1 || \
+                       cosign verify-attestation --type spdxjson "$tag" > /dev/null 2>&1; then
+                        has_sbom="true"
+                    fi
                 fi
             fi
         else
@@ -128,8 +138,13 @@ check_image() {
 
         if [[ "$is_valid" == "true" ]]; then
             local tag_only="${tag##*:}"
-            echo "  [✓] FOUND ($desc): $component -> $tag_only"
-            echo "::notice title=Image Resolved::Package '$component' resolved to $tag_only ($desc)"
+            local signed_status="[ ]"
+            [[ "$COSIGN_ENABLED" == "true" ]] && signed_status="[✓]"
+            local sbom_status="[ ]"
+            [[ "$has_sbom" == "true" ]] && sbom_status="[✓]"
+
+            echo "  [✓] FOUND ($desc): $component -> $tag_only (Signed: $signed_status, SBOM: $sbom_status)"
+            echo "::notice title=Image Resolved::Package '$component' resolved to $tag_only ($desc) [Signed: $signed_status, SBOM: $sbom_status]"
             
             # In inventory mode, we track EVERYTHING found
             if [[ "$INVENTORY_MODE" == "true" ]]; then
@@ -145,7 +160,8 @@ check_image() {
                 
                 local current_pr="${PR_NUM_MAP[$target_commit]:-N/A}"
                 INVENTORY_JSON=$(echo "$INVENTORY_JSON" | jq -c --arg c "$component" --arg s "$tag_only" --arg d "$merge_date" --arg p "$current_pr" \
-                    '. += [{"package": $c, "tag": $s, "merged_at": $d, "pr": $p}]')
+                    --arg sig "$signed_status" --arg sbom "$sbom_status" \
+                    '. += [{"package": $c, "tag": $s, "merged_at": $d, "pr": $p, "signed": $sig, "sbom": $sbom}]')
             fi
 
             FOUND_BUNDLE_JSON=$(echo "$FOUND_BUNDLE_JSON" | jq -c --arg c "$component" --arg s "$tag_only" '.[$c] = $s')
@@ -219,15 +235,15 @@ done
 if [[ "$INVENTORY_MODE" == "true" ]]; then
     echo ""
     echo "  [i] Inventory Summary:"
-    echo "$INVENTORY_JSON" | jq -r '["PACKAGE", "TAG", "PR", "MERGED_AT"], (.[] | [.package, .tag, .pr, .merged_at]) | @tsv' | column -t -s $'\t' || true
+    echo "$INVENTORY_JSON" | jq -r '["PACKAGE", "TAG", "PR", "MERGED_AT", "SIGNED", "SBOM"], (.[] | [.package, .tag, .pr, .merged_at, .signed, .sbom]) | @tsv' | column -t -s $'\t' || true
     echo ""
     
     # Add to GitHub Step Summary
     {
         echo "### 🔍 Image Inventory Audit"
-        echo "| Package | Tag | PR | Merged At |"
-        echo "| --- | --- | --- | --- |"
-        echo "$INVENTORY_JSON" | jq -r '.[] | "| \(.package) | `\(.tag)` | #\(.pr) | \(.merged_at) |"'
+        echo "| Package | Tag | PR | Merged At | Signed | SBOM |"
+        echo "| --- | --- | --- | --- | --- | --- |"
+        echo "$INVENTORY_JSON" | jq -r '.[] | "| \(.package) | `\(.tag)` | #\(.pr) | \(.merged_at) | \(.signed) | \(.sbom) |"'
     } >> "$GITHUB_STEP_SUMMARY"
 fi
 
