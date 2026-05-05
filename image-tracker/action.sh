@@ -111,7 +111,7 @@ check_image() {
         FOUND_BUNDLE_JSON=$(echo "$FOUND_BUNDLE_JSON" | jq -c --arg c "$component" --arg s "sha-${sha}" '.[$c] = $s')
         return 0
     fi
-    echo "  [x] MISSING ($desc): sha-${sha}"
+    echo "  [x] MISSING ($desc): $component -> $full_image"
     return 1
 }
 
@@ -119,7 +119,7 @@ declare -A PR_MAP
 declare -A PR_NUM_MAP
 if [[ -n "$GH_TOKEN" ]]; then
     echo "  [i] Batch-fetching PR merge map for $REPOSITORY..."
-    PR_DATA=$(gh api "/repos/${REPOSITORY}/pulls?state=all&per_page=100" \
+    PR_DATA=$(gh api --paginate "/repos/${REPOSITORY}/pulls?state=all&per_page=100" \
         --jq '.[] | [.merge_commit_sha, .head.sha, .number] | @tsv' 2>/dev/null || true)
     
     if [[ -n "$PR_DATA" ]]; then
