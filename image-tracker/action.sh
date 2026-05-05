@@ -29,12 +29,14 @@ cd "$DIR" || { echo "::error::Could not change to directory $DIR"; exit 1; }
 # Parse one or more package names (space, comma, or newline separated)
 # and resolve each to its GHCR image path.
 declare -A IMAGE_REPOS
+FIRST_PKG=""
 repo_name="${REPOSITORY#*/}"
 lc_repo=$(echo "$REPOSITORY" | tr '[:upper:]' '[:lower:]')
 
 while IFS= read -r pkg; do
     pkg=$(echo "$pkg" | tr -d '[:space:]')
     [[ -z "$pkg" ]] && continue
+    [[ -z "$FIRST_PKG" ]] && FIRST_PKG="$pkg"
     # If the package name matches the repo name, image lives at the repo root path
     if [[ "${pkg,,}" == "${repo_name,,}" ]]; then
         IMAGE_REPOS["$pkg"]="ghcr.io/${lc_repo}"
@@ -182,3 +184,15 @@ fi
 echo "packages=${FOUND_BUNDLE_JSON}" >> "$GITHUB_OUTPUT"
 echo "bundle=${FOUND_BUNDLE_JSON}" >> "$GITHUB_OUTPUT"
 echo "inventory=${INVENTORY_JSON}" >> "$GITHUB_OUTPUT"
+
+# Simplified single tag output (first package)
+if [[ -n "$FIRST_PKG" ]]; then
+    FIRST_TAG=$(echo "$FOUND_BUNDLE_JSON" | jq -r --arg p "$FIRST_PKG" '.[$p] // empty')
+    if [[ -n "$FIRST_TAG" ]]; then
+        echo "tag=${FIRST_TAG}" >> "$GITHUB_OUTPUT"
+        # If there were multiple packages, let the user know which one 'tag' refers to
+        if [[ $(echo "$PACKAGE_INPUT" | tr ',' '\n' | grep -v '^$' | wc -l) -gt 1 ]]; then
+            echo "  [i] Note: Multiple packages resolved. 'tag' output set to first package: $FIRST_PKG"
+        fi
+    fi
+fi

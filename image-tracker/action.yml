@@ -34,6 +34,9 @@ outputs:
   bundle:
     description: 'Backward-compatible alias for packages; JSON object mapping package names to verified image tags'
     value: ${{ steps.walk.outputs.packages }}
+  tag:
+    description: 'The resolved SHA for the first package in the list (simplified output)'
+    value: ${{ steps.walk.outputs.tag }}
   inventory:
     description: 'JSON array of all found images and their metadata (only populated if inventory mode is enabled)'
     value: ${{ steps.walk.outputs.inventory }}
