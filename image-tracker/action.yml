@@ -23,6 +23,9 @@ inputs:
   revision:
     description: 'Starting revision to walk back from (Tag, Branch, or SHA)'
     default: 'HEAD'
+  inventory:
+    description: 'If true, walk all commits and report all found images instead of stopping.'
+    default: 'false'
 
 outputs:
   packages:
@@ -31,6 +34,9 @@ outputs:
   bundle:
     description: 'Backward-compatible alias for packages; JSON object mapping package names to verified image tags'
     value: ${{ steps.walk.outputs.packages }}
+  inventory:
+    description: 'JSON array of all found images and their metadata (only populated if inventory mode is enabled)'
+    value: ${{ steps.walk.outputs.inventory }}
 
 runs:
   using: 'composite'
@@ -43,5 +49,6 @@ runs:
         INPUT_DIR: ${{ inputs.dir }}
         INPUT_REPOSITORY: ${{ inputs.repository }}
         INPUT_REVISION: ${{ inputs.revision }}
+        INPUT_INVENTORY: ${{ inputs.inventory }}
         GH_TOKEN: ${{ inputs.token }}
       run: bash ${{ github.action_path }}/action.sh

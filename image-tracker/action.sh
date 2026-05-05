@@ -11,6 +11,7 @@ GH_TOKEN="${GH_TOKEN:-}"
 DIR="${INPUT_DIR:-.}"
 REPOSITORY="${INPUT_REPOSITORY:-$GITHUB_REPOSITORY}"
 REVISION="${INPUT_REVISION:-HEAD}"
+INVENTORY_MODE="${INPUT_INVENTORY:-false}"
 
 if [[ -z "$PACKAGE_INPUT" ]]; then
   echo "::error::No packages provided. Set the 'package' input."
@@ -76,16 +77,28 @@ fi
 
 # Verification state
 FOUND_BUNDLE_JSON="{}"
+INVENTORY_JSON="[]"
 NOT_FOUND_COMPONENTS=("${!IMAGE_REPOS[@]}")
 
 check_image() {
     local component="$1"
     local sha="$2"
     local desc="$3"
+    local target_commit="$4"
     local full_image="${IMAGE_REPOS[$component]}:sha-${sha}"
 
     if docker manifest inspect "$full_image" > /dev/null 2>&1; then
         echo "  [✓] FOUND ($desc): $component -> sha-${sha}"
+        
+        # In inventory mode, we track EVERYTHING found
+        if [[ "$INVENTORY_MODE" == "true" ]]; then
+            local merge_date
+            merge_date=$(git log -1 --format=%cI "$target_commit" 2>/dev/null || echo "unknown")
+            local pr_num="${PR_NUM_MAP[$target_commit]:-N/A}"
+            INVENTORY_JSON=$(echo "$INVENTORY_JSON" | jq -c --arg c "$component" --arg s "sha-${sha}" --arg d "$merge_date" --arg p "$pr_num" \
+                '. += [{"package": $c, "tag": $s, "merged_at": $d, "pr": $p}]')
+        fi
+
         FOUND_BUNDLE_JSON=$(echo "$FOUND_BUNDLE_JSON" | jq -c --arg c "$component" --arg s "sha-${sha}" '.[$c] = $s')
         return 0
     fi
@@ -121,25 +134,37 @@ for TARGET_SHA in $REVISIONS; do
     if [[ -n "$PR_HEAD_SHA" && "$PR_HEAD_SHA" != "null" && "$PR_HEAD_SHA" != "$TARGET_SHA" ]]; then
         REFRESHED=()
         for component in "${NOT_FOUND_COMPONENTS[@]}"; do
-            check_image "$component" "$PR_HEAD_SHA" "PR #$PR_NUM Head" || REFRESHED+=("$component")
+            check_image "$component" "$PR_HEAD_SHA" "PR #$PR_NUM Head" "$TARGET_SHA" || REFRESHED+=("$component")
         done
-        NOT_FOUND_COMPONENTS=("${REFRESHED[@]}")
+        # Only update NOT_FOUND if we aren't in inventory mode (in inventory mode, we keep searching)
+        if [[ "$INVENTORY_MODE" != "true" ]]; then
+            NOT_FOUND_COMPONENTS=("${REFRESHED[@]}")
+        fi
     fi
 
     # 2. Check the commit SHA itself (covers standard merges)
-    if [[ ${#NOT_FOUND_COMPONENTS[@]} -gt 0 ]]; then
+    if [[ ${#NOT_FOUND_COMPONENTS[@]} -gt 0 || "$INVENTORY_MODE" == "true" ]]; then
         REFRESHED=()
         for component in "${NOT_FOUND_COMPONENTS[@]}"; do
-            check_image "$component" "$TARGET_SHA" "Commit SHA" || REFRESHED+=("$component")
+            check_image "$component" "$TARGET_SHA" "Commit SHA" "$TARGET_SHA" || REFRESHED+=("$component")
         done
-        NOT_FOUND_COMPONENTS=("${REFRESHED[@]}")
+        if [[ "$INVENTORY_MODE" != "true" ]]; then
+            NOT_FOUND_COMPONENTS=("${REFRESHED[@]}")
+        fi
     fi
 
-    if [[ ${#NOT_FOUND_COMPONENTS[@]} -eq 0 ]]; then
+    if [[ "$INVENTORY_MODE" != "true" && ${#NOT_FOUND_COMPONENTS[@]} -eq 0 ]]; then
         echo "  [!] Success: All packages resolved."
         break
     fi
 done
+
+if [[ "$INVENTORY_MODE" == "true" ]]; then
+    echo ""
+    echo "  [i] Inventory Summary:"
+    echo "$INVENTORY_JSON" | jq -r '["PACKAGE", "TAG", "PR", "MERGED_AT"], (.[] | [.package, .tag, .pr, .merged_at]) | @tsv' | column -t -s $'\t' || true
+    echo ""
+fi
 
 echo "::endgroup::"
 
@@ -150,3 +175,4 @@ fi
 
 echo "packages=${FOUND_BUNDLE_JSON}" >> "$GITHUB_OUTPUT"
 echo "bundle=${FOUND_BUNDLE_JSON}" >> "$GITHUB_OUTPUT"
+echo "inventory=${INVENTORY_JSON}" >> "$GITHUB_OUTPUT"
