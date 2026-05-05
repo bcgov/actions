@@ -73,11 +73,13 @@ check_image() {
     local component="$1"
     local sha="$2"
     local desc="$3"
-    local full_image="${IMAGE_REPOS[$component]}:sha-${sha}"
+    # Match docker/metadata-action's default `type=sha` short-SHA (7 chars) tag format.
+    local short_sha="${sha:0:7}"
+    local full_image="${IMAGE_REPOS[$component]}:sha-${short_sha}"
 
     if docker manifest inspect "$full_image" > /dev/null 2>&1; then
-        echo "  [✓] FOUND ($desc): $component -> sha-${sha}"
-        FOUND_BUNDLE_JSON=$(echo "$FOUND_BUNDLE_JSON" | jq -c --arg c "$component" --arg s "sha-${sha}" '.[$c] = $s')
+        echo "  [✓] FOUND ($desc): $component -> sha-${short_sha}"
+        FOUND_BUNDLE_JSON=$(echo "$FOUND_BUNDLE_JSON" | jq -c --arg c "$component" --arg s "sha-${short_sha}" '.[$c] = $s')
         return 0
     fi
     return 1

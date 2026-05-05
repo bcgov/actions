@@ -70,26 +70,30 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Checkout Vexilon
+      - name: Checkout Quickstart
         uses: actions/checkout@v6
         with:
-          repository: DerekRoberts/vexilon
-          path: vexilon-repo
+          repository: bcgov/quickstart-openshift
+          path: quickstart-repo
           fetch-depth: 100
 
-      - name: Resolve vexilon package
-        id: vexilon
+      - name: Resolve Quickstart packages
+        id: quickstart
         uses: ./image-tracker
         with:
-          package: vexilon
-          repository: DerekRoberts/vexilon
-          dir: vexilon-repo
+          package: frontend, backend, quickstart-openshift
+          repository: bcgov/quickstart-openshift
+          dir: quickstart-repo
           token: ${{ github.token }}
 
       - name: Verify resolution
         run: |
-          PACKAGES='${{ steps.vexilon.outputs.packages }}'
+          PACKAGES='${{ steps.quickstart.outputs.packages }}'
           echo "Packages: $PACKAGES"
-          echo "$PACKAGES" | jq -e '.vexilon' > /dev/null \
-            || { echo "::error::Resolution failed"; exit 1; }
-          echo "✅ Passed: $(echo "$PACKAGES" | jq -r '.vexilon')"
+          echo "$PACKAGES" | jq -e '.frontend' > /dev/null \
+            || { echo "::error::frontend resolution failed"; exit 1; }
+          echo "$PACKAGES" | jq -e '.backend' > /dev/null \
+            || { echo "::error::backend resolution failed"; exit 1; }
+          echo "$PACKAGES" | jq -e '."quickstart-openshift"' > /dev/null \
+            || { echo "::error::base-repo resolution failed"; exit 1; }
+          echo "✅ Passed: $PACKAGES"
