@@ -24,6 +24,9 @@ inputs:
   max_tags:
     description: 'Upper bound on tags inspected per package before failing.'
     default: '500'
+  max_depth:
+    description: 'Max number of commits back in history to search for an image.'
+    default: '1'
 
 outputs:
   images:
@@ -59,4 +62,5 @@ runs:
         INPUT_DIR: ${{ inputs.dir }}
         INPUT_TOKEN: ${{ inputs.token }}
         INPUT_MAX_TAGS: ${{ inputs.max_tags }}
+        INPUT_MAX_DEPTH: ${{ inputs.max_depth }}
       run: bash ${{ github.action_path }}/action.sh

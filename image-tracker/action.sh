@@ -18,6 +18,7 @@ REPOSITORY="${INPUT_REPOSITORY:-$GITHUB_REPOSITORY}"
 DIR="${INPUT_DIR:-.}"
 TOKEN="${INPUT_TOKEN:-${GITHUB_TOKEN:-}}"
 MAX_TAGS="${INPUT_MAX_TAGS:-500}"
+MAX_DEPTH="${INPUT_MAX_DEPTH:-1}"
 
 if [[ -z "$PACKAGE_INPUT" ]]; then
     echo "::error::Missing required input 'package'."
@@ -28,16 +29,33 @@ if [[ -z "$TOKEN" ]]; then
     exit 1
 fi
 
-# ---- Resolve git revision to a 40-char commit SHA --------------------------
+# ---- Resolve git history to candidate SHAs ---------------------------------
 cd "$DIR"
-TARGET_SHA=$(git rev-parse --verify --quiet "${REVISION}^{commit}" 2>/dev/null || true)
-if [[ -z "$TARGET_SHA" ]]; then
+# Get the "pivot" commit (the starting point for history walking)
+PIVOT_SHA=$(git rev-parse --verify --quiet "${REVISION}^{commit}" 2>/dev/null || true)
+if [[ -z "$PIVOT_SHA" ]]; then
     echo "::error::Could not resolve git revision '$REVISION' in '$DIR'."
     exit 1
 fi
-echo "::group::Image Tracker — resolving commit $TARGET_SHA"
+
+# Generate list of candidate commits from history
+mapfile -t CANDIDATES < <(git rev-list -n "$MAX_DEPTH" "$PIVOT_SHA")
+if [[ ${#CANDIDATES[@]} -eq 0 ]]; then
+    echo "::error::No commits found for revision $REVISION."
+    exit 1
+fi
+
+# Convert to associative array for O(1) lookup during tag iteration
+declare -A CANDIDATE_MAP
+for sha in "${CANDIDATES[@]}"; do
+    CANDIDATE_MAP["$sha"]=1
+done
+
+echo "::group::Image Tracker — resolving ancestry for $REVISION"
 echo "  Repository: $REPOSITORY"
-echo "  Revision:   $REVISION -> $TARGET_SHA"
+echo "  Starting SHA: $PIVOT_SHA"
+echo "  Max Depth:    $MAX_DEPTH"
+echo "  Candidates:   ${#CANDIDATES[@]} commit(s) in history"
 
 # ---- Map package names to GHCR image paths ---------------------------------
 # Convention: if package name matches the repo name, image lives at the repo
@@ -159,8 +177,8 @@ resolve_digest() {
             revision=$(curl -sSL -H "Authorization: Bearer ${bearer}" "${base}/blobs/${config_digest}" \
                 | jq -r '.config.Labels["org.opencontainers.image.revision"] // empty' 2>/dev/null || true)
 
-            if [[ "$revision" == "$TARGET_SHA" ]]; then
-                printf '%s' "$mdigest"
+            if [[ -n "${CANDIDATE_MAP[$revision]:-}" ]]; then
+                printf '%s:%s' "$revision" "$mdigest"
                 return 0
             fi
         done < <(printf '%s' "$body" | jq -r '.tags[]?' 2>/dev/null)
@@ -200,21 +218,27 @@ for pkg in "${PKG_ORDER[@]}"; do
         MISSING+=("$pkg")
         continue
     fi
-    echo "  [>] Searching ghcr.io/${image_path} for commit ${TARGET_SHA:0:12}..."
-    digest=""
+    echo "  [>] Searching ghcr.io/${image_path} for matching ancestry..."
+    result=""
     resolve_rc=0
-    digest=$(resolve_digest "$image_path" "$bearer") || resolve_rc=$?
+    result=$(resolve_digest "$image_path" "$bearer") || resolve_rc=$?
+    
     if [[ "$resolve_rc" -eq 2 ]]; then
         echo "::error::max_tags ($MAX_TAGS) exceeded resolving $pkg — no image found. Increase max_tags or narrow the search."
         exit 1
     fi
-    if [[ -z "$digest" ]]; then
-        echo "  [x] MISS: $pkg (no image labeled with this commit)"
+    
+    if [[ -z "$result" ]]; then
+        echo "  [x] MISS: $pkg (no image found in history matching candidate commits)"
         MISSING+=("$pkg")
         continue
     fi
+
+    # result is "sha:digest"
+    resolved_sha="${result%%:*}"
+    digest="${result#*:}"
     image_ref="ghcr.io/${image_path}@${digest}"
-    echo "  [✓] HIT:  $pkg -> $image_ref"
+    echo "  [✓] HIT:  $pkg -> $image_ref (matched commit ${resolved_sha:0:12})"
     IMAGES_JSON=$(printf '%s' "$IMAGES_JSON"  | jq -c --arg k "$pkg" --arg v "$image_ref" '.[$k] = $v')
     DIGESTS_JSON=$(printf '%s' "$DIGESTS_JSON" | jq -c --arg k "$pkg" --arg v "$digest"    '.[$k] = $v')
     # Set first-package outputs on the first successful hit
@@ -235,8 +259,8 @@ echo "::endgroup::"
 } >> "$GITHUB_OUTPUT"
 
 if [[ ${#MISSING[@]} -gt 0 ]]; then
-    echo "::error::Failed to resolve the following package(s) for commit ${TARGET_SHA}: ${MISSING[*]}"
+    echo "::error::Failed to resolve the following package(s) within $MAX_DEPTH commit(s) of $PIVOT_SHA: ${MISSING[*]}"
     exit 1
 fi
 
-echo "Resolved ${#IMAGE_PATHS[@]} package(s) for commit ${TARGET_SHA}."
+echo "Resolved ${#IMAGE_PATHS[@]} package(s) for $REVISION history."
