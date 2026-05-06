@@ -60,12 +60,16 @@ echo "  Candidates:   ${#CANDIDATES[@]} commit(s) in history"
 # Batch-fetch closed PR data: merge_commit_sha -> head_sha
 # This allows us to resolve images built from PR heads that were squash-merged.
 declare -A PR_MAP
+declare -A PR_NUM_MAP
 if command -v gh &>/dev/null && [[ -n "$TOKEN" ]]; then
     echo "  [i] Batch-fetching PR merge map..."
-    while IFS=$'\t' read -r merge_sha head_sha; do
-        [[ -n "$merge_sha" && "$merge_sha" != "null" ]] && PR_MAP["$merge_sha"]="$head_sha"
+    while IFS=$'\t' read -r merge_sha head_sha pr_num; do
+        if [[ -n "$merge_sha" && "$merge_sha" != "null" ]]; then
+            PR_MAP["$merge_sha"]="$head_sha"
+            PR_NUM_MAP["$merge_sha"]="$pr_num"
+        fi
     done < <(GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/pulls?state=closed&per_page=100" \
-        --jq '.[] | [.merge_commit_sha, .head.sha] | @tsv' 2>/dev/null || true)
+        --jq '.[] | [.merge_commit_sha, .head.sha, .number] | @tsv' 2>/dev/null || true)
     echo "  [i] PR Map populated with ${#PR_MAP[@]} entries."
 fi
 
@@ -169,6 +173,12 @@ resolve_digest() {
                     match_found="$candidate"
                     break
                 fi
+                # PR Number match (force-push support)
+                local pr_num="${PR_NUM_MAP[$candidate]:-}"
+                if [[ -n "$pr_num" && "$tag" == "pr-$pr_num" ]]; then
+                    match_found="$candidate"
+                    break
+                fi
             done
 
             # Fetch top-level manifest + its digest header.
@@ -223,6 +233,13 @@ resolve_digest() {
                 # Match candidate's PR head (if it was a squash merge)
                 local pr_head="${PR_MAP[$candidate]:-}"
                 if [[ -n "$pr_head" && "$pr_head" == "$revision"* ]] && [[ ${#revision} -ge 7 ]]; then
+                    printf '%s:%s' "$candidate" "$mdigest"
+                    return 0
+                fi
+                # Match candidate's PR number (if it was a force-push merge)
+                # Note: revision labels are usually SHAs, but we check if it matches the PR tag convention
+                local pr_num="${PR_NUM_MAP[$candidate]:-}"
+                if [[ -n "$pr_num" && "$revision" == "pr-$pr_num" ]]; then
                     printf '%s:%s' "$candidate" "$mdigest"
                     return 0
                 fi
