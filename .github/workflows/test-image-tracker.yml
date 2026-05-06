@@ -92,14 +92,18 @@ jobs:
           bearer=$(curl -sS -u "x:${GH_TOKEN}" \
             "https://ghcr.io/token?scope=repository:${image_path}:pull" | jq -r '.token')
 
-          # Skip helper tags (sigs, sboms, buildcache) and the 'latest' moving tag.
-          tag=$(curl -sS -H "Authorization: Bearer ${bearer}" \
-            "https://ghcr.io/v2/${image_path}/tags/list?n=50" \
-            | jq -r '.tags[]' \
-            | grep -Ev '^(buildcache|latest)$' \
-            | grep -Ev '\.(sig|sbom|att)$' \
-            | head -1)
-          echo "Using tag: $tag"
+           # Skip helper tags (sigs, sboms, buildcache) and the 'latest' moving tag.
+           tag=$(curl -sS -H "Authorization: Bearer ${bearer}" \
+             "https://ghcr.io/v2/${image_path}/tags/list?n=50" \
+             | jq -r '.tags[]' \
+             | grep -Ev '^(buildcache|latest)$' \
+             | grep -Ev '\.(sig|sbom|att)$' \
+             | head -1)
+           if [[ -z "$tag" ]]; then
+             echo "::error::No valid tags found after filtering (all tags were buildcache, latest, sig, sbom, or att)"
+             exit 1
+           fi
+           echo "Using tag: $tag"
 
           accept='application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json'
           resp=$(curl -sS -i -H "Authorization: Bearer ${bearer}" -H "Accept: ${accept}" \
