@@ -114,6 +114,44 @@ registry_token() {
         | jq -r '.token'
 }
 
+# Probe a specific tag directly.
+# Returns "sha:digest" on success, empty on failure.
+probe_tag() {
+    local image_path="$1"
+    local tag="$2"
+    local bearer="$3"
+    local base="https://ghcr.io/v2/${image_path}"
+    local accept_index="application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json"
+
+    local mresp mdigest
+    mresp=$(curl -sS -i -H "Authorization: Bearer ${bearer}" -H "Accept: ${accept_index}" "${base}/manifests/${tag}")
+    mdigest=$(printf '%s' "$mresp" | awk 'BEGIN{IGNORECASE=1} /^docker-content-digest:/ {gsub(/\r/,""); print $2; exit}')
+    
+    if [[ -n "$mdigest" ]]; then
+        local tag_sha="${tag#sha-}"
+        for candidate in "${!CANDIDATE_MAP[@]}"; do
+            # Direct match
+            if [[ "$candidate" == "$tag_sha"* ]] && [[ ${#tag_sha} -ge 7 ]]; then
+                printf '%s:%s' "$candidate" "$mdigest"
+                return 0
+            fi
+            # PR Head match
+            local pr_head="${PR_MAP[$candidate]:-}"
+            if [[ -n "$pr_head" && "$pr_head" == "$tag_sha"* ]] && [[ ${#tag_sha} -ge 7 ]]; then
+                printf '%s:%s' "$candidate" "$mdigest"
+                return 0
+            fi
+            # PR Number match
+            local pr_num="${PR_NUM_MAP[$candidate]:-}"
+            if [[ -n "$pr_num" && "$tag" == "pr-$pr_num" ]]; then
+                printf '%s:%s' "$candidate" "$mdigest"
+                return 0
+            fi
+        done
+    fi
+    return 1
+}
+
 # ---- Look up the manifest digest whose config carries our commit SHA -------
 # Returns "sha256:...<manifest-digest>" on stdout, empty string on miss.
 # Strategy:
@@ -282,13 +320,43 @@ for pkg in "${PKG_ORDER[@]}"; do
         continue
     fi
     echo "  [>] Searching ghcr.io/${image_path} for matching ancestry..."
-    result=""
-    resolve_rc=0
-    result=$(resolve_digest "$image_path" "$bearer") || resolve_rc=$?
     
-    if [[ "$resolve_rc" -eq 2 ]]; then
-        echo "::error::max_tags ($MAX_TAGS) exceeded resolving $pkg — no image found. Increase max_tags or narrow the search."
-        exit 1
+    result=""
+    # 1. Deterministic Probe (Fast Path - Mirroring legacy behavior)
+    # Check each candidate SHA (and its PR head/number) as a direct tag.
+    for candidate in "${CANDIDATES[@]}"; do
+        short_sha="${candidate:0:7}"
+        result=$(probe_tag "$image_path" "sha-${short_sha}" "$bearer" || true)
+        [[ -n "$result" ]] && break
+        
+        if [[ "${#candidate}" -gt 7 ]]; then
+             result=$(probe_tag "$image_path" "sha-${candidate}" "$bearer" || true)
+             [[ -n "$result" ]] && break
+        fi
+
+        pr_head="${PR_MAP[$candidate]:-}"
+        if [[ -n "$pr_head" ]]; then
+             result=$(probe_tag "$image_path" "sha-${pr_head:0:7}" "$bearer" || true)
+             [[ -n "$result" ]] && break
+        fi
+        
+        pr_num="${PR_NUM_MAP[$candidate]:-}"
+        if [[ -n "$pr_num" ]]; then
+             result=$(probe_tag "$image_path" "pr-${pr_num}" "$bearer" || true)
+             [[ -n "$result" ]] && break
+        fi
+    done
+
+    # 2. Iterative Search (Fallback Path)
+    if [[ -z "$result" ]]; then
+        echo "      (Direct probes failed; falling back to iterative tag search...)"
+        resolve_rc=0
+        result=$(resolve_digest "$image_path" "$bearer") || resolve_rc=$?
+        
+        if [[ "$resolve_rc" -eq 2 ]]; then
+            echo "::error::max_tags ($MAX_TAGS) exceeded resolving $pkg — no image found. Increase max_tags or narrow the search."
+            exit 1
+        fi
     fi
     
     if [[ -z "$result" ]]; then
