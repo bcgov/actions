@@ -68,7 +68,7 @@ if command -v gh &>/dev/null && [[ -n "$TOKEN" ]]; then
             PR_MAP["$merge_sha"]="$head_sha"
             PR_NUM_MAP["$merge_sha"]="$pr_num"
         fi
-    done < <(GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/pulls?state=closed&per_page=100" \
+    done < <(GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/pulls?state=all&per_page=100" \
         --jq '.[] | [.merge_commit_sha, .head.sha, .number] | @tsv' 2>/dev/null || true)
     echo "  [i] PR Map populated with ${#PR_MAP[@]} entries."
 fi
