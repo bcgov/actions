@@ -57,9 +57,16 @@ jobs:
     permissions:
       contents: read
       packages: read
+    strategy:
+      matrix:
+        include:
+          - repo: MinionTech/vexilon
+            package: agnav
+          - repo: bcgov/quickstart-openshift
+            package: frontend,backend,migrations
     env:
-      TARGET_REPO: MinionTech/vexilon
-      TARGET_PACKAGE: agnav
+      TARGET_REPO: ${{ matrix.repo }}
+      TARGET_PACKAGE: ${{ matrix.package }}
     steps:
       - uses: actions/checkout@v6
 
@@ -153,9 +160,9 @@ jobs:
 
           [[ "$got_digest" == "$expected" ]] \
             || { echo "::error::digest mismatch"; exit 1; }
-          [[ "$got_image" == "ghcr.io/miniontech/vexilon/${TARGET_PACKAGE}@$expected" ]] \
+          [[ "$got_image" == "ghcr.io/${TARGET_REPO}/${TARGET_PACKAGE}@$expected" ]] \
             || { echo "::error::image ref malformed or wrong"; exit 1; }
-          echo "$got_images" | jq -e --arg k "$TARGET_PACKAGE" '.[$k]' >/dev/null \
-            || { echo "::error::images JSON missing $TARGET_PACKAGE key"; exit 1; }
+          echo "$got_images" | jq -e --arg k "${TARGET_PACKAGE}" '.[$k]' >/dev/null \
+            || { echo "::error::images JSON missing ${TARGET_PACKAGE} key"; exit 1; }
 
           echo "✅ image-tracker returned the expected digest"
