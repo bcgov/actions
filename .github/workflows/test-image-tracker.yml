@@ -58,6 +58,7 @@ jobs:
       contents: read
       packages: read
     strategy:
+      fail-fast: false
       matrix:
         include:
           - repo: MinionTech/vexilon
@@ -88,7 +89,10 @@ jobs:
           # the same digest when asked to resolve this commit.
           set -euo pipefail
           lc_repo=$(echo "${TARGET_REPO}" | tr '[:upper:]' '[:lower:]')
-          image_path="${lc_repo}/${TARGET_PACKAGE}"
+          # Use only the first package from the (possibly comma-separated) list
+          # for the ground-truth registry probe.
+          first_pkg=$(echo "${TARGET_PACKAGE}" | tr ',' '\n' | tr -s '[:space:]' '\n' | grep -v '^$' | head -1)
+          image_path="${lc_repo}/${first_pkg}"
           bearer=$(curl -sS -u "x:${GH_TOKEN}" \
             "https://ghcr.io/token?scope=repository:${image_path}:pull" | jq -r '.token')
 
@@ -162,12 +166,14 @@ jobs:
           echo "Got images:  $got_images"
           echo "Expected:    $expected"
 
-          [[ "$got_digest" == "$expected" ]] \
-            || { echo "::error::digest mismatch"; exit 1; }
           lc_repo=$(echo "${TARGET_REPO}" | tr '[:upper:]' '[:lower:]')
-          [[ "$got_image" == "ghcr.io/${lc_repo}/${TARGET_PACKAGE}@$expected" ]] \
-            || { echo "::error::image ref malformed or wrong"; exit 1; }
-          echo "$got_images" | jq -e --arg k "${TARGET_PACKAGE}" '.[$k]' >/dev/null \
-            || { echo "::error::images JSON missing ${TARGET_PACKAGE} key"; exit 1; }
+          first_pkg=$(echo "${TARGET_PACKAGE}" | tr ',' '\n' | tr -s '[:space:]' '\n' | grep -v '^$' | head -1)
+
+          [[ "$got_digest" == "$expected" ]] \
+            || { echo "::error::digest mismatch: got $got_digest expected $expected"; exit 1; }
+          [[ "$got_image" == "ghcr.io/${lc_repo}/${first_pkg}@$expected" ]] \
+            || { echo "::error::image ref malformed or wrong: got $got_image"; exit 1; }
+          echo "$got_images" | jq -e --arg k "${first_pkg}" '.[$k]' >/dev/null \
+            || { echo "::error::images JSON missing ${first_pkg} key"; exit 1; }
 
           echo "✅ image-tracker returned the expected digest"
