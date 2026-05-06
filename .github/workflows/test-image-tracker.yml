@@ -64,7 +64,7 @@ jobs:
           - repo: MinionTech/vexilon
             package: agnav
           - repo: bcgov/quickstart-openshift
-            package: frontend,backend,migrations
+            package: frontend,backend
     env:
       TARGET_REPO: ${{ matrix.repo }}
       TARGET_PACKAGE: ${{ matrix.package }}
