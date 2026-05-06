@@ -89,60 +89,105 @@ jobs:
           # the same digest when asked to resolve this commit.
           set -euo pipefail
           lc_repo=$(echo "${TARGET_REPO}" | tr '[:upper:]' '[:lower:]')
-          # Use only the first package from the (possibly comma-separated) list
-          # for the ground-truth registry probe.
-          first_pkg=$(echo "${TARGET_PACKAGE}" | tr ',' '\n' | tr -s '[:space:]' '\n' | grep -v '^$' | head -1)
-          image_path="${lc_repo}/${first_pkg}"
-          bearer=$(curl -sS -u "x:${GH_TOKEN}" \
-            "https://ghcr.io/token?scope=repository:${image_path}:pull" | jq -r '.token')
 
-           # Skip helper tags (sigs, sboms, buildcache) and the 'latest' moving tag.
-           tag=$(curl -sS -H "Authorization: Bearer ${bearer}" \
-             "https://ghcr.io/v2/${image_path}/tags/list?n=50" \
-             | jq -r '.tags[]' \
-             | grep -Ev '^(buildcache|latest)$' \
-             | grep -Ev '\.(sig|sbom|att)$' \
-             | head -1)
-           if [[ -z "$tag" ]]; then
-             echo "::error::No valid tags found after filtering (all tags were buildcache, latest, sig, sbom, or att)"
-             exit 1
-           fi
-           echo "Using tag: $tag"
-
+          # Build the list of packages to probe.
+          mapfile -t pkgs < <(echo "${TARGET_PACKAGE}" | tr ',' '\n' | tr -s '[:space:]' '\n' | grep -v '^$')
+          first_pkg="${pkgs[0]}"
           accept='application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json'
-          resp=$(curl -sS -i -H "Authorization: Bearer ${bearer}" -H "Accept: ${accept}" \
-            "https://ghcr.io/v2/${image_path}/manifests/${tag}")
-          body=$(printf '%s' "$resp" | awk 'BEGIN{p=0}/^\r?$/{p=1;next}p{print}')
-          expected_digest=$(printf '%s' "$resp" \
-            | awk 'BEGIN{IGNORECASE=1}/^docker-content-digest:/ {gsub(/\r/,""); print $2; exit}')
-          mtype=$(printf '%s' "$body" | jq -r '.mediaType // empty')
+          accept_m='application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json'
 
-          if [[ "$mtype" == *index* || "$mtype" == *manifest.list* ]]; then
-            child=$(printf '%s' "$body" | jq -r '
-              .manifests[]
-              | select(.platform.architecture == "amd64" and (.platform.os // "") != "unknown")
-              | .digest' | head -1)
-            body=$(curl -sS -H "Authorization: Bearer ${bearer}" \
-              -H "Accept: application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json" \
-              "https://ghcr.io/v2/${image_path}/manifests/${child}")
-          fi
-          config_digest=$(printf '%s' "$body" | jq -r '.config.digest')
-          revision=$(curl -sSL -H "Authorization: Bearer ${bearer}" \
-            "https://ghcr.io/v2/${image_path}/blobs/${config_digest}" \
-            | jq -r '.config.Labels["org.opencontainers.image.revision"]')
+          # Helper: read org.opencontainers.image.revision from a GHCR image tag.
+          get_revision() {
+            local ipath="$1" tag="$2" b="$3"
+            local resp body mtype child cfg rev
+            resp=$(curl -sS -i -H "Authorization: Bearer ${b}" -H "Accept: ${accept}" \
+              "https://ghcr.io/v2/${ipath}/manifests/${tag}")
+            body=$(printf '%s' "$resp" | awk 'BEGIN{p=0}/^\r?$/{p=1;next}p{print}')
+            mtype=$(printf '%s' "$body" | jq -r '.mediaType // empty')
+            if [[ "$mtype" == *index* || "$mtype" == *manifest.list* ]]; then
+              child=$(printf '%s' "$body" | jq -r '
+                (.manifests[] | select(.platform.architecture == "amd64" and (.platform.os // "") != "unknown") | .digest),
+                (.manifests[0].digest)' 2>/dev/null | head -1)
+              body=$(curl -sS -H "Authorization: Bearer ${b}" -H "Accept: ${accept_m}" \
+                "https://ghcr.io/v2/${ipath}/manifests/${child}" 2>/dev/null)
+            fi
+            cfg=$(printf '%s' "$body" | jq -r '.config.digest // empty')
+            [[ -z "$cfg" ]] && return 1
+            rev=$(curl -sSL -H "Authorization: Bearer ${b}" \
+              "https://ghcr.io/v2/${ipath}/blobs/${cfg}" \
+              | jq -r '.config.Labels["org.opencontainers.image.revision"] // empty')
+            printf '%s' "$rev"
+          }
 
-          if [[ -z "$revision" || "$revision" == "null" ]]; then
-            echo "::error::Selected tag $tag has no revision label; cannot use for test."
+          # Scan tags on the first package. For each candidate revision, verify
+          # that all other packages also have a labeled image for that commit.
+          bearer=$(curl -sS -u "x:${GH_TOKEN}" \
+            "https://ghcr.io/token?scope=repository:${lc_repo}/${first_pkg}:pull" | jq -r '.token')
+
+          tags=$(curl -sS -H "Authorization: Bearer ${bearer}" \
+            "https://ghcr.io/v2/${lc_repo}/${first_pkg}/tags/list?n=100" \
+            | jq -r '.tags[]' \
+            | grep -Ev '^(buildcache|latest|prod)$' \
+            | grep -Ev '\.(sig|sbom|att)$')
+          if [[ -z "$tags" ]]; then
+            echo "::error::No valid tags found on ${first_pkg} after filtering."
             exit 1
           fi
 
-          echo "commit=${revision}"          >> "$GITHUB_OUTPUT"
-          echo "expected=${expected_digest}" >> "$GITHUB_OUTPUT"
-          echo "Ground truth: commit=${revision}, expected_digest=${expected_digest}"
+          found_revision=""
+          found_digest=""
+          while IFS= read -r tag; do
+            rev=$(get_revision "${lc_repo}/${first_pkg}" "$tag" "$bearer" || true)
+            [[ -z "$rev" || "$rev" == "null" ]] && continue
 
-          # Ensure the commit is locally reachable for `git rev-parse` inside
-          # image-tracker. Commits on branches/PRs aren't always fetched.
-          ( cd target && git fetch --quiet origin "${revision}" || true )
+            # Check all other packages have an image for this revision.
+            all_found=true
+            for pkg in "${pkgs[@]:1}"; do
+              b=$(curl -sS -u "x:${GH_TOKEN}" \
+                "https://ghcr.io/token?scope=repository:${lc_repo}/${pkg}:pull" | jq -r '.token')
+              # Scan up to 100 tags on each sibling package looking for this revision.
+              pkg_tags=$(curl -sS -H "Authorization: Bearer ${b}" \
+                "https://ghcr.io/v2/${lc_repo}/${pkg}/tags/list?n=100" \
+                | jq -r '.tags[]' \
+                | grep -Ev '^(buildcache|latest|prod)$' \
+                | grep -Ev '\.(sig|sbom|att)$')
+              pkg_found=false
+              while IFS= read -r ptag; do
+                prev=$(get_revision "${lc_repo}/${pkg}" "$ptag" "$b" || true)
+                if [[ "$prev" == "$rev" ]]; then
+                  pkg_found=true
+                  break
+                fi
+              done <<< "$pkg_tags"
+              if [[ "$pkg_found" == "false" ]]; then
+                all_found=false
+                break
+              fi
+            done
+
+            if [[ "$all_found" == "true" ]]; then
+              # Get the manifest digest for the first package at this tag.
+              resp=$(curl -sS -i -H "Authorization: Bearer ${bearer}" -H "Accept: ${accept}" \
+                "https://ghcr.io/v2/${lc_repo}/${first_pkg}/manifests/${tag}")
+              found_digest=$(printf '%s' "$resp" \
+                | awk 'BEGIN{IGNORECASE=1}/^docker-content-digest:/ {gsub(/\r/,""); print $2; exit}')
+              found_revision="$rev"
+              echo "Found commit present in all packages: ${rev} (tag ${tag} on ${first_pkg})"
+              break
+            fi
+          done <<< "$tags"
+
+          if [[ -z "$found_revision" ]]; then
+            echo "::error::Could not find a commit with labeled images in all packages: ${TARGET_PACKAGE}"
+            exit 1
+          fi
+
+          echo "commit=${found_revision}"   >> "$GITHUB_OUTPUT"
+          echo "expected=${found_digest}"   >> "$GITHUB_OUTPUT"
+          echo "Ground truth: commit=${found_revision}, expected_digest=${found_digest}"
+
+          # Ensure the commit is locally reachable for git rev-parse inside image-tracker.
+          ( cd target && git fetch --quiet origin "${found_revision}" || true )
 
       - name: Resolve via image-tracker
         id: tracker
