@@ -38,8 +38,8 @@ if [[ -z "$PIVOT_SHA" ]]; then
     exit 1
 fi
 
-# Generate list of candidate commits from history
-mapfile -t CANDIDATES < <(git rev-list -n "$MAX_DEPTH" "$PIVOT_SHA")
+# Generate list of candidate commits from history (including all parents of merges)
+mapfile -t CANDIDATES < <(git rev-list --topo-order -n "$MAX_DEPTH" "$PIVOT_SHA")
 if [[ ${#CANDIDATES[@]} -eq 0 ]]; then
     echo "::error::No commits found for revision $REVISION."
     exit 1
@@ -141,6 +141,17 @@ resolve_digest() {
                 return 2
             fi
 
+            # Quick check: does the tag name itself match our candidates?
+            # Handle both raw SHA and sha- prefix.
+            tag_sha="${tag#sha-}"
+            match_found=""
+            for candidate in "${!CANDIDATE_MAP[@]}"; do
+                if [[ "$candidate" == "$tag_sha"* ]] && [[ ${#tag_sha} -ge 7 ]]; then
+                    match_found="$candidate"
+                    break
+                fi
+            done
+
             # Fetch top-level manifest + its digest header.
             local manifest_url="${base}/manifests/${tag}"
             local mresp mbody mdigest mtype
@@ -168,6 +179,12 @@ resolve_digest() {
                 config_digest=$(printf '%s' "$child_body" | jq -r '.config.digest // empty' 2>/dev/null || true)
             else
                 config_digest=$(printf '%s' "$mbody" | jq -r '.config.digest // empty' 2>/dev/null || true)
+            fi
+
+            # If the tag name matched, we can skip fetching labels
+            if [[ -n "$match_found" ]]; then
+                printf '%s:%s' "$match_found" "$mdigest"
+                return 0
             fi
 
             [[ -z "$config_digest" ]] && continue
