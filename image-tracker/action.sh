@@ -31,10 +31,50 @@ fi
 
 # ---- Resolve git history to candidate SHAs ---------------------------------
 cd "$DIR"
+
+# Batch-fetch closed PR data: merge_commit_sha -> head_sha
+# This allows us to resolve images built from PR heads that were squash-merged.
+# We also use this to aid in resolution of missing commits (e.g. from forks).
+declare -A PR_MAP
+declare -A PR_NUM_MAP
+if command -v gh &>/dev/null && [[ -n "$TOKEN" ]]; then
+    echo "  [i] Batch-fetching PR merge map..."
+    while IFS=$'\t' read -r merge_sha head_sha pr_num; do
+        if [[ -n "$pr_num" && "$pr_num" != "null" ]]; then
+            [[ -n "$merge_sha" && "$merge_sha" != "null" ]] && PR_MAP["$merge_sha"]="$head_sha"
+            [[ -n "$merge_sha" && "$merge_sha" != "null" ]] && PR_NUM_MAP["$merge_sha"]="$pr_num"
+            [[ -n "$head_sha" && "$head_sha" != "null" ]] && PR_NUM_MAP["$head_sha"]="$pr_num"
+        fi
+    done < <(GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/pulls?state=all&per_page=100" \
+        --jq '.[] | [.merge_commit_sha, .head.sha, .number] | @tsv' 2>/dev/null || true)
+    echo "  [i] PR Map populated with ${#PR_MAP[@]} entries."
+fi
+
 # Get the "pivot" commit (the starting point for history walking)
 PIVOT_SHA=$(git rev-parse --verify --quiet "${REVISION}^{commit}" 2>/dev/null || true)
+
+# If the pivot is missing and looks like a SHA, check if it's a known PR head
+if [[ -z "$PIVOT_SHA" && "$REVISION" =~ ^[0-9a-f]{7,40}$ ]]; then
+    echo "  [w] Revision $REVISION not found in local history. Checking PR map..."
+    matched_pr=""
+    for key in "${!PR_NUM_MAP[@]}"; do
+        if [[ "$key" == "$REVISION"* ]]; then
+            matched_pr="${PR_NUM_MAP[$key]}"
+            break
+        fi
+    done
+    
+    if [[ -n "$matched_pr" ]]; then
+        echo "  [i] Revision matches head of PR #$matched_pr. Attempting to fetch PR ref..."
+        git fetch origin "pull/${matched_pr}/head:refs/remotes/origin/pr/${matched_pr}" --quiet || true
+        PIVOT_SHA=$(git rev-parse --verify --quiet "${REVISION}^{commit}" 2>/dev/null || true)
+    fi
+fi
+
 if [[ -z "$PIVOT_SHA" ]]; then
     echo "::error::Could not resolve git revision '$REVISION' in '$DIR'."
+    echo "  [d] Current branch: $(git branch --show-current || echo 'DETACHED')"
+    echo "  [d] HEAD:           $(git rev-parse HEAD 2>/dev/null || echo 'UNKNOWN')"
     exit 1
 fi
 
@@ -56,22 +96,6 @@ echo "  Repository: $REPOSITORY"
 echo "  Starting SHA: $PIVOT_SHA"
 echo "  Max Depth:    $MAX_DEPTH"
 echo "  Candidates:   ${#CANDIDATES[@]} commit(s) in history"
-
-# Batch-fetch closed PR data: merge_commit_sha -> head_sha
-# This allows us to resolve images built from PR heads that were squash-merged.
-declare -A PR_MAP
-declare -A PR_NUM_MAP
-if command -v gh &>/dev/null && [[ -n "$TOKEN" ]]; then
-    echo "  [i] Batch-fetching PR merge map..."
-    while IFS=$'\t' read -r merge_sha head_sha pr_num; do
-        if [[ -n "$merge_sha" && "$merge_sha" != "null" ]]; then
-            PR_MAP["$merge_sha"]="$head_sha"
-            PR_NUM_MAP["$merge_sha"]="$pr_num"
-        fi
-    done < <(GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/pulls?state=all&per_page=100" \
-        --jq '.[] | [.merge_commit_sha, .head.sha, .number] | @tsv' 2>/dev/null || true)
-    echo "  [i] PR Map populated with ${#PR_MAP[@]} entries."
-fi
 
 # ---- Map package names to GHCR image paths ---------------------------------
 # Convention: if package name matches the repo name, image lives at the repo
