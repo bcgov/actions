@@ -62,6 +62,11 @@ while IFS= read -r pkg; do
     fi
 done < <(echo "$PACKAGE_INPUT" | tr ',' '\n' | tr -s '[:space:]' '\n')
 
+if [[ ${#IMAGE_PATHS[@]} -eq 0 ]]; then
+    echo "::error::No valid package names found in input '${PACKAGE_INPUT}'. Provide at least one package name."
+    exit 1
+fi
+
 echo "  Packages:   ${!IMAGE_PATHS[*]}"
 echo ""
 
@@ -115,7 +120,7 @@ resolve_digest() {
             tags_seen=$((tags_seen + 1))
             if [[ "$tags_seen" -gt "$MAX_TAGS" ]]; then
                 echo "  [!] Reached MAX_TAGS=$MAX_TAGS; stopping search." >&2
-                return 1
+                return 2
             fi
 
             # Fetch top-level manifest + its digest header.
@@ -189,14 +194,20 @@ MISSING=()
 # first successfully resolved package in the input list.
 for pkg in "${PKG_ORDER[@]}"; do
     image_path="${IMAGE_PATHS[$pkg]}"
-    bearer=$(registry_token "$image_path")
+    bearer=$(registry_token "$image_path" || true)
     if [[ -z "$bearer" || "$bearer" == "null" ]]; then
         echo "::error::Failed to obtain registry token for ${image_path}."
         MISSING+=("$pkg")
         continue
     fi
     echo "  [>] Searching ghcr.io/${image_path} for commit ${TARGET_SHA:0:12}..."
-    digest=$(resolve_digest "$image_path" "$bearer" || true)
+    digest=""
+    resolve_rc=0
+    digest=$(resolve_digest "$image_path" "$bearer") || resolve_rc=$?
+    if [[ "$resolve_rc" -eq 2 ]]; then
+        echo "::error::max_tags ($MAX_TAGS) exceeded resolving $pkg — no image found. Increase max_tags or narrow the search."
+        exit 1
+    fi
     if [[ -z "$digest" ]]; then
         echo "  [x] MISS: $pkg (no image labeled with this commit)"
         MISSING+=("$pkg")

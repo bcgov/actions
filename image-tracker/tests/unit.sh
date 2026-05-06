@@ -99,6 +99,14 @@ test_whitespace_only_entries_ignored() {
     assert_eq "${IMAGE_PATHS[backend]}"  "bcgov/myapp/backend"  "backend retained"
 }
 
+test_space_separated_packages() {
+    map_packages "frontend backend migrations" "bcgov/myapp"
+    assert_eq "${#IMAGE_PATHS[@]}" "3" "space-separated: correct package count"
+    assert_eq "${IMAGE_PATHS[frontend]}"   "bcgov/myapp/frontend"   "space-separated: frontend path"
+    assert_eq "${IMAGE_PATHS[backend]}"    "bcgov/myapp/backend"    "space-separated: backend path"
+    assert_eq "${IMAGE_PATHS[migrations]}" "bcgov/myapp/migrations" "space-separated: migrations path"
+}
+
 # -- Git plumbing sanity (runs in the checked-out repo) ----------------------
 
 test_git_head_resolution() {
@@ -119,6 +127,7 @@ test_multiple_packages_newline
 test_case_normalization
 test_empty_input_rejected_in_action
 test_whitespace_only_entries_ignored
+test_space_separated_packages
 test_git_head_resolution
 echo ""
 echo "Results: $passed passed, $failed failed"
