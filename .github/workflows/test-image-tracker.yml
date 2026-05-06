@@ -164,7 +164,8 @@ jobs:
 
           [[ "$got_digest" == "$expected" ]] \
             || { echo "::error::digest mismatch"; exit 1; }
-          [[ "$got_image" == "ghcr.io/${TARGET_REPO}/${TARGET_PACKAGE}@$expected" ]] \
+          lc_repo=$(echo "${TARGET_REPO}" | tr '[:upper:]' '[:lower:]')
+          [[ "$got_image" == "ghcr.io/${lc_repo}/${TARGET_PACKAGE}@$expected" ]] \
             || { echo "::error::image ref malformed or wrong"; exit 1; }
           echo "$got_images" | jq -e --arg k "${TARGET_PACKAGE}" '.[$k]' >/dev/null \
             || { echo "::error::images JSON missing ${TARGET_PACKAGE} key"; exit 1; }
