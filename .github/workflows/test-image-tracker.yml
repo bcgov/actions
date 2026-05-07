@@ -33,8 +33,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Run Unit Tests
-        run: |
-          bash image-tracker/tests/unit.sh
+        run: bash image-tracker/tests/unit.sh
 
   validate:
     name: Validate Action Definition
@@ -45,19 +44,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Validate action.yml exists
+      - name: Validate action.yml
         run: |
-          if [ ! -f "image-tracker/action.yml" ]; then
-            echo "::error::image-tracker/action.yml not found"
-            exit 1
-          fi
-          echo "✅ action.yml exists"
-
-      - name: Validate YAML syntax
-        run: |
+          test -f image-tracker/action.yml
           pip install pyyaml -q
           python3 -c "import yaml; yaml.safe_load(open('image-tracker/action.yml'))"
-          echo "✅ YAML syntax valid"
 
   functional:
     name: Functional Tests (Real-World)
@@ -66,30 +57,134 @@ jobs:
     permissions:
       contents: read
       packages: read
-      pull-requests: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - repo: MinionTech/vexilon
+            packages: agnav
+          - repo: bcgov/quickstart-openshift
+            packages: frontend,backend
+    env:
+      TARGET_REPO: ${{ matrix.repo }}
+      TARGET_PACKAGES: ${{ matrix.packages }}
     steps:
       - uses: actions/checkout@v6
 
-      - name: Checkout Vexilon
+      - name: Checkout target repo
         uses: actions/checkout@v6
         with:
-          repository: DerekRoberts/vexilon
-          path: vexilon-repo
-          fetch-depth: 100
+          repository: ${{ env.TARGET_REPO }}
+          path: target
+          fetch-depth: 0
 
-      - name: Resolve vexilon package
-        id: vexilon
-        uses: ./image-tracker
-        with:
-          package: vexilon
-          repository: DerekRoberts/vexilon
-          dir: vexilon-repo
-          token: ${{ github.token }}
-
-      - name: Verify resolution
+      - name: For each package, pick a labeled commit and verify resolution
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          PACKAGES='${{ steps.vexilon.outputs.packages }}'
-          echo "Packages: $PACKAGES"
-          echo "$PACKAGES" | jq -e '.vexilon' > /dev/null \
-            || { echo "::error::Resolution failed"; exit 1; }
-          echo "✅ Passed: $(echo "$PACKAGES" | jq -r '.vexilon')"
+          set -euo pipefail
+          lc_repo=$(echo "${TARGET_REPO}" | tr '[:upper:]' '[:lower:]')
+          accept='application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json'
+          accept_m='application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json'
+
+          # Given an image path and tag, return "revision\tmanifest-digest" or empty.
+          probe_tag() {
+            local ipath="$1" tag="$2" b="$3"
+            local resp body mtype child cfg rev mdigest
+            resp=$(curl -sS -i -H "Authorization: Bearer ${b}" -H "Accept: ${accept}" \
+              "https://ghcr.io/v2/${ipath}/manifests/${tag}")
+            mdigest=$(printf '%s' "$resp" \
+              | awk 'BEGIN{IGNORECASE=1}/^docker-content-digest:/{gsub(/\r/,""); print $2; exit}')
+            body=$(printf '%s' "$resp" | awk 'BEGIN{p=0}/^\r?$/{p=1;next}p{print}')
+            mtype=$(printf '%s' "$body" | jq -r '.mediaType // empty')
+            if [[ "$mtype" == *index* || "$mtype" == *manifest.list* ]]; then
+              child=$(printf '%s' "$body" | jq -r '
+                (.manifests[] | select(.platform.architecture=="amd64" and (.platform.os//"")!="unknown") | .digest),
+                (.manifests[0].digest)' 2>/dev/null | head -1)
+              body=$(curl -sS -H "Authorization: Bearer ${b}" -H "Accept: ${accept_m}" \
+                "https://ghcr.io/v2/${ipath}/manifests/${child}" 2>/dev/null || true)
+            fi
+            cfg=$(printf '%s' "$body" | jq -r '.config.digest // empty')
+            [[ -z "$cfg" ]] && return 0
+            rev=$(curl -sSL -H "Authorization: Bearer ${b}" \
+              "https://ghcr.io/v2/${ipath}/blobs/${cfg}" \
+              | jq -r '.config.Labels["org.opencontainers.image.revision"] // empty' 2>/dev/null || true)
+            [[ -z "$rev" || "$rev" == "null" ]] && return 0
+            printf '%s\t%s' "$rev" "$mdigest"
+          }
+
+          overall_pass=true
+
+          while IFS= read -r pkg; do
+            [[ -z "$pkg" ]] && continue
+            image_path="${lc_repo}/${pkg}"
+            echo ""
+            echo "=== Package: ${pkg} ==="
+
+            bearer=$(curl -sS -u "x:${GH_TOKEN}" \
+              "https://ghcr.io/token?scope=repository:${image_path}:pull" | jq -r '.token')
+
+            # Find the most recent tag that has an OCI revision label.
+            found_rev=""
+            found_digest=""
+            while IFS= read -r tag; do
+              result=$(probe_tag "$image_path" "$tag" "$bearer" || true)
+              [[ -z "$result" ]] && continue
+              found_rev="${result%%$'\t'*}"
+              found_digest="${result##*$'\t'}"
+              echo "Ground truth: pkg=${pkg} commit=${found_rev} digest=${found_digest}"
+              break
+            done < <(curl -sS -H "Authorization: Bearer ${bearer}" \
+              "https://ghcr.io/v2/${image_path}/tags/list?n=200" \
+              | jq -r '.tags[]' \
+              | grep -Ev '^(buildcache|latest|prod)$' \
+              | grep -Ev '\.(sig|sbom|att)$')
+
+            if [[ -z "$found_rev" ]]; then
+              echo "::error::No labeled image found for ${pkg} in ${TARGET_REPO}"
+              overall_pass=false
+              continue
+            fi
+
+            # Ensure the commit is locally reachable.
+            ( cd target && git fetch --quiet origin "${found_rev}" 2>/dev/null || true )
+
+            # Run image-tracker for this package.
+            export GITHUB_OUTPUT; GITHUB_OUTPUT=$(mktemp)
+            INPUT_PACKAGE="$pkg" \
+            INPUT_REVISION="$found_rev" \
+            INPUT_REPOSITORY="${TARGET_REPO}" \
+            INPUT_DIR="target" \
+            INPUT_TOKEN="${GH_TOKEN}" \
+            bash ./image-tracker/action.sh
+
+            got_digest=$(grep '^digest=' "$GITHUB_OUTPUT" | cut -d= -f2-)
+            got_image=$(grep '^image='  "$GITHUB_OUTPUT" | cut -d= -f2-)
+            got_images=$(grep '^images=' "$GITHUB_OUTPUT" | cut -d= -f2-)
+
+            echo "Got digest:  ${got_digest}"
+            echo "Got image:   ${got_image}"
+            echo "Got images:  ${got_images}"
+            echo "Expected:    ${found_digest}"
+
+            if [[ "$got_digest" != "$found_digest" ]]; then
+              echo "::error::${pkg}: digest mismatch: got ${got_digest} expected ${found_digest}"
+              overall_pass=false
+              continue
+            fi
+            if [[ "$got_image" != "ghcr.io/${image_path}@${found_digest}" ]]; then
+              echo "::error::${pkg}: image ref wrong: got ${got_image}"
+              overall_pass=false
+              continue
+            fi
+            if ! echo "$got_images" | jq -e --arg k "$pkg" '.[$k]' >/dev/null 2>&1; then
+              echo "::error::${pkg}: images JSON missing key ${pkg}"
+              overall_pass=false
+              continue
+            fi
+            echo "✅ ${pkg}: resolved correctly"
+          done < <(echo "${TARGET_PACKAGES}" | tr ',' '\n' | tr -s '[:space:]' '\n' | grep -v '^$')
+
+          [[ "$overall_pass" == "true" ]] || { echo "::error::One or more packages failed"; exit 1; }
+          echo ""
+          echo "✅ All packages resolved correctly"

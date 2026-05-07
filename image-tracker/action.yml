@@ -1,47 +1,66 @@
 name: 'Image Tracker'
-description: 'Forensic history traversal to resolve stable image SHAs from squash-merged commits.'
+description: 'Resolve GHCR image digests for a git commit using OCI revision labels.'
 
 inputs:
   package:
     description: |
-      One or more package names (space, comma, or newline separated).
-      Each resolves to ghcr.io/<owner>/<repo>/<package>, except when the package
-      name matches the repo name, in which case it resolves to ghcr.io/<owner>/<repo>.
+      One or more package names (comma, space, or newline separated).
+      Each resolves to `ghcr.io/<owner>/<repo>/<package>`, except when the
+      package name matches the repo name, in which case it resolves to
+      `ghcr.io/<owner>/<repo>`.
     required: true
-  max_depth:
-    description: 'Max commits to walk back'
-    default: '100'
-  token:
-    description: 'GitHub token (defaults to github.token)'
-    default: ${{ github.token }}
+  revision:
+    description: 'Git revision (SHA, branch, or tag) to resolve against.'
+    default: 'HEAD'
   repository:
-    description: 'Repository to resolve against (defaults to current repo)'
+    description: 'Repository owning the images (defaults to current).'
     default: ${{ github.repository }}
   dir:
-    description: 'Directory containing the git repository'
+    description: 'Working directory containing the git repository.'
     default: '.'
-  revision:
-    description: 'Starting revision to walk back from (Tag, Branch, or SHA)'
-    default: 'HEAD'
+  token:
+    description: 'GitHub token for GHCR auth (defaults to github.token).'
+    default: ${{ github.token }}
+  max_tags:
+    description: 'Upper bound on tags inspected per package before failing.'
+    default: '500'
+  max_depth:
+    description: 'Max number of commits back in history to search for an image (default: 1).'
+    default: '1'
 
 outputs:
-  packages:
-    description: 'JSON object mapping package names to verified image tags (e.g. {"frontend":"sha-abc123"})'
-    value: ${{ steps.walk.outputs.packages }}
-  bundle:
-    description: 'Backward-compatible alias for packages; JSON object mapping package names to verified image tags'
-    value: ${{ steps.walk.outputs.packages }}
+  images:
+    description: |
+      JSON object mapping each package to its fully-qualified digest reference:
+      `{"frontend": "ghcr.io/owner/repo/frontend@sha256:..."}`.
+    value: ${{ steps.resolve.outputs.images }}
+  digests:
+    description: |
+      JSON object mapping each package to its manifest digest only:
+      `{"frontend": "sha256:..."}`.
+    value: ${{ steps.resolve.outputs.digests }}
+  image:
+    description: |
+      Convenience — fully-qualified digest reference for the first (or only)
+      package. Empty if nothing was resolved.
+    value: ${{ steps.resolve.outputs.image }}
+  digest:
+    description: |
+      Convenience — manifest digest for the first (or only) package.
+      Empty if nothing was resolved.
+    value: ${{ steps.resolve.outputs.digest }}
 
 runs:
   using: 'composite'
   steps:
-    - id: walk
+    - id: resolve
       shell: bash
       env:
         INPUT_PACKAGE: ${{ inputs.package }}
-        INPUT_MAX_DEPTH: ${{ inputs.max_depth }}
-        INPUT_DIR: ${{ inputs.dir }}
-        INPUT_REPOSITORY: ${{ inputs.repository }}
         INPUT_REVISION: ${{ inputs.revision }}
-        GH_TOKEN: ${{ inputs.token }}
+        INPUT_REPOSITORY: ${{ inputs.repository }}
+        INPUT_DIR: ${{ inputs.dir }}
+        INPUT_TOKEN: ${{ inputs.token }}
+        INPUT_MAX_TAGS: ${{ inputs.max_tags }}
+        INPUT_MAX_DEPTH: ${{ inputs.max_depth }}
       run: bash ${{ github.action_path }}/action.sh
