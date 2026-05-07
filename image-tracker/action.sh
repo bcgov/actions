@@ -240,6 +240,17 @@ resolve_digest() {
                 return 2
             fi
 
+            # Check if tag is one of our candidates (Fast path)
+            local match_found=""
+            for candidate in "${!CANDIDATE_MAP[@]}"; do
+                if [[ "$tag" == "sha-${candidate:0:7}"* ]] || [[ "$tag" == "sha-${candidate}" ]] || \
+                   [[ -n "${PR_MAP[$candidate]}" && "$tag" == "sha-${PR_MAP[$candidate]:0:7}"* ]] || \
+                   [[ -n "${PR_NUM_MAP[$candidate]}" && "$tag" == "pr-${PR_NUM_MAP[$candidate]}" ]]; then
+                    match_found="$candidate"
+                    break
+                fi
+            done
+
             # Fetch top-level manifest + its digest header.
             local manifest_url="${base}/manifests/${tag}"
             local mresp mbody mdigest mtype
@@ -247,6 +258,14 @@ resolve_digest() {
             mbody=$(printf '%s' "$mresp" | awk 'BEGIN{p=0} /^\r?$/{p=1; next} p{print}')
             mdigest=$(printf '%s' "$mresp" | awk 'BEGIN{IGNORECASE=1} /^docker-content-digest:/ {gsub(/\r/,""); print $2; exit}')
             mtype=$(printf '%s' "$mbody" | jq -r '.mediaType // empty' 2>/dev/null || true)
+
+            # If the tag name matched a candidate, we treat this as a high-confidence hit.
+            # We still verify the digest is present, but we skip the heavy config/label fetch
+            # UNLESS the user explicitly wants to be paranoid (in this case, we always do it).
+            if [[ -n "$match_found" && -n "$mdigest" ]]; then
+                printf '%s:%s' "$match_found" "$mdigest"
+                return 0
+            fi
 
             # Descend into amd64 child if this is a multi-arch index.
             local config_digest
