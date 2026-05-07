@@ -20,6 +20,7 @@ TOKEN="${INPUT_TOKEN:-${GITHUB_TOKEN:-}}"
 MAX_TAGS="${INPUT_MAX_TAGS:-500}"
 MAX_DEPTH="${INPUT_MAX_DEPTH:-1}"
 
+# ---- Input Validation ------------------------------------------------------
 if [[ -z "$PACKAGE_INPUT" ]]; then
     echo "::error::Missing required input 'package'."
     exit 1
@@ -29,8 +30,19 @@ if [[ -z "$TOKEN" ]]; then
     exit 1
 fi
 
-# ---- Resolve git history to candidate SHAs ---------------------------------
-cd "$DIR"
+if [[ ! "$MAX_TAGS" =~ ^[0-9]+$ ]]; then
+    echo "::error::Invalid input 'max_tags': must be a positive integer."
+    exit 1
+fi
+if [[ ! "$MAX_DEPTH" =~ ^[0-9]+$ ]]; then
+    echo "::error::Invalid input 'max_depth': must be a positive integer."
+    exit 1
+fi
+
+if ! cd "$DIR"; then
+    echo "::error::Invalid input 'dir': unable to change to directory '$DIR'."
+    exit 1
+fi
 
 # Batch-fetch closed PR data: merge_commit_sha -> head_sha
 # This allows us to resolve images built from PR heads that were squash-merged.
@@ -45,7 +57,7 @@ if command -v gh &>/dev/null && [[ -n "$TOKEN" ]]; then
             [[ -n "$merge_sha" && "$merge_sha" != "null" ]] && PR_NUM_MAP["$merge_sha"]="$pr_num"
             [[ -n "$head_sha" && "$head_sha" != "null" ]] && PR_NUM_MAP["$head_sha"]="$pr_num"
         fi
-    done < <(GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/pulls?state=all&per_page=100" \
+    done < <(GH_TOKEN="$TOKEN" gh api --paginate "/repos/${REPOSITORY}/pulls?state=all&per_page=100" \
         --jq '.[] | [.merge_commit_sha, .head.sha, .number] | @tsv' 2>/dev/null || true)
     echo "  [i] PR Map populated with ${#PR_MAP[@]} entries."
 fi
@@ -152,26 +164,35 @@ probe_tag() {
     mdigest=$(printf '%s' "$mresp" | awk 'BEGIN{IGNORECASE=1} /^docker-content-digest:/ {gsub(/\r/,""); print $2; exit}')
     
     if [[ -n "$mdigest" ]]; then
-        local tag_sha="${tag#sha-}"
-        for candidate in "${!CANDIDATE_MAP[@]}"; do
-            # Direct match
-            if [[ "$candidate" == "$tag_sha"* ]] && [[ ${#tag_sha} -ge 7 ]]; then
-                printf '%s:%s' "$candidate" "$mdigest"
-                return 0
+        # Fetch config to verify the revision label (Tags are mutable; labels are our authority)
+        local mbody mtype config_digest
+        mbody=$(curl -sS -H "Authorization: Bearer ${bearer}" -H "Accept: ${accept_index}" "${base}/manifests/${tag}")
+        mtype=$(printf '%s' "$mbody" | jq -r '.mediaType // empty' 2>/dev/null || true)
+        
+        if [[ "$mtype" == *"index"* || "$mtype" == *"manifest.list"* ]]; then
+            config_digest=$(printf '%s' "$mbody" | jq -r '
+                .manifests[]
+                | select(.platform.architecture == "amd64" and (.platform.os // "") != "unknown")
+                | .digest' 2>/dev/null | head -1)
+            [[ -z "$config_digest" ]] && config_digest=$(printf '%s' "$mbody" | jq -r '.manifests[0].digest' 2>/dev/null | head -1)
+            [[ -n "$config_digest" ]] && mbody=$(curl -sS -H "Authorization: Bearer ${bearer}" -H "Accept: application/vnd.oci.image.manifest.v1+json" "${base}/manifests/${config_digest}")
+        fi
+        config_digest=$(printf '%s' "$mbody" | jq -r '.config.digest // empty' 2>/dev/null || true)
+        
+        if [[ -n "$config_digest" ]]; then
+            local revision
+            revision=$(curl -sSL -H "Authorization: Bearer ${bearer}" "${base}/blobs/${config_digest}" \
+                | jq -r '.config.Labels["org.opencontainers.image.revision"] // empty' 2>/dev/null || true)
+            
+            if [[ -n "$revision" ]]; then
+                for candidate in "${!CANDIDATE_MAP[@]}"; do
+                    if [[ "$candidate" == "$revision"* ]] || [[ "${PR_MAP[$candidate]:-}" == "$revision"* ]] || [[ "pr-${PR_NUM_MAP[$candidate]:-}" == "$revision" ]]; then
+                        printf '%s:%s' "$candidate" "$mdigest"
+                        return 0
+                    fi
+                done
             fi
-            # PR Head match
-            local pr_head="${PR_MAP[$candidate]:-}"
-            if [[ -n "$pr_head" && "$pr_head" == "$tag_sha"* ]] && [[ ${#tag_sha} -ge 7 ]]; then
-                printf '%s:%s' "$candidate" "$mdigest"
-                return 0
-            fi
-            # PR Number match
-            local pr_num="${PR_NUM_MAP[$candidate]:-}"
-            if [[ -n "$pr_num" && "$tag" == "pr-$pr_num" ]]; then
-                printf '%s:%s' "$candidate" "$mdigest"
-                return 0
-            fi
-        done
+        fi
     fi
     return 1
 }
@@ -219,30 +240,6 @@ resolve_digest() {
                 return 2
             fi
 
-            # Quick check: does the tag name itself match our candidates?
-            # Handle both raw SHA and sha- prefix.
-            tag_sha="${tag#sha-}"
-            match_found=""
-            for candidate in "${!CANDIDATE_MAP[@]}"; do
-                # Direct match
-                if [[ "$candidate" == "$tag_sha"* ]] && [[ ${#tag_sha} -ge 7 ]]; then
-                    match_found="$candidate"
-                    break
-                fi
-                # PR Head match (squash merge support)
-                local pr_head="${PR_MAP[$candidate]:-}"
-                if [[ -n "$pr_head" && "$pr_head" == "$tag_sha"* ]] && [[ ${#tag_sha} -ge 7 ]]; then
-                    match_found="$candidate"
-                    break
-                fi
-                # PR Number match (force-push support)
-                local pr_num="${PR_NUM_MAP[$candidate]:-}"
-                if [[ -n "$pr_num" && "$tag" == "pr-$pr_num" ]]; then
-                    match_found="$candidate"
-                    break
-                fi
-            done
-
             # Fetch top-level manifest + its digest header.
             local manifest_url="${base}/manifests/${tag}"
             local mresp mbody mdigest mtype
@@ -270,12 +267,6 @@ resolve_digest() {
                 config_digest=$(printf '%s' "$child_body" | jq -r '.config.digest // empty' 2>/dev/null || true)
             else
                 config_digest=$(printf '%s' "$mbody" | jq -r '.config.digest // empty' 2>/dev/null || true)
-            fi
-
-            # If the tag name matched, we can skip fetching labels
-            if [[ -n "$match_found" ]]; then
-                printf '%s:%s' "$match_found" "$mdigest"
-                return 0
             fi
 
             [[ -z "$config_digest" ]] && continue
