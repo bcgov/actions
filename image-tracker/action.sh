@@ -163,7 +163,7 @@ matches_candidate() {
         fi
         # Check PR head match (squash-merge support)
         local ph="${PR_MAP[$cand]:-}"
-        if [[ -n "$ph" ]] && ([[ "$ph" == "$rev"* ]] || [[ "$rev" == "$ph"* ]]); then
+        if [[ -n "$ph" ]] && { [[ "$ph" == "$rev"* ]] || [[ "$rev" == "$ph"* ]]; }; then
             return 0
         fi
         # Check PR number match (tag support)
