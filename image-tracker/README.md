@@ -11,11 +11,10 @@ Every OCI-compliant image has a config blob. Builds that use
 `org.opencontainers.image.revision` — the git commit SHA that produced the
 image.
 
-Image Tracker lists the tags for a GHCR repository, inspects each image's
 config, and returns the **manifest digest** (`sha256:...`) of the image whose
-revision label matches your target commit. Tag names are irrelevant — this
-works with `sha-<7>`, `sha-<40>`, `pr-123`, `latest`, or any other naming
-scheme.
+revision label matches your target commit. 
+
+Tag names (`sha-<7>`, `pr-123`, `latest`, etc.) are used as search hints, but the **label is the sole authority**. Even if a tag matches your SHA, the tracker will verify the internal OCI label before returning the digest.
 
 The returned digest is immutable and cryptographically verified on pull, making
 it the recommended form for deployment references.

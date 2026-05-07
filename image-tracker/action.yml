@@ -25,7 +25,7 @@ inputs:
     description: 'Upper bound on tags inspected per package before failing.'
     default: '500'
   max_depth:
-    description: 'Max number of commits back in history to search for an image.'
+    description: 'Max number of commits back in history to search for an image (default: 1).'
     default: '1'
 
 outputs:
