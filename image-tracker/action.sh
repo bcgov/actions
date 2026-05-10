@@ -14,7 +14,7 @@ set -euo pipefail
 # ---- Inputs ----------------------------------------------------------------
 PACKAGE_INPUT="${INPUT_PACKAGE:-}"
 REVISION="${INPUT_REVISION:-HEAD}"
-REPOSITORY="${INPUT_REPOSITORY:-${GITHUB_REPOSITORY:-}}"
+REPOSITORY="${INPUT_REPOSITORY:-$GITHUB_REPOSITORY}"
 DIR="${INPUT_DIR:-.}"
 TOKEN="${INPUT_TOKEN:-${GITHUB_TOKEN:-}}"
 MAX_TAGS="${INPUT_MAX_TAGS:-500}"
