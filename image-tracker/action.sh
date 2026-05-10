@@ -342,44 +342,45 @@ for pkg in "${PKG_ORDER[@]}"; do
     echo "  [>] Searching ghcr.io/${image_path} for matching ancestry..."
     
     result=""
-    # 1. Primary: Resolve by checking recent digests for a matching OCI label
-    # This is tag-agnostic and most secure as it ignores mutable tags entirely.
-    echo "  [i] Resolving commit to digest via recent OCI labels..."
-    resolve_rc=0
-    result=$(resolve_digest "$image_path" "$bearer") || resolve_rc=$?
-    
-    if [[ "$resolve_rc" -eq 2 ]]; then
-        echo "::error::max_tags ($MAX_TAGS) exceeded resolving $pkg — no image found."
-        exit 1
-    fi
+    # 1. Forensic Trace (Primary)
+    # We walk history backwards and check if a tag exists for each commit (e.g. sha-<commit>).
+    # This is a secure, O(1) forensic link from commit to build.
+    # Every hit is still cryptographically verified via OCI labels in probe_tag.
+    for candidate in "${CANDIDATES[@]}"; do
+        short_sha="${candidate:0:7}"
+        result=$(probe_tag "$image_path" "sha-${short_sha}" "$bearer" || true)
+        [[ -n "$result" ]] && break
+        
+        if [[ "${#candidate}" -gt 7 ]]; then
+             result=$(probe_tag "$image_path" "sha-${candidate}" "$bearer" || true)
+             [[ -n "$result" ]] && break
+        fi
 
-    # 2. Fallback: Deterministic Probe (Hints)
-    # Only if the recent digest scan misses, we use tags like sha-<commit> and pr-<num> 
-    # as fast-path hints to locate older images. probe_tag still verifies the OCI label.
+        pr_head="${PR_MAP[$candidate]:-}"
+        if [[ -n "$pr_head" ]]; then
+             result=$(probe_tag "$image_path" "sha-${pr_head:0:7}" "$bearer" || true)
+             [[ -n "$result" ]] && break
+        fi
+        
+        pr_num="${PR_NUM_MAP[$candidate]:-}"
+        if [[ -n "$pr_num" ]]; then
+             result=$(probe_tag "$image_path" "pr-${pr_num}" "$bearer" || true)
+             [[ -n "$result" ]] && break
+        fi
+    done
+
+    # 2. Garbage Scrub (Fallback)
+    # If the forensic trace misses (e.g. for untagged images or infrequently changed packages),
+    # we perform an iterative scan of the last 100 raw digests via the GitHub Packages API.
     if [[ -z "$result" ]]; then
-        echo "      (Recent digest scan missed; falling back to tag-based hints...)"
-        for candidate in "${CANDIDATES[@]}"; do
-            short_sha="${candidate:0:7}"
-            result=$(probe_tag "$image_path" "sha-${short_sha}" "$bearer" || true)
-            [[ -n "$result" ]] && break
-            
-            if [[ "${#candidate}" -gt 7 ]]; then
-                 result=$(probe_tag "$image_path" "sha-${candidate}" "$bearer" || true)
-                 [[ -n "$result" ]] && break
-            fi
-
-            pr_head="${PR_MAP[$candidate]:-}"
-            if [[ -n "$pr_head" ]]; then
-                 result=$(probe_tag "$image_path" "sha-${pr_head:0:7}" "$bearer" || true)
-                 [[ -n "$result" ]] && break
-            fi
-            
-            pr_num="${PR_NUM_MAP[$candidate]:-}"
-            if [[ -n "$pr_num" ]]; then
-                 result=$(probe_tag "$image_path" "pr-${pr_num}" "$bearer" || true)
-                 [[ -n "$result" ]] && break
-            fi
-        done
+        echo "      (Forensic trace missed; falling back to iterative digest scan...)"
+        resolve_rc=0
+        result=$(resolve_digest "$image_path" "$bearer") || resolve_rc=$?
+        
+        if [[ "$resolve_rc" -eq 2 ]]; then
+            echo "::error::max_tags ($MAX_TAGS) exceeded resolving $pkg — no image found."
+            exit 1
+        fi
     fi
     
     if [[ -z "$result" ]]; then
