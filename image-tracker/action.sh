@@ -217,8 +217,12 @@ probe_tag() {
                     if [[ "$cand" == "$revision"* ]] || [[ "$revision" == "$cand"* ]] || \
                        [[ -n "$ph" && "$ph" == "$revision"* ]] || [[ -n "$revision" && "$revision" == "$ph"* ]] || \
                        [[ -n "$pn" && "$revision" == "pr-$pn" ]]; then
+                        # Get the commit message for this candidate
+                        local msg
+                        msg=$(git log -1 --format=%s "$cand" 2>/dev/null || echo "Unknown commit message")
+                        
                         # Return all metadata pipe-separated
-                        printf '%s|%s|%s|%s' "$cand" "$mdigest" "$created" "$pn"
+                        printf '%s|%s|%s|%s|%s' "$cand" "$mdigest" "$created" "$pn" "$msg"
                         return 0
                     fi
                 done
@@ -384,7 +388,7 @@ for pkg in "${PKG_ORDER[@]}"; do
         continue
     fi
 
-    IFS='|' read -r resolved_sha digest created pr_num <<< "$result"
+    IFS='|' read -r resolved_sha digest created pr_num msg <<< "$result"
     image_ref="ghcr.io/${image_path}@${digest}"
     
     pr_info=""
@@ -396,9 +400,11 @@ for pkg in "${PKG_ORDER[@]}"; do
     if [[ "$resolved_sha" != "$PIVOT_SHA" ]]; then
         echo "::warning title=Image Fallback (${pkg})::Target commit ${PIVOT_SHA:0:7} missing image. Using older commit ${resolved_sha:0:7}${pr_info}${date_info}."
         echo "  [✓] HIT (FALLBACK): $pkg -> $image_ref"
+        echo "      Message: $msg"
         echo "      Matched commit ${resolved_sha:0:12}${pr_info}${date_info}"
     else
         echo "  [✓] HIT:  $pkg -> $image_ref"
+        echo "      Message: $msg"
         echo "      Matched commit ${resolved_sha:0:12}${pr_info}${date_info}"
     fi
     
@@ -407,6 +413,7 @@ for pkg in "${PKG_ORDER[@]}"; do
         echo "### 📦 Image Tracker: \`${pkg}\`"
         echo "- **Target Commit:** \`${PIVOT_SHA}\`"
         echo "- **Resolved Commit:** \`${resolved_sha}\`$( [[ -n "$pr_info" ]] && echo " $pr_info" )"
+        echo "- **Commit Message:** \`${msg}\`"
         echo "- **Build Date:** \`${created:-Unknown}\`"
         echo "- **Image Digest:** \`${digest}\`"
         if [[ "$resolved_sha" != "$PIVOT_SHA" ]]; then
