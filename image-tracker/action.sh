@@ -458,11 +458,11 @@ for pkg in "${PKG_ORDER[@]}"; do
     # Write to step summary for high visibility
     {
         echo "### 📦 Image Tracker: \`${pkg}\`"
-        echo "- **Target Commit:** \`${PIVOT_SHA}\`"
-        echo "- **Resolved Commit:** \`${resolved_sha}\`$( [[ -n "$pr_info" ]] && echo " $pr_info" )"
-        echo "- **Commit Message:** \`${msg}\`"
-        echo "- **Build Date:** \`${created:-Unknown}\`"
-        echo "- **Image Digest:** \`${digest}\`"
+        echo "- **Merged:** \`${created:-Unknown}\`"
+        echo "- **Message:** \`${msg}\`"
+        echo "- **Digest:** \`${digest}\`"
+        echo "- **Merge Commit:** \`${PIVOT_SHA}\`"
+        echo "- **Image Commit:** \`${resolved_sha}\`$( [[ -n "$pr_info" ]] && echo " $pr_info" )"
         if [[ "$resolved_sha" != "$PIVOT_SHA" ]]; then
             echo "⚠️ *Note: Fell back to older commit because target image was not found for the latest revision.*"
         fi
