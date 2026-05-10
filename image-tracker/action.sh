@@ -53,19 +53,17 @@ PIVOT_SHA=$(git rev-parse --verify --quiet "${REVISION}^{commit}" 2>/dev/null ||
 
 # If the pivot is missing and looks like a SHA, check if it's a known PR head
 if [[ -z "$PIVOT_SHA" && "$REVISION" =~ ^[0-9a-f]{7,40}$ ]]; then
-    echo "  [w] Revision $REVISION not found in local history. Checking PR map..."
-    matched_pr=""
-    for key in "${!PR_NUM_MAP[@]}"; do
-        if [[ "$key" == "$REVISION"* ]]; then
-            matched_pr="${PR_NUM_MAP[$key]}"
-            break
+    echo "  [w] Revision $REVISION not found in local history. Checking for associated PRs..."
+    if command -v gh &>/dev/null && [[ -n "$TOKEN" ]]; then
+        pr_data=$(GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/commits/${REVISION}/pulls" --jq 'if length > 0 then .[0] | [.head.sha, .number] | @tsv else empty end' 2>/dev/null || true)
+        if [[ -n "$pr_data" ]]; then
+            read -r head_sha pr_num <<< "$pr_data"
+            if [[ -n "$pr_num" ]]; then
+                echo "  [i] Revision matches PR #$pr_num. Attempting to fetch PR ref..."
+                git fetch origin "pull/${pr_num}/head:refs/remotes/origin/pr/${pr_num}" --quiet || true
+                PIVOT_SHA=$(git rev-parse --verify --quiet "${REVISION}^{commit}" 2>/dev/null || true)
+            fi
         fi
-    done
-    
-    if [[ -n "$matched_pr" ]]; then
-        echo "  [i] Revision matches head of PR #$matched_pr. Attempting to fetch PR ref..."
-        git fetch origin "pull/${matched_pr}/head:refs/remotes/origin/pr/${matched_pr}" --quiet || true
-        PIVOT_SHA=$(git rev-parse --verify --quiet "${REVISION}^{commit}" 2>/dev/null || true)
     fi
 fi
 
@@ -195,10 +193,7 @@ probe_tag() {
         mtype=$(printf '%s' "$mbody" | jq -r '.mediaType // empty' 2>/dev/null || true)
         
         if [[ "$mtype" == *"index"* || "$mtype" == *"manifest.list"* ]]; then
-            config_digest=$(printf '%s' "$mbody" | jq -r '
-                .manifests[]
-                | select(.platform.architecture == "amd64" and (.platform.os // "") != "unknown")
-                | .digest' 2>/dev/null | head -1)
+            config_digest=$(printf '%s' "$mbody" | jq -r '.manifests[] | select(.platform.architecture == "amd64" and (.platform.os // "") != "unknown") | .digest' 2>/dev/null | head -1)
             [[ -z "$config_digest" ]] && config_digest=$(printf '%s' "$mbody" | jq -r '.manifests[0].digest' 2>/dev/null | head -1)
             [[ -n "$config_digest" ]] && mbody=$(curl -sS -H "Authorization: Bearer ${bearer}" -H "Accept: ${accept_manifest}" "${base}/manifests/${config_digest}")
         fi
@@ -209,25 +204,16 @@ probe_tag() {
             revision=$(curl -sSL -H "Authorization: Bearer ${bearer}" "${base}/blobs/${config_digest}" \
                 | jq -r '.config.Labels["org.opencontainers.image.revision"] // empty' 2>/dev/null || true)
             
-            local match_str="$revision"
-            if ! matches_candidate "$match_str"; then
-                local tag_val="${tag#sha-}"
-                if matches_candidate "$tag_val"; then
-                    match_str="$tag_val"
-                fi
-            fi
-            
-            # Prefer the OCI revision label, but if it is missing or does not match any
-            # candidate, allow a matching sha-derived tag value to stand in. This is safe
-            # because we only accept the tag when it matches one of the known candidates.
-            if matches_candidate "$match_str"; then
+            # Strict OCI Revision Verification
+            # We only accept images where the embedded label matches a known candidate.
+            if matches_candidate "$revision"; then
                 # Find which candidate it matched
                 for cand in "${!CANDIDATE_MAP[@]}"; do
                     local pn="${PR_NUM_MAP[$cand]:-}"
                     local ph="${PR_MAP[$cand]:-}"
-                    if [[ "$cand" == "$match_str"* ]] || [[ "$match_str" == "$cand"* ]] || \
-                       [[ -n "$ph" && "$ph" == "$match_str"* ]] || [[ -n "$ph" && "$match_str" == "$ph"* ]] || \
-                       [[ -n "$pn" && "$match_str" == "pr-$pn" ]]; then
+                    if [[ "$cand" == "$revision"* ]] || [[ "$revision" == "$cand"* ]] || \
+                       [[ -n "$ph" && "$ph" == "$revision"* ]] || [[ -n "$revision" && "$revision" == "$ph"* ]] || \
+                       [[ -n "$pn" && "$revision" == "pr-$pn" ]]; then
                         printf '%s:%s' "$cand" "$mdigest"
                         return 0
                     fi
@@ -266,7 +252,12 @@ resolve_digest() {
         while IFS= read -r digest; do
             [[ -z "$digest" ]] && continue
             tags_seen=$((tags_seen + 1))
-            echo -ne "\r      -> [${tags_seen}/100] Inspecting digest: ${digest:0:15}... \033[K" >&2
+            if [[ "$tags_seen" -gt "$MAX_TAGS" ]]; then
+                echo -ne "\r\033[K" >&2
+                echo "  [!] Reached MAX_TAGS=$MAX_TAGS; stopping search." >&2
+                return 2
+            fi
+            echo -ne "\r      -> [${tags_seen}/${MAX_TAGS}] Inspecting digest: ${digest:0:15}... \033[K" >&2
             
             # probe_tag takes a digest as well and checks the OCI label securely
             local result
