@@ -51,7 +51,7 @@ jobs:
           python3 -c "import yaml; yaml.safe_load(open('image-tracker/action.yml'))"
 
   functional:
-    name: Functional Tests (Real-World)
+    name: Functional Tests
     needs: unit
     runs-on: ubuntu-latest
     permissions:
@@ -60,11 +60,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        repo:
+          - bcgov/quickstart-openshift
+          - miniontech/vexilon
         include:
-          - repo: MinionTech/vexilon
-            packages: agnav
           - repo: bcgov/quickstart-openshift
-            packages: frontend,backend
+            packages: frontend, backend
+          - repo: miniontech/vexilon
+            packages: agnav
     env:
       TARGET_REPO: ${{ matrix.repo }}
       TARGET_PACKAGES: ${{ matrix.packages }}
@@ -124,21 +127,34 @@ jobs:
             bearer=$(curl -sS -u "x:${GH_TOKEN}" \
               "https://ghcr.io/token?scope=repository:${image_path}:pull" | jq -r '.token')
 
-            # Find the most recent tag that has an OCI revision label.
+            # Walk main backwards to find the most recent image (no registry scanning!)
             found_rev=""
             found_digest=""
-            while IFS= read -r tag; do
-              result=$(probe_tag "$image_path" "$tag" "$bearer" || true)
-              [[ -z "$result" ]] && continue
-              found_rev="${result%%$'\t'*}"
-              found_digest="${result##*$'\t'}"
-              echo "Ground truth: pkg=${pkg} commit=${found_rev} digest=${found_digest}"
-              break
-            done < <(curl -sS -H "Authorization: Bearer ${bearer}" \
-              "https://ghcr.io/v2/${image_path}/tags/list?n=200" \
-              | jq -r '.tags[]' \
-              | grep -Ev '^(buildcache|latest|prod)$' \
-              | grep -Ev '\.(sig|sbom|att)$')
+            
+            # Walk up to 20 commits backwards from HEAD
+            for cand in $(cd target && git rev-list --topo-order -n 20 HEAD); do
+              short_sha="${cand:0:7}"
+              
+              # Fetch PR num if this commit is from a PR
+              pr_num=$(GH_TOKEN="$GH_TOKEN" gh api "/repos/${TARGET_REPO}/commits/${cand}/pulls" --jq 'if length > 0 then .[0].number else empty end' 2>/dev/null || true)
+              
+              # Probe the explicit sha- tag
+              result=$(probe_tag "$image_path" "sha-${short_sha}" "$bearer" || true)
+              if [[ -z "$result" ]]; then
+                 result=$(probe_tag "$image_path" "sha-${cand}" "$bearer" || true)
+              fi
+              # Probe the PR tag
+              if [[ -z "$result" && -n "$pr_num" ]]; then
+                 result=$(probe_tag "$image_path" "pr-${pr_num}" "$bearer" || true)
+              fi
+              
+              if [[ -n "$result" ]]; then
+                found_rev="${result%%$'\t'*}"
+                found_digest="${result##*$'\t'}"
+                echo "Ground truth: pkg=${pkg} commit=${found_rev} digest=${found_digest}"
+                break
+              fi
+            done
 
             if [[ -z "$found_rev" ]]; then
               echo "::error::No labeled image found for ${pkg} in ${TARGET_REPO}"
