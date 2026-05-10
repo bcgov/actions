@@ -69,10 +69,10 @@ if [[ -z "$PIVOT_SHA" && "$REVISION" =~ ^[0-9a-f]{7,40}$ ]]; then
         fi
 
         if [[ -n "$pr_data" ]]; then
-            # Use temporary file and IFS to handle spaces in title correctly
-            printf '%s' "$pr_data" > .pr_data_tmp
-            IFS=$'\t' read -r head_sha pr_num pr_title < .pr_data_tmp
-            rm -f .pr_data_tmp
+            # Use a here-string and IFS to handle potential spaces/tabs in the title
+            {
+                IFS=$'\t' read -r head_sha pr_num pr_title
+            } <<< "$pr_data"
 
             if [[ -n "$pr_num" ]]; then
                 printf "  [i] Revision matches PR #%s. Attempting to fetch PR ref...\n" "$pr_num"
@@ -127,10 +127,10 @@ for sha in "${CANDIDATES[@]}"; do
         fi
 
         if [[ -n "$pr_data" ]]; then
-            # Use a temporary file and IFS to handle potential spaces/tabs in the title
-            printf '%s' "$pr_data" > .pr_data_tmp
-            IFS=$'\t' read -r head_sha pr_num pr_title < .pr_data_tmp
-            rm -f .pr_data_tmp
+            # Use a here-string and IFS to handle potential spaces/tabs in the title
+            {
+                IFS=$'\t' read -r head_sha pr_num pr_title
+            } <<< "$pr_data"
             
             if [[ "$head_sha" != "null" && -n "$head_sha" ]]; then
                 PR_MAP["$sha"]="$head_sha"
@@ -295,7 +295,6 @@ resolve_digest() {
     local base="https://ghcr.io/v2/${image_path}"
 
     local owner_orig="${REPOSITORY%%/*}"
-    local owner="${image_path%%/*}"
     local pkg="${image_path#*/}"
     local pkg_enc="${pkg//\//%2F}"
     
