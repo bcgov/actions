@@ -454,7 +454,7 @@ if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
         first_payload="${IMAGES["$first_pkg"]:-}"
         if [[ -n "$first_payload" ]]; then
             { IFS='|' read -r _ r_digest _ _ _; } <<< "$first_payload"
-            local f_path="${IMAGE_PATHS["$first_pkg"]:-}"
+            f_path="${IMAGE_PATHS["$first_pkg"]:-}"
             printf "image=ghcr.io/%s@%s\n" "$f_path" "$r_digest" >> "$GITHUB_OUTPUT"
             printf "digest=%s\n" "$r_digest" >> "$GITHUB_OUTPUT"
             
