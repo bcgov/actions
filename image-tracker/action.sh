@@ -46,33 +46,47 @@ log_endgroup() {
     fi
 }
 
-# ---- Inputs & Defaults -----------------------------------------------------
-PACKAGE_INPUT="${INPUT_PACKAGE:-${PACKAGE:-}}"
-REVISION="${INPUT_REVISION:-${REVISION:-HEAD}}"
-REPOSITORY="${INPUT_REPOSITORY:-${REPOSITORY:-${GITHUB_REPOSITORY:-}}}"
-DIR="${INPUT_DIR:-${DIR:-.}}"
-TOKEN="${INPUT_TOKEN:-${GITHUB_TOKEN:-}}"
-MAX_TAGS="${INPUT_MAX_TAGS:-${MAX_TAGS:-500}}"
-MAX_DEPTH="${INPUT_MAX_DEPTH:-${MAX_DEPTH:-20}}"
+# ---- Inputs & Auto-Detection -----------------------------------------------
+# 1. Repository: Detect from git remote if not provided
+if [[ -z "${REPOSITORY:-${INPUT_REPOSITORY:-${GITHUB_REPOSITORY:-}}}" ]]; then
+    remote_url=$(git remote get-url origin 2>/dev/null || true)
+    if [[ "$remote_url" == *"github.com"* ]]; then
+        # Parse owner/repo from https://github.com/owner/repo or git@github.com:owner/repo
+        REPOSITORY=$(printf '%s' "$remote_url" | sed -E 's/.*github.com[:\/](.*).git/\1/' | sed -E 's/.*github.com[:\/](.*)/\1/')
+    fi
+fi
+REPOSITORY="${REPOSITORY:-${INPUT_REPOSITORY:-${GITHUB_REPOSITORY:-}}}"
+
+# 2. Packages: Use positional arguments if provided, else fall back to env/inputs
+if [[ $# -gt 0 ]]; then
+    PACKAGE_INPUT=$(IFS=,; echo "$*")
+else
+    PACKAGE_INPUT="${PACKAGE:-${INPUT_PACKAGE:-}}"
+fi
+
+# 3. Other Settings
+REVISION="${REVISION:-${INPUT_REVISION:-HEAD}}"
+DIR="${DIR:-${INPUT_DIR:-.}}"
+TOKEN="${TOKEN:-${GITHUB_TOKEN:-}}"
+MAX_TAGS="${MAX_TAGS:-${INPUT_MAX_TAGS:-500}}"
+MAX_DEPTH="${MAX_DEPTH:-${INPUT_MAX_DEPTH:-20}}"
 
 # ---- Validation ------------------------------------------------------------
 if [[ -z "$PACKAGE_INPUT" ]]; then
-    log_error "Missing required input 'package'. Set PACKAGE or INPUT_PACKAGE."
+    log_error "Missing required package names. Usage: $0 pkg1 [pkg2 ...]"
     exit 1
 fi
-if [[ -z "$TOKEN" ]]; then
-    log_error "No token available. Set TOKEN or GITHUB_TOKEN."
-    exit 1
-fi
+# No hard exit here; we attempt anonymous access in registry_token()
 if [[ -z "$REPOSITORY" ]]; then
-    log_error "No repository available. Set REPOSITORY or GITHUB_REPOSITORY."
+    log_error "No repository detected. Set REPOSITORY or run from a git repo."
     exit 1
 fi
 
-if ! cd "$DIR"; then
+if [[ ! -d "$DIR" ]]; then
     log_error "Invalid directory '$DIR'."
     exit 1
 fi
+cd "$DIR"
 
 # ---- State -----------------------------------------------------------------
 declare -A PR_MAP
@@ -112,19 +126,25 @@ mapfile -t CANDIDATES < <(git rev-list --topo-order -n "$MAX_DEPTH" "$PIVOT_SHA"
 for sha in "${CANDIDATES[@]}"; do
     CANDIDATE_MAP["$sha"]=1
     msg=$(git log -1 --format=%s "$sha" 2>/dev/null || true)
-    # Extract (#123) with potential trailing whitespace
-    pr_num=$(printf '%s' "$msg" | grep -oE '\(#[0-9]+\)\s*$' | grep -oE '[0-9]+' || true)
-    if [[ -n "$pr_num" ]]; then
-        PR_NUM_MAP["$sha"]="$pr_num"
+    # Extract (#123) or (#123) followed by anything
+    pr_from_msg=$(printf '%s' "$msg" | grep -oE '\(#[0-9]+\)' | grep -oE '[0-9]+' | head -1 || true)
+    
+    if [[ -n "$pr_from_msg" ]]; then
+        [[ "${DEBUG:-}" == "true" ]] && printf "      [d]   Mapped %s to PR #%s (from msg)\n" "${sha:0:7}" "$pr_from_msg" >&2
+        PR_NUM_MAP["$sha"]="$pr_from_msg"
     fi
     
     # Optional: fetch full metadata from API if needed for titles
-    # (Skip if you want speed, but we use it for the audit trail)
-    if [[ -n "$pr_num" && -z "${PR_TITLE_MAP[$sha]:-}" ]]; then
-        pr_data=$(GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/commits/${sha}/pulls" --jq 'if length > 0 then .[0] | [.head.sha, .number, .title] | @tsv else empty end' 2>/dev/null || true)
+    if command -v gh &>/dev/null; then
+        pr_data=""
+        if [[ -n "$TOKEN" ]]; then
+            pr_data=$(GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/commits/${sha}/pulls" --jq '.[] | [.head.sha, .number, .title] | @tsv' 2>/dev/null | head -1 || true)
+        fi
+        
         if [[ -n "$pr_data" ]]; then
              { IFS=$'\t' read -r head_sha pr_num_api pr_title; } <<< "$pr_data"
              if [[ -n "$head_sha" && "$head_sha" != "null" ]]; then
+                 [[ "${DEBUG:-}" == "true" ]] && printf "      [d]   Mapped %s to PR #%s (Head: %s) (from API)\n" "${sha:0:7}" "$pr_num_api" "${head_sha:0:7}" >&2
                  PR_MAP["$sha"]="$head_sha"
                  PR_NUM_MAP["$sha"]="$pr_num_api"
                  PR_NUM_MAP["$head_sha"]="$pr_num_api"
@@ -138,6 +158,9 @@ done
 # ---- Registry Logic --------------------------------------------------------
 repo_name="${REPOSITORY#*/}"
 lc_repo="${REPOSITORY,,}"
+# ---- Map package names to GHCR image paths ---------------------------------
+# Normalize separators: turn commas and whitespace into newlines
+package_list=$(echo "$PACKAGE_INPUT" | tr ',' '\n' | tr -s '[:space:]' '\n')
 while IFS= read -r pkg; do
     pkg="${pkg//[[:space:]]/}"
     [[ -z "$pkg" ]] && continue
@@ -147,21 +170,50 @@ while IFS= read -r pkg; do
         IMAGE_PATHS["$pkg"]="${lc_repo}/${pkg,,}"
     fi
     PKG_ORDER+=("$pkg")
-done < <(echo "$PACKAGE_INPUT" | tr ',' '\n' | tr -s '[:space:]' '\n')
+done <<< "$package_list"
 
 registry_token() {
-    curl -sS -u "x:${TOKEN}" "https://ghcr.io/token?scope=repository:${1}:pull" | jq -r '.token'
+    local repo="$1"
+    if [[ -n "${TOKEN:-}" ]]; then
+        curl -sS -u "x:${TOKEN}" "https://ghcr.io/token?scope=repository:${repo}:pull" | jq -r '.token'
+    else
+        curl -sS "https://ghcr.io/token?scope=repository:${repo}:pull" | jq -r '.token'
+    fi
 }
 
 matches_candidate() {
     local rev="$1"
+    local tag="${2:-}"
     [[ -z "$rev" ]] && return 1
+    
     for cand in "${!CANDIDATE_MAP[@]}"; do
-        if [[ "$cand" == "$rev"* ]] || [[ "$rev" == "$cand"* ]]; then return 0; fi
+        # 1. Direct SHA match
+        if [[ "$cand" == "$rev"* ]] || [[ "$rev" == "$cand"* ]]; then
+            [[ "${DEBUG:-}" == "true" ]] && printf "      [d]   Match found (SHA): %s == %s\n" "$cand" "$rev" >&2
+            return 0
+        fi
+        
+        # 2. PR Head match (API-dependent)
         local ph="${PR_MAP[$cand]:-}"
-        if [[ -n "$ph" ]] && { [[ "$ph" == "$rev"* ]] || [[ "$rev" == "$ph"* ]]; }; then return 0; fi
+        if [[ -n "$ph" ]] && { [[ "$ph" == "$rev"* ]] || [[ "$rev" == "$ph"* ]]; }; then
+            [[ "${DEBUG:-}" == "true" ]] && printf "      [d]   Match found (PR Head): %s maps to %s\n" "$cand" "$ph" >&2
+            return 0
+        fi
+        
+        # 3. PR Number match (The bridge)
         local pn="${PR_NUM_MAP[$cand]:-}"
-        if [[ -n "$pn" && "$rev" == "pr-$pn" ]]; then return 0; fi
+        if [[ -n "$pn" ]]; then
+            # Match if the revision label itself is the PR tag
+            if [[ "$rev" == "pr-$pn" ]]; then
+                [[ "${DEBUG:-}" == "true" ]] && printf "      [d]   Match found (PR Label): %s maps to pr-%s\n" "$cand" "$pn" >&2
+                return 0
+            fi
+            # Match if the tag we are probing is the PR tag
+            if [[ "$tag" == "pr-$pn" ]]; then
+                [[ "${DEBUG:-}" == "true" ]] && printf "      [d]   Match found (PR Tag Bridge): %s matches tag pr-%s\n" "$cand" "$pn" >&2
+                return 0
+            fi
+        fi
     done
     return 1
 }
@@ -169,39 +221,62 @@ matches_candidate() {
 probe_tag() {
     local image_path="$1" tag="$2" bearer="$3"
     local base="https://ghcr.io/v2/${image_path}"
-    local accept="application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json"
+    local accept="application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json, */*"
     
-    local mresp mdigest
-    mresp=$(curl -sS -i -H "Authorization: Bearer ${bearer}" -H "Accept: ${accept}" "${base}/manifests/${tag}")
-    mdigest=$(printf '%s' "$mresp" | awk 'BEGIN{IGNORECASE=1} /^docker-content-digest:/ {gsub(/\r/,""); print $2; exit}')
-    [[ -z "$mdigest" ]] && return 1
+    local hfile=$(mktemp)
+    local mbody mdigest mtype
+    
+    mbody=$(curl -sS -L -D "$hfile" -H "Authorization: Bearer ${bearer}" -H "Accept: ${accept}" "${base}/manifests/${tag}")
+    mdigest=$(grep -iE '^docker-content-digest:' "$hfile" | tail -1 | awk '{print $2}' | tr -d '\r')
+    mtype=$(printf '%s' "$mbody" | jq -r '.mediaType // empty' 2>/dev/null || true)
+    
+    # Fallback to body digest if not in headers
+    [[ -z "$mdigest" ]] && mdigest=$(printf '%s' "$mbody" | jq -r '.digest // empty' 2>/dev/null || true)
+    
+    if [[ -z "$mdigest" || "$mdigest" == "null" ]]; then
+        rm -f "$hfile"
+        return 1
+    fi
+    
+    # Extract metadata (OCI Annotations)
+    local revision created
+    revision=$(printf '%s' "$mbody" | jq -r '.annotations["org.opencontainers.image.revision"] // empty' 2>/dev/null || true)
+    created=$(printf '%s' "$mbody" | jq -r '.annotations["org.opencontainers.image.created"] // empty' 2>/dev/null || true)
 
-    local mbody=$(printf '%s' "$mresp" | awk 'BEGIN{p=0} /^\r?$/{p=1; next} p{print}')
-    local mtype=$(printf '%s' "$mbody" | jq -r '.mediaType // empty' 2>/dev/null || true)
-    
+    # Multi-arch Index Navigation
     if [[ "$mtype" == *"index"* || "$mtype" == *"manifest.list"* ]]; then
         local cd=$(printf '%s' "$mbody" | jq -r '.manifests[] | select(.platform.architecture == "amd64" and (.platform.os // "") != "unknown") | .digest' 2>/dev/null | head -1)
         [[ -z "$cd" ]] && cd=$(printf '%s' "$mbody" | jq -r '.manifests[0].digest' 2>/dev/null | head -1)
-        [[ -n "$cd" ]] && mbody=$(curl -sS -H "Authorization: Bearer ${bearer}" -H "Accept: ${accept}" "${base}/manifests/${cd}")
+        if [[ -n "$cd" ]]; then
+            mbody=$(curl -sS -L -H "Authorization: Bearer ${bearer}" -H "Accept: ${accept}" "${base}/manifests/${cd}")
+            [[ -z "$revision" || "$revision" == "null" ]] && revision=$(printf '%s' "$mbody" | jq -r '.annotations["org.opencontainers.image.revision"] // empty' 2>/dev/null || true)
+            [[ -z "$created" || "$created" == "null" ]] && created=$(printf '%s' "$mbody" | jq -r '.annotations["org.opencontainers.image.created"] // empty' 2>/dev/null || true)
+        fi
     fi
 
-    local cd_final=$(printf '%s' "$mbody" | jq -r '.config.digest // empty' 2>/dev/null || true)
-    [[ -z "$cd_final" ]] && return 1
-
-    local config=$(curl -sSL -H "Authorization: Bearer ${bearer}" "${base}/blobs/${cd_final}")
-    local revision=$(printf '%s' "$config" | jq -r '.config.Labels["org.opencontainers.image.revision"] // empty' 2>/dev/null || true)
+    # Config Blob Fallback
+    if [[ -z "$revision" || "$revision" == "null" ]]; then
+        local cd_final=$(printf '%s' "$mbody" | jq -r '.config.digest // empty' 2>/dev/null || true)
+        if [[ -n "$cd_final" ]]; then
+            local config=$(curl -sSL -H "Authorization: Bearer ${bearer}" "${base}/blobs/${cd_final}")
+            revision=$(printf '%s' "$config" | jq -r '.config.Labels["org.opencontainers.image.revision"] // empty' 2>/dev/null || true)
+            [[ -z "$created" || "$created" == "null" ]] && created=$(printf '%s' "$config" | jq -r '.config.Labels["org.opencontainers.image.created"] // empty' 2>/dev/null || true)
+        fi
+    fi
     
-    if matches_candidate "$revision"; then
-        local created=$(printf '%s' "$config" | jq -r '.config.Labels["org.opencontainers.image.created"] // empty' 2>/dev/null || true)
+    rm -f "$hfile"
+
+    if matches_candidate "$revision" "$tag"; then
         for cand in "${!CANDIDATE_MAP[@]}"; do
              local ph="${PR_MAP[$cand]:-}"
              local pn="${PR_NUM_MAP[$cand]:-}"
-             if [[ "$cand" == "$revision"* ]] || [[ "$revision" == "$cand"* ]] || \
-                [[ -n "$ph" && "$ph" == "$revision"* ]] || [[ -n "$revision" && "$revision" == "$ph"* ]] || \
-                [[ -n "$pn" && "$revision" == "pr-$pn" ]]; then
-                 local msg="${PR_TITLE_MAP[$cand]:-}"
-                 [[ -z "$msg" || "$msg" == "null" ]] && msg=$(git log -1 --format=%s "$cand" 2>/dev/null || echo "Unknown commit message")
-                 printf '%s|%s|%s|%s|%s' "$cand" "$mdigest" "$created" "$pn" "$msg"
+             if [[ "$tag" == "sha-${cand:0:7}" || "$tag" == "pr-$pn" || ( -n "$ph" && "$tag" == "sha-${ph:0:7}" ) ]]; then
+                 local title="${PR_TITLE_MAP[$cand]:-}"
+                 local audit_msg="[✓] HIT: $tag ($mdigest)"
+                 [[ -n "$pn" ]] && audit_msg+=" | PR #$pn"
+                 [[ -n "$title" ]] && audit_msg+=": $title"
+                 [[ -n "$created" ]] && audit_msg+=" | Built: $created"
+                 echo "$audit_msg"
                  return 0
              fi
         done
@@ -215,20 +290,37 @@ resolve_digest() {
     local pkg="${image_path#*/}"
     local pkg_enc="${pkg//\//%2F}"
     
-    local digests=""
-    digests=$(GH_TOKEN="$TOKEN" gh api "/orgs/${owner_orig}/packages/container/${pkg_enc}/versions?per_page=100" --jq '.[].name' 2>/dev/null || true)
-    [[ -z "$digests" ]] && digests=$(GH_TOKEN="$TOKEN" gh api "/users/${owner_orig}/packages/container/${pkg_enc}/versions?per_page=100" --jq '.[].name' 2>/dev/null || true)
+    local raw_data=""
+    if command -v gh &>/dev/null && [[ -n "$TOKEN" ]]; then
+        # Fetch both digest (name) and tags for each version
+        raw_data=$(GH_TOKEN="$TOKEN" gh api "/orgs/${owner_orig}/packages/container/${pkg_enc}/versions?per_page=100" --jq 'if length > 0 then .[] | [.name, (.metadata.container.tags | join(","))] | @tsv else empty end' 2>/dev/null || true)
+        if [[ -z "$raw_data" ]]; then
+            raw_data=$(GH_TOKEN="$TOKEN" gh api "/users/${owner_orig}/packages/container/${pkg_enc}/versions?per_page=100" --jq 'if length > 0 then .[] | [.name, (.metadata.container.tags | join(","))] | @tsv else empty end' 2>/dev/null || true)
+        fi
+    fi
     
     local tags_seen=0
-    if [[ -n "$digests" ]]; then
-        while IFS= read -r digest; do
+    if [[ -n "$raw_data" ]]; then
+        while IFS=$'\t' read -r digest tags; do
             [[ -z "$digest" ]] && continue
             tags_seen=$((tags_seen + 1))
             [[ "$tags_seen" -gt "$MAX_TAGS" ]] && return 2
+            
             printf "\r      -> [%d/%d] Inspecting digest: %s... \033[K" "$tags_seen" "$MAX_TAGS" "${digest:0:15}" >&2
-            local res=$(probe_tag "$image_path" "$digest" "$bearer" || true)
+            
+            # Use the most relevant tag from the list for probing (e.g. pr-N if it exists)
+            local probe_ref="$digest"
+            IFS=',' read -ra tag_arr <<< "$tags"
+            for t in "${tag_arr[@]}"; do
+                if [[ "$t" == pr-* ]]; then
+                    probe_ref="$t"
+                    break
+                fi
+            done
+
+            local res=$(probe_tag "$image_path" "$probe_ref" "$bearer" || true)
             if [[ -n "$res" ]]; then echo -ne "\r\033[K" >&2; echo "$res"; return 0; fi
-        done <<< "$digests"
+        done <<< "$raw_data"
     fi
     echo -ne "\r\033[K" >&2
     return 1
@@ -250,20 +342,30 @@ for pkg in "${PKG_ORDER[@]}"; do
         MISSING+=("$pkg")
         continue
     fi
-    
-    printf "  [>] Searching ghcr.io/%s for matching ancestry...\n" "$path" >&2
-    
     res=""
+    # 1. Forensic Trace (Primary)
     for candidate in "${CANDIDATES[@]}"; do
-        ph="${PR_MAP[$candidate]:-}"
-        pn="${PR_NUM_MAP[$candidate]:-}"
-        # 1. PR Head
-        [[ -n "$ph" ]] && res=$(probe_tag "$path" "sha-${ph:0:7}" "$bearer" || true)
-        # 2. PR Number
-        [[ -z "$res" && -n "$pn" ]] && res=$(probe_tag "$path" "pr-${pn}" "$bearer" || true)
-        # 3. Commit SHA
-        [[ -z "$res" ]] && res=$(probe_tag "$path" "sha-${candidate:0:7}" "$bearer" || true)
-        [[ -n "$res" ]] && break
+        pr_head="${PR_MAP[$candidate]:-}"
+        pr_num="${PR_NUM_MAP[$candidate]:-}"
+        
+        # 1. Explicit PR Tag Probe (from commit message/API)
+        if [[ -n "$pr_num" ]]; then
+            res=$(probe_tag "$path" "pr-${pr_num}" "$bearer" || true)
+        fi
+        
+        # 2. PR Head SHA Probe (API-dependent)
+        if [[ -z "$res" && -n "$pr_head" ]]; then
+            res=$(probe_tag "$path" "sha-${pr_head:0:7}" "$bearer" || true)
+        fi
+        
+        # 3. Direct Commit SHA Probe
+        if [[ -z "$res" ]]; then
+            res=$(probe_tag "$path" "sha-${candidate:0:7}" "$bearer" || true)
+        fi
+        
+        if [[ -n "$res" ]]; then
+            break
+        fi
     done
 
     if [[ -z "$res" ]]; then
