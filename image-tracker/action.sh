@@ -238,8 +238,90 @@ probe_tag() {
     return 1
 }
 
-# (Iterative tag search has been completely removed to enforce strict history walking
-# and prevent arbitrary image discovery security risks).
+# ---- Look up the manifest digest whose config carries our commit SHA -------
+# Returns "sha256:...<manifest-digest>" on stdout, empty string on miss.
+resolve_digest() {
+    local image_path="$1"
+    local bearer="$2"
+    local base="https://ghcr.io/v2/${image_path}"
+
+    local owner="${image_path%%/*}"
+    local pkg="${image_path#*/}"
+    local pkg_enc="${pkg//\//%2F}"
+    
+    # Securely map commits to digests by reading their embedded OCI labels.
+    # We fetch the most recent digests from the GitHub API first because it's sorted by date.
+    local digests=""
+    if command -v gh &>/dev/null && [[ -n "$TOKEN" ]]; then
+        digests=$(GH_TOKEN="$TOKEN" gh api "/orgs/${owner}/packages/container/${pkg_enc}/versions?per_page=100" --jq '.[].name' 2>/dev/null || true)
+        if [[ -z "$digests" ]]; then
+            digests=$(GH_TOKEN="$TOKEN" gh api "/users/${owner}/packages/container/${pkg_enc}/versions?per_page=100" --jq '.[].name' 2>/dev/null || true)
+        fi
+    fi
+    
+    local tags_seen=0
+    
+    # If GH API worked, check recent digests
+    if [[ -n "$digests" ]]; then
+        while IFS= read -r digest; do
+            [[ -z "$digest" ]] && continue
+            tags_seen=$((tags_seen + 1))
+            echo -ne "\r      -> [${tags_seen}/100] Inspecting digest: ${digest:0:15}... \033[K" >&2
+            
+            # probe_tag takes a digest as well and checks the OCI label securely
+            local result
+            result=$(probe_tag "$image_path" "$digest" "$bearer" || true)
+            if [[ -n "$result" ]]; then
+                echo -ne "\r\033[K" >&2
+                echo "$result"
+                return 0
+            fi
+        done <<< "$digests"
+    else
+        # Fallback to the slow, alphabetical tags/list from GHCR
+        local url="${base}/tags/list?n=100"
+        while [[ -n "$url" ]]; do
+            local raw body link_hdr
+            raw=$(curl -sS -i -H "Authorization: Bearer ${bearer}" "$url")
+            body=$(printf '%s' "$raw" | awk 'BEGIN{p=0} /^\r?$/{p=1; next} p{print}')
+            link_hdr=$(printf '%s' "$raw" | awk 'BEGIN{IGNORECASE=1} /^link:/ {print; exit}')
+            
+            local tag
+            while IFS= read -r tag; do
+                [[ -z "$tag" ]] && continue
+                [[ "$tag" == sha256-*.sig || "$tag" == sha256-*.sbom || "$tag" == sha256-*.att ]] && continue
+                
+                tags_seen=$((tags_seen + 1))
+                if [[ "$tags_seen" -gt "$MAX_TAGS" ]]; then
+                    echo -ne "\r\033[K" >&2
+                    echo "  [!] Reached MAX_TAGS=$MAX_TAGS; stopping search." >&2
+                    return 2
+                fi
+                echo -ne "\r      -> [${tags_seen}/${MAX_TAGS}] Inspecting tag: ${tag} \033[K" >&2
+                
+                local result
+                result=$(probe_tag "$image_path" "$tag" "$bearer" || true)
+                if [[ -n "$result" ]]; then
+                    echo -ne "\r\033[K" >&2
+                    echo "$result"
+                    return 0
+                fi
+            done < <(printf '%s' "$body" | jq -r '.tags[]?' 2>/dev/null)
+            
+            if [[ -n "$link_hdr" ]]; then
+                local next=$(printf '%s' "$link_hdr" | grep -oE '<[^>]+>' | head -1 | tr -d '<>')
+                if [[ -n "$next" ]]; then
+                    url="${next}"
+                    [[ "$next" == /* ]] && url="https://ghcr.io${next}"
+                    continue
+                fi
+            fi
+            url=""
+        done
+    fi
+    echo -ne "\r\033[K" >&2
+    return 1
+}
 
 # ---- Resolve each package --------------------------------------------------
 IMAGES_JSON='{}'
@@ -284,7 +366,14 @@ for pkg in "${PKG_ORDER[@]}"; do
     done
 
     if [[ -z "$result" ]]; then
-        echo "      (Direct probes failed. Iterative tag search has been disabled for security reasons.)"
+        echo "      (Direct probes failed; iterating through recent digests...)"
+        resolve_rc=0
+        result=$(resolve_digest "$image_path" "$bearer") || resolve_rc=$?
+        
+        if [[ "$resolve_rc" -eq 2 ]]; then
+            echo "::error::max_tags ($MAX_TAGS) exceeded resolving $pkg — no image found."
+            exit 1
+        fi
     fi
     
     if [[ -z "$result" ]]; then
