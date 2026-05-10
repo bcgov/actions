@@ -223,6 +223,7 @@ probe_tag() {
                     fi
                 done
             fi
+        fi
     fi
     return 1
 }
