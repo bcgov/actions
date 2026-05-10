@@ -421,7 +421,26 @@ for pkg in "${PKG_ORDER[@]}"; do
     resolved_sha="${result%%:*}"
     digest="${result#*:}"
     image_ref="ghcr.io/${image_path}@${digest}"
-    echo "  [✓] HIT:  $pkg -> $image_ref (matched commit ${resolved_sha:0:12})"
+    
+    if [[ "$resolved_sha" != "$PIVOT_SHA" ]]; then
+        echo "::warning title=Image Fallback (${pkg})::Target commit ${PIVOT_SHA:0:7} missing image. Using older commit ${resolved_sha:0:7}."
+        echo "  [✓] HIT (FALLBACK): $pkg -> $image_ref (matched commit ${resolved_sha:0:12})"
+    else
+        echo "  [✓] HIT:  $pkg -> $image_ref (matched commit ${resolved_sha:0:12})"
+    fi
+    
+    # Write to step summary for high visibility
+    {
+        echo "### 📦 Image Tracker: \`${pkg}\`"
+        echo "- **Target Commit:** \`${PIVOT_SHA}\`"
+        echo "- **Resolved Commit:** \`${resolved_sha}\`"
+        echo "- **Image Digest:** \`${digest}\`"
+        if [[ "$resolved_sha" != "$PIVOT_SHA" ]]; then
+            echo "⚠️ *Note: Fell back to older commit because target image was not found in the registry.*"
+        fi
+        echo ""
+    } >> "$GITHUB_STEP_SUMMARY"
+
     IMAGES_JSON=$(printf '%s' "$IMAGES_JSON"  | jq -c --arg k "$pkg" --arg v "$image_ref" '.[$k] = $v')
     DIGESTS_JSON=$(printf '%s' "$DIGESTS_JSON" | jq -c --arg k "$pkg" --arg v "$digest"    '.[$k] = $v')
     if [[ -z "$FIRST_IMAGE" ]]; then
