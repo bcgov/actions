@@ -309,7 +309,8 @@ resolve_digest() {
             done < <(printf '%s' "$body" | jq -r '.tags[]?' 2>/dev/null)
             
             if [[ -n "$link_hdr" ]]; then
-                local next=$(printf '%s' "$link_hdr" | grep -oE '<[^>]+>' | head -1 | tr -d '<>')
+                local next
+                next=$(printf '%s' "$link_hdr" | grep -oE '<[^>]+>' | head -1 | tr -d '<>')
                 if [[ -n "$next" ]]; then
                     url="${next}"
                     [[ "$next" == /* ]] && url="https://ghcr.io${next}"
