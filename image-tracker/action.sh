@@ -210,11 +210,22 @@ probe_tag() {
             revision=$(curl -sSL -H "Authorization: Bearer ${bearer}" "${base}/blobs/${config_digest}" \
                 | jq -r '.config.Labels["org.opencontainers.image.revision"] // empty' 2>/dev/null || true)
             
+            local match_str="$revision"
+            if ! matches_candidate "$match_str"; then
+                local tag_val="${tag#sha-}"
+                if matches_candidate "$tag_val"; then
+                    match_str="$tag_val"
+                fi
+            fi
+            
             # Check label. If tag name matches a candidate, we can also fallback to that if label is somehow missing but tag exists.
-            if matches_candidate "$revision"; then
+            if matches_candidate "$match_str"; then
                 # Find which candidate it matched
                 for cand in "${!CANDIDATE_MAP[@]}"; do
-                    if [[ "$cand" == "$revision"* ]] || [[ "$revision" == "$cand"* ]] || [[ "${PR_MAP[$cand]:-}" == "$revision"* ]] || [[ "$revision" == "${PR_MAP[$cand]:-}"* ]] || [[ "pr-${PR_NUM_MAP[$cand]:-}" == "$revision" ]]; then
+                    local pn="${PR_NUM_MAP[$cand]:-}"
+                    if [[ "$cand" == "$match_str"* ]] || [[ "$match_str" == "$cand"* ]] || \
+                       [[ "${PR_MAP[$cand]:-}" == "$match_str"* ]] || [[ "$match_str" == "${PR_MAP[$cand]:-}"* ]] || \
+                       [[ -n "$pn" && "$match_str" == "pr-$pn" ]]; then
                         printf '%s:%s' "$cand" "$mdigest"
                         return 0
                     fi
@@ -271,7 +282,10 @@ resolve_digest() {
                  if [[ -n "$mdigest" ]]; then
                     # Find which candidate it matched
                     for cand in "${!CANDIDATE_MAP[@]}"; do
-                        if [[ "$cand" == "$tag_sha"* ]] || [[ "$tag_sha" == "$cand"* ]] || [[ "${PR_MAP[$cand]:-}" == "$tag_sha"* ]] || [[ "$tag_sha" == "${PR_MAP[$cand]:-}"* ]] || [[ "pr-$tag_sha" == "pr-${PR_NUM_MAP[$cand]:-}" ]]; then
+                        local pn="${PR_NUM_MAP[$cand]:-}"
+                        if [[ "$cand" == "$tag_sha"* ]] || [[ "$tag_sha" == "$cand"* ]] || \
+                           [[ "${PR_MAP[$cand]:-}" == "$tag_sha"* ]] || [[ "$tag_sha" == "${PR_MAP[$cand]:-}"* ]] || \
+                           [[ -n "$pn" && "$tag_sha" == "pr-$pn" ]]; then
                             printf '%s:%s' "$cand" "$mdigest"
                             return 0
                         fi
@@ -309,9 +323,20 @@ resolve_digest() {
             revision=$(curl -sSL -H "Authorization: Bearer ${bearer}" "${base}/blobs/${config_digest}" \
                 | jq -r '.config.Labels["org.opencontainers.image.revision"] // empty' 2>/dev/null || true)
 
-            if matches_candidate "$revision"; then
+            local match_str="$revision"
+            if ! matches_candidate "$match_str"; then
+                local tag_val="${tag#sha-}"
+                if matches_candidate "$tag_val"; then
+                    match_str="$tag_val"
+                fi
+            fi
+
+            if matches_candidate "$match_str"; then
                 for cand in "${!CANDIDATE_MAP[@]}"; do
-                    if [[ "$cand" == "$revision"* ]] || [[ "$revision" == "$cand"* ]] || [[ "${PR_MAP[$cand]:-}" == "$revision"* ]] || [[ "$revision" == "${PR_MAP[$cand]:-}"* ]] || [[ "pr-${PR_NUM_MAP[$cand]:-}" == "$revision" ]]; then
+                    local pn="${PR_NUM_MAP[$cand]:-}"
+                    if [[ "$cand" == "$match_str"* ]] || [[ "$match_str" == "$cand"* ]] || \
+                       [[ "${PR_MAP[$cand]:-}" == "$match_str"* ]] || [[ "$match_str" == "${PR_MAP[$cand]:-}"* ]] || \
+                       [[ -n "$pn" && "$match_str" == "pr-$pn" ]]; then
                         printf '%s:%s' "$cand" "$mdigest"
                         return 0
                     fi
