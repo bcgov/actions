@@ -57,10 +57,20 @@ if [[ -z "$PIVOT_SHA" && "$REVISION" =~ ^[0-9a-f]{7,40}$ ]]; then
     echo "  [w] Revision $REVISION not found in local history. Checking for associated PRs..."
     if command -v gh &>/dev/null && [[ -n "$TOKEN" ]]; then
         pr_data=$(GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/commits/${REVISION}/pulls" --jq 'if length > 0 then .[0] | [.head.sha, .number, .title] | @tsv else empty end' 2>/dev/null || true)
+        
+        # If no PR found and it's a merge commit, try the second parent
+        if [[ -z "$pr_data" ]]; then
+            parents=$(git show -s --format=%P "${REVISION}^{commit}" 2>/dev/null || true)
+            if [[ $(echo "$parents" | wc -w) -ge 2 ]]; then
+                second_parent=$(echo "$parents" | awk '{print $2}')
+                pr_data=$(GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/commits/${second_parent}/pulls" --jq 'if length > 0 then .[0] | [.head.sha, .number, .title] | @tsv else empty end' 2>/dev/null || true)
+            fi
+        fi
+
         if [[ -n "$pr_data" ]]; then
-            # Use temporary file to handle spaces in title correctly
+            # Use temporary file and IFS to handle spaces in title correctly
             echo "$pr_data" > .pr_data_tmp
-            read -r head_sha pr_num pr_title < .pr_data_tmp
+            IFS=$'\t' read -r head_sha pr_num pr_title < .pr_data_tmp
             rm .pr_data_tmp
 
             if [[ -n "$pr_num" ]]; then
@@ -99,11 +109,22 @@ for sha in "${CANDIDATES[@]}"; do
     
     # Fetch PR mapping on-demand for this candidate to resolve squash-merges
     if command -v gh &>/dev/null && [[ -n "$TOKEN" ]]; then
+        # Try finding PRs for the commit SHA directly
         pr_data=$(GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/commits/${sha}/pulls" --jq 'if length > 0 then .[0] | [.head.sha, .number, .title] | @tsv else empty end' 2>/dev/null || true)
+        
+        # If no PR found and it's a merge commit, try the second parent (the PR branch)
+        if [[ -z "$pr_data" ]]; then
+            parents=$(git show -s --format=%P "$sha" 2>/dev/null || true)
+            if [[ $(echo "$parents" | wc -w) -ge 2 ]]; then
+                second_parent=$(echo "$parents" | awk '{print $2}')
+                pr_data=$(GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/commits/${second_parent}/pulls" --jq 'if length > 0 then .[0] | [.head.sha, .number, .title] | @tsv else empty end' 2>/dev/null || true)
+            fi
+        fi
+
         if [[ -n "$pr_data" ]]; then
-            # Use a temporary file to handle potential spaces in the title
+            # Use a temporary file and IFS to handle potential spaces/tabs in the title
             echo "$pr_data" > .pr_data_tmp
-            read -r head_sha pr_num pr_title < .pr_data_tmp
+            IFS=$'\t' read -r head_sha pr_num pr_title < .pr_data_tmp
             rm .pr_data_tmp
             
             if [[ "$head_sha" != "null" && -n "$head_sha" ]]; then
@@ -234,10 +255,17 @@ probe_tag() {
                     if [[ "$cand" == "$revision"* ]] || [[ "$revision" == "$cand"* ]] || \
                        [[ -n "$ph" && "$ph" == "$revision"* ]] || [[ -n "$revision" && "$revision" == "$ph"* ]] || \
                        [[ -n "$pn" && "$revision" == "pr-$pn" ]]; then
-                        # Prefer the PR title if we have it, otherwise fallback to git log
+                        # Resolve a human-friendly message
                         local msg="${PR_TITLE_MAP[$cand]:-}"
                         if [[ -z "$msg" || "$msg" == "null" ]]; then
+                            # Fallback to git log
                             msg=$(git log -1 --format=%s "$cand" 2>/dev/null || echo "Unknown commit message")
+                            # If it's a technical merge message, try to find a PR number in the history
+                            if [[ "$msg" == "Merge "* && "$msg" == *" into "* ]]; then
+                                local potential_pr
+                                potential_pr=$(git log -1 --format=%b "$cand" 2>/dev/null | grep -oE '#[0-9]+' | head -1 || true)
+                                [[ -n "$potential_pr" ]] && msg="Merge PR ${potential_pr}"
+                            fi
                         fi
                         
                         # Return all metadata pipe-separated
