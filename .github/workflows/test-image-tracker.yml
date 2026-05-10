@@ -124,20 +124,27 @@ jobs:
             bearer=$(curl -sS -u "x:${GH_TOKEN}" \
               "https://ghcr.io/token?scope=repository:${image_path}:pull" | jq -r '.token')
 
-            # Fetch latest tags using GH API to ensure we get recent sha- tags
-            pkg_enc=$(echo "$image_path" | sed 's/\//%2F/g')
+            # Walk main backwards to find the most recent image (no registry scanning!)
             found_rev=""
             found_digest=""
-            while IFS= read -r tag; do
-              result=$(probe_tag "$image_path" "$tag" "$bearer" || true)
-              [[ -z "$result" ]] && continue
-              found_rev="${result%%$'\t'*}"
-              found_digest="${result##*$'\t'}"
-              echo "Ground truth: pkg=${pkg} commit=${found_rev} digest=${found_digest}"
-              break
-            done < <(GH_TOKEN="$GH_TOKEN" gh api "/orgs/${TARGET_REPO%%/*}/packages/container/${pkg_enc}/versions?per_page=50" \
-              --jq '.[].metadata.container.tags[]?' 2>/dev/null \
-              | grep -E '^sha-' | head -n 10)
+            
+            # Walk up to 20 commits backwards from HEAD
+            for cand in $(cd target && git rev-list --topo-order -n 20 HEAD); do
+              short_sha="${cand:0:7}"
+              
+              # Probe the explicit sha- tag
+              result=$(probe_tag "$image_path" "sha-${short_sha}" "$bearer" || true)
+              if [[ -z "$result" ]]; then
+                 result=$(probe_tag "$image_path" "sha-${cand}" "$bearer" || true)
+              fi
+              
+              if [[ -n "$result" ]]; then
+                found_rev="${result%%$'\t'*}"
+                found_digest="${result##*$'\t'}"
+                echo "Ground truth: pkg=${pkg} commit=${found_rev} digest=${found_digest}"
+                break
+              fi
+            done
 
             if [[ -z "$found_rev" ]]; then
               echo "::error::No labeled image found for ${pkg} in ${TARGET_REPO}"
