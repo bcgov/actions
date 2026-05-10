@@ -198,7 +198,6 @@ probe_tag() {
             [[ -n "$config_digest" ]] && mbody=$(curl -sS -H "Authorization: Bearer ${bearer}" -H "Accept: ${accept_manifest}" "${base}/manifests/${config_digest}")
         fi
         config_digest=$(printf '%s' "$mbody" | jq -r '.config.digest // empty' 2>/dev/null || true)
-        
         if [[ -n "$config_digest" ]]; then
             local revision
             revision=$(curl -sSL -H "Authorization: Bearer ${bearer}" "${base}/blobs/${config_digest}" \
@@ -207,6 +206,10 @@ probe_tag() {
             # Strict OCI Revision Verification
             # We only accept images where the embedded label matches a known candidate.
             if matches_candidate "$revision"; then
+                local created
+                created=$(curl -sSL -H "Authorization: Bearer ${bearer}" "${base}/blobs/${config_digest}" \
+                    | jq -r '.config.Labels["org.opencontainers.image.created"] // empty' 2>/dev/null || true)
+                
                 # Find which candidate it matched
                 for cand in "${!CANDIDATE_MAP[@]}"; do
                     local pn="${PR_NUM_MAP[$cand]:-}"
@@ -214,12 +217,12 @@ probe_tag() {
                     if [[ "$cand" == "$revision"* ]] || [[ "$revision" == "$cand"* ]] || \
                        [[ -n "$ph" && "$ph" == "$revision"* ]] || [[ -n "$revision" && "$revision" == "$ph"* ]] || \
                        [[ -n "$pn" && "$revision" == "pr-$pn" ]]; then
-                        printf '%s:%s' "$cand" "$mdigest"
+                        # Return all metadata pipe-separated
+                        printf '%s|%s|%s|%s' "$cand" "$mdigest" "$created" "$pn"
                         return 0
                     fi
                 done
             fi
-        fi
     fi
     return 1
 }
@@ -380,25 +383,33 @@ for pkg in "${PKG_ORDER[@]}"; do
         continue
     fi
 
-    resolved_sha="${result%%:*}"
-    digest="${result#*:}"
+    IFS='|' read -r resolved_sha digest created pr_num <<< "$result"
     image_ref="ghcr.io/${image_path}@${digest}"
     
+    pr_info=""
+    [[ -n "$pr_num" && "$pr_num" != "null" ]] && pr_info=" (PR #$pr_num)"
+    
+    date_info=""
+    [[ -n "$created" && "$created" != "null" ]] && date_info=" built on $created"
+
     if [[ "$resolved_sha" != "$PIVOT_SHA" ]]; then
-        echo "::warning title=Image Fallback (${pkg})::Target commit ${PIVOT_SHA:0:7} missing image. Using older commit ${resolved_sha:0:7}."
-        echo "  [✓] HIT (FALLBACK): $pkg -> $image_ref (matched commit ${resolved_sha:0:12})"
+        echo "::warning title=Image Fallback (${pkg})::Target commit ${PIVOT_SHA:0:7} missing image. Using older commit ${resolved_sha:0:7}${pr_info}${date_info}."
+        echo "  [✓] HIT (FALLBACK): $pkg -> $image_ref"
+        echo "      Matched commit ${resolved_sha:0:12}${pr_info}${date_info}"
     else
-        echo "  [✓] HIT:  $pkg -> $image_ref (matched commit ${resolved_sha:0:12})"
+        echo "  [✓] HIT:  $pkg -> $image_ref"
+        echo "      Matched commit ${resolved_sha:0:12}${pr_info}${date_info}"
     fi
     
     # Write to step summary for high visibility
     {
         echo "### 📦 Image Tracker: \`${pkg}\`"
         echo "- **Target Commit:** \`${PIVOT_SHA}\`"
-        echo "- **Resolved Commit:** \`${resolved_sha}\`"
+        echo "- **Resolved Commit:** \`${resolved_sha}\`$( [[ -n "$pr_info" ]] && echo " $pr_info" )"
+        echo "- **Build Date:** \`${created:-Unknown}\`"
         echo "- **Image Digest:** \`${digest}\`"
         if [[ "$resolved_sha" != "$PIVOT_SHA" ]]; then
-            echo "⚠️ *Note: Fell back to older commit because target image was not found in the registry.*"
+            echo "⚠️ *Note: Fell back to older commit because target image was not found for the latest revision.*"
         fi
         echo ""
     } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
