@@ -14,7 +14,7 @@ set -euo pipefail
 # ---- Inputs ----------------------------------------------------------------
 PACKAGE_INPUT="${INPUT_PACKAGE:-}"
 REVISION="${INPUT_REVISION:-HEAD}"
-REPOSITORY="${INPUT_REPOSITORY:-$GITHUB_REPOSITORY}"
+REPOSITORY="${INPUT_REPOSITORY:-${GITHUB_REPOSITORY:-}}"
 DIR="${INPUT_DIR:-.}"
 TOKEN="${INPUT_TOKEN:-${GITHUB_TOKEN:-}}"
 MAX_TAGS="${INPUT_MAX_TAGS:-500}"
@@ -452,7 +452,7 @@ for pkg in "${PKG_ORDER[@]}"; do
             echo "⚠️ *Note: Fell back to older commit because target image was not found in the registry.*"
         fi
         echo ""
-    } >> "$GITHUB_STEP_SUMMARY"
+    } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
 
     IMAGES_JSON=$(printf '%s' "$IMAGES_JSON"  | jq -c --arg k "$pkg" --arg v "$image_ref" '.[$k] = $v')
     DIGESTS_JSON=$(printf '%s' "$DIGESTS_JSON" | jq -c --arg k "$pkg" --arg v "$digest"    '.[$k] = $v')
@@ -470,7 +470,7 @@ echo "::endgroup::"
     echo "digests=${DIGESTS_JSON}"
     echo "image=${FIRST_IMAGE}"
     echo "digest=${FIRST_DIGEST}"
-} >> "$GITHUB_OUTPUT"
+} >> "${GITHUB_OUTPUT:-/dev/null}"
 
 if [[ ${#MISSING[@]} -gt 0 ]]; then
     echo "::error::Failed to resolve the following package(s) within $MAX_DEPTH commit(s) of $PIVOT_SHA: ${MISSING[*]}"
