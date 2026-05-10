@@ -124,7 +124,8 @@ jobs:
             bearer=$(curl -sS -u "x:${GH_TOKEN}" \
               "https://ghcr.io/token?scope=repository:${image_path}:pull" | jq -r '.token')
 
-            # Find the most recent tag that has an OCI revision label.
+            # Fetch latest tags using GH API to ensure we get recent sha- tags
+            pkg_enc=$(echo "$image_path" | sed 's/\//%2F/g')
             found_rev=""
             found_digest=""
             while IFS= read -r tag; do
@@ -134,12 +135,9 @@ jobs:
               found_digest="${result##*$'\t'}"
               echo "Ground truth: pkg=${pkg} commit=${found_rev} digest=${found_digest}"
               break
-            done < <(curl -sS -H "Authorization: Bearer ${bearer}" \
-              "https://ghcr.io/v2/${image_path}/tags/list?n=200" \
-              | jq -r '.tags[]' \
-              | grep -E '^sha-' \
-              | grep -Ev '^(buildcache|latest|prod)$' \
-              | grep -Ev '\.(sig|sbom|att)$')
+            done < <(GH_TOKEN="$GH_TOKEN" gh api "/orgs/${TARGET_REPO%%/*}/packages/container/${pkg_enc}/versions?per_page=50" \
+              --jq '.[].metadata.container.tags[]?' 2>/dev/null \
+              | grep -E '^sha-' | head -n 10)
 
             if [[ -z "$found_rev" ]]; then
               echo "::error::No labeled image found for ${pkg} in ${TARGET_REPO}"
