@@ -271,9 +271,14 @@ resolve_digest() {
 
             tags_seen=$((tags_seen + 1))
             if [[ "$tags_seen" -gt "$MAX_TAGS" ]]; then
+                # Clear progress line before error
+                echo -ne "\r\033[K" >&2
                 echo "  [!] Reached MAX_TAGS=$MAX_TAGS; stopping search." >&2
                 return 2
             fi
+            
+            # Print progress to stderr
+            echo -ne "\r      -> [${tags_seen}/${MAX_TAGS}] Inspecting tag: ${tag} \033[K" >&2
 
             # Check if tag is one of our candidates (High-confidence hit)
             tag_sha="${tag#sha-}"
@@ -290,6 +295,7 @@ resolve_digest() {
                         if [[ "$cand" == "$tag_sha"* ]] || [[ "$tag_sha" == "$cand"* ]] || \
                            [[ -n "$ph" && "$ph" == "$tag_sha"* ]] || [[ -n "$ph" && "$tag_sha" == "$ph"* ]] || \
                            [[ -n "$pn" && "$tag_sha" == "pr-$pn" ]]; then
+                            echo -ne "\r\033[K" >&2
                             printf '%s:%s' "$cand" "$mdigest"
                             return 0
                         fi
@@ -342,6 +348,7 @@ resolve_digest() {
                     if [[ "$cand" == "$match_str"* ]] || [[ "$match_str" == "$cand"* ]] || \
                        [[ -n "$ph" && "$ph" == "$match_str"* ]] || [[ -n "$ph" && "$match_str" == "$ph"* ]] || \
                        [[ -n "$pn" && "$match_str" == "pr-$pn" ]]; then
+                        echo -ne "\r\033[K" >&2
                         printf '%s:%s' "$cand" "$mdigest"
                         return 0
                     fi
@@ -360,6 +367,7 @@ resolve_digest() {
         fi
         url=""
     done
+    echo -ne "\r\033[K" >&2
     return 1
 }
 
