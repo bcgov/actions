@@ -284,23 +284,19 @@ probe_tag() {
     fi
     
     rm -f "$hfile"
-
     if matches_candidate "$revision" "$tag"; then
         for cand in "${!CANDIDATE_MAP[@]}"; do
              local ph="${PR_MAP[$cand]:-}"
              local pn="${PR_NUM_MAP[$cand]:-}"
              
-             # Decoupled decision: does the revision label match OR does the tag follow a known pattern?
-             local pattern_match=false
-             if [[ "$tag" == "sha-${cand:0:7}" || "$tag" == "pr-$pn" || ( -n "$ph" && "$tag" == "sha-${ph:0:7}" ) ]]; then
-                 pattern_match=true
-             fi
-
-             if [[ "$revision" == "$cand"* || ( -n "$ph" && "$revision" == "$ph"* ) || "$pattern_match" == "true" ]]; then
+             if [[ "$revision" == "$cand"* || ( -n "$ph" && "$revision" == "$ph"* ) ]]; then
                  local title="${PR_TITLE_MAP[$cand]:-}"
                  [[ -z "$title" || "$title" == "null" ]] && title=$(git log -1 --format=%s "$cand" 2>/dev/null || echo "Unknown commit message")
                  
                  local display_ref="$tag"
+                 if [[ "$tag" == "sha-${cand:0:7}" || "$tag" == "pr-$pn" || ( -n "$ph" && "$tag" == "sha-${ph:0:7}" ) ]]; then
+                     display_ref="$tag"
+                 fi
 
                  # 1. Stderr for human logs
                  local audit_msg="[✓] HIT: $display_ref ($mdigest)"
