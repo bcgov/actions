@@ -342,43 +342,44 @@ for pkg in "${PKG_ORDER[@]}"; do
     echo "  [>] Searching ghcr.io/${image_path} for matching ancestry..."
     
     result=""
-    # 1. Deterministic Probe (Hints)
-    # We use tags like sha-<commit> and pr-<num> only as fast-path hints to locate 
-    # a digest. The probe_tag function still performs strict OCI label verification 
-    # to ensure the digest is authentic and matches our commit history.
-    for candidate in "${CANDIDATES[@]}"; do
-        short_sha="${candidate:0:7}"
-        result=$(probe_tag "$image_path" "sha-${short_sha}" "$bearer" || true)
-        [[ -n "$result" ]] && break
-        
-        if [[ "${#candidate}" -gt 7 ]]; then
-             result=$(probe_tag "$image_path" "sha-${candidate}" "$bearer" || true)
-             [[ -n "$result" ]] && break
-        fi
+    # 1. Primary: Resolve by checking recent digests for a matching OCI label
+    # This is tag-agnostic and most secure as it ignores mutable tags entirely.
+    echo "  [i] Resolving commit to digest via recent OCI labels..."
+    resolve_rc=0
+    result=$(resolve_digest "$image_path" "$bearer") || resolve_rc=$?
+    
+    if [[ "$resolve_rc" -eq 2 ]]; then
+        echo "::error::max_tags ($MAX_TAGS) exceeded resolving $pkg — no image found."
+        exit 1
+    fi
 
-        pr_head="${PR_MAP[$candidate]:-}"
-        if [[ -n "$pr_head" ]]; then
-             result=$(probe_tag "$image_path" "sha-${pr_head:0:7}" "$bearer" || true)
-             [[ -n "$result" ]] && break
-        fi
-        
-        pr_num="${PR_NUM_MAP[$candidate]:-}"
-        if [[ -n "$pr_num" ]]; then
-             result=$(probe_tag "$image_path" "pr-${pr_num}" "$bearer" || true)
-             [[ -n "$result" ]] && break
-        fi
-    done
-
+    # 2. Fallback: Deterministic Probe (Hints)
+    # Only if the recent digest scan misses, we use tags like sha-<commit> and pr-<num> 
+    # as fast-path hints to locate older images. probe_tag still verifies the OCI label.
     if [[ -z "$result" ]]; then
-        # Resolve by checking recent digests for a matching OCI label
-        echo "  [i] Tag-based hints missed; falling back to recent digest resolution via OCI label..."
-        resolve_rc=0
-        result=$(resolve_digest "$image_path" "$bearer") || resolve_rc=$?
-        
-        if [[ "$resolve_rc" -eq 2 ]]; then
-            echo "::error::max_tags ($MAX_TAGS) exceeded resolving $pkg — no image found."
-            exit 1
-        fi
+        echo "      (Recent digest scan missed; falling back to tag-based hints...)"
+        for candidate in "${CANDIDATES[@]}"; do
+            short_sha="${candidate:0:7}"
+            result=$(probe_tag "$image_path" "sha-${short_sha}" "$bearer" || true)
+            [[ -n "$result" ]] && break
+            
+            if [[ "${#candidate}" -gt 7 ]]; then
+                 result=$(probe_tag "$image_path" "sha-${candidate}" "$bearer" || true)
+                 [[ -n "$result" ]] && break
+            fi
+
+            pr_head="${PR_MAP[$candidate]:-}"
+            if [[ -n "$pr_head" ]]; then
+                 result=$(probe_tag "$image_path" "sha-${pr_head:0:7}" "$bearer" || true)
+                 [[ -n "$result" ]] && break
+            fi
+            
+            pr_num="${PR_NUM_MAP[$candidate]:-}"
+            if [[ -n "$pr_num" ]]; then
+                 result=$(probe_tag "$image_path" "pr-${pr_num}" "$bearer" || true)
+                 [[ -n "$result" ]] && break
+            fi
+        done
     fi
     
     if [[ -z "$result" ]]; then
