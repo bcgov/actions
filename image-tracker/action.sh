@@ -459,10 +459,10 @@ for pkg in "${PKG_ORDER[@]}"; do
     {
         echo "### 📦 Image Tracker: \`${pkg}\`"
         echo "- **Merged:** \`${created:-Unknown}\`"
-        echo "- **Message:** \`${msg}\`"
+        echo "- **Message:** \`${msg}\`$( [[ -n "$pr_info" ]] && echo " $pr_info" )"
         echo "- **Digest:** \`${digest}\`"
         echo "- **Merge Commit:** \`${PIVOT_SHA}\`"
-        echo "- **Image Commit:** \`${resolved_sha}\`$( [[ -n "$pr_info" ]] && echo " $pr_info" )"
+        echo "- **Image Commit:** \`${resolved_sha}\`"
         if [[ "$resolved_sha" != "$PIVOT_SHA" ]]; then
             echo "⚠️ *Note: Fell back to older commit because target image was not found for the latest revision.*"
         fi
