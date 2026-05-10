@@ -29,10 +29,6 @@ if [[ -z "$TOKEN" ]]; then
     echo "::error::No token available. Pass 'token' input or set GITHUB_TOKEN."
     exit 1
 fi
-if [[ -z "$REPOSITORY" ]]; then
-    echo "::error::No repository provided. Set the 'repository' input or ensure GITHUB_REPOSITORY is set."
-    exit 1
-fi
 
 if [[ ! "$MAX_TAGS" =~ ^[0-9]+$ ]]; then
     echo "::error::Invalid input 'max_tags': must be a positive integer."
