@@ -44,23 +44,9 @@ if ! cd "$DIR"; then
     exit 1
 fi
 
-# Batch-fetch closed PR data: merge_commit_sha -> head_sha
-# This allows us to resolve images built from PR heads that were squash-merged.
-# We also use this to aid in resolution of missing commits (e.g. from forks).
+# On-demand PR map for squash-merge resolution
 declare -A PR_MAP
 declare -A PR_NUM_MAP
-if command -v gh &>/dev/null && [[ -n "$TOKEN" ]]; then
-    echo "  [i] Batch-fetching PR merge map..."
-    while IFS=$'\t' read -r merge_sha head_sha pr_num; do
-        if [[ -n "$pr_num" && "$pr_num" != "null" ]]; then
-            [[ -n "$merge_sha" && "$merge_sha" != "null" ]] && PR_MAP["$merge_sha"]="$head_sha"
-            [[ -n "$merge_sha" && "$merge_sha" != "null" ]] && PR_NUM_MAP["$merge_sha"]="$pr_num"
-            [[ -n "$head_sha" && "$head_sha" != "null" ]] && PR_NUM_MAP["$head_sha"]="$pr_num"
-        fi
-    done < <(GH_TOKEN="$TOKEN" gh api --paginate "/repos/${REPOSITORY}/pulls?state=all&per_page=100" \
-        --jq '.[] | [.merge_commit_sha, .head.sha, .number] | @tsv' 2>/dev/null || true)
-    echo "  [i] PR Map populated with ${#PR_MAP[@]} entries."
-fi
 
 # Get the "pivot" commit (the starting point for history walking)
 PIVOT_SHA=$(git rev-parse --verify --quiet "${REVISION}^{commit}" 2>/dev/null || true)
@@ -101,6 +87,19 @@ fi
 declare -A CANDIDATE_MAP
 for sha in "${CANDIDATES[@]}"; do
     CANDIDATE_MAP["$sha"]=1
+    
+    # Fetch PR mapping on-demand for this candidate to resolve squash-merges
+    if command -v gh &>/dev/null && [[ -n "$TOKEN" ]]; then
+        pr_data=$(GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/commits/${sha}/pulls" --jq 'if length > 0 then .[0] | [.head.sha, .number] | @tsv else empty end' 2>/dev/null || true)
+        if [[ -n "$pr_data" ]]; then
+            read -r head_sha pr_num <<< "$pr_data"
+            if [[ "$head_sha" != "null" && -n "$head_sha" ]]; then
+                PR_MAP["$sha"]="$head_sha"
+                PR_NUM_MAP["$sha"]="$pr_num"
+                PR_NUM_MAP["$head_sha"]="$pr_num"
+            fi
+        fi
+    fi
 done
 
 echo "::group::Image Tracker — resolving ancestry for $REVISION"
@@ -239,137 +238,8 @@ probe_tag() {
     return 1
 }
 
-# ---- Look up the manifest digest whose config carries our commit SHA -------
-# Returns "sha256:...<manifest-digest>" on stdout, empty string on miss.
-resolve_digest() {
-    local image_path="$1"
-    local bearer="$2"
-    local base="https://ghcr.io/v2/${image_path}"
-    local tags_seen=0
-
-    # Accept headers
-    local accept_index="application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json"
-    local accept_manifest="application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json"
-
-    # Paginate tags
-    local url="${base}/tags/list?n=100"
-    while [[ -n "$url" ]]; do
-        local raw
-        raw=$(curl -sS -i -H "Authorization: Bearer ${bearer}" "$url")
-        local body
-        body=$(printf '%s' "$raw" | awk 'BEGIN{p=0} /^\r?$/{p=1; next} p{print}')
-        local link_hdr
-        link_hdr=$(printf '%s' "$raw" | awk 'BEGIN{IGNORECASE=1} /^link:/ {print; exit}')
-
-        local tag
-        while IFS= read -r tag; do
-            [[ -z "$tag" ]] && continue
-            # Skip cosign/SBOM helper tags.
-            [[ "$tag" == sha256-*.sig ]] && continue
-            [[ "$tag" == sha256-*.sbom ]] && continue
-            [[ "$tag" == sha256-*.att ]] && continue
-
-            tags_seen=$((tags_seen + 1))
-            if [[ "$tags_seen" -gt "$MAX_TAGS" ]]; then
-                # Clear progress line before error
-                echo -ne "\r\033[K" >&2
-                echo "  [!] Reached MAX_TAGS=$MAX_TAGS; stopping search." >&2
-                return 2
-            fi
-            
-            # Print progress to stderr
-            echo -ne "\r      -> [${tags_seen}/${MAX_TAGS}] Inspecting tag: ${tag} \033[K" >&2
-
-            # Check if tag is one of our candidates (High-confidence hit)
-            tag_sha="${tag#sha-}"
-            if matches_candidate "$tag_sha"; then
-                 # Pull manifest to get digest
-                 local mresp mdigest
-                 mresp=$(curl -sS -i -H "Authorization: Bearer ${bearer}" -H "Accept: ${accept_index}" "${base}/manifests/${tag}")
-                 mdigest=$(printf '%s' "$mresp" | awk 'BEGIN{IGNORECASE=1} /^docker-content-digest:/ {gsub(/\r/,""); print $2; exit}')
-                 if [[ -n "$mdigest" ]]; then
-                    # Find which candidate it matched
-                    for cand in "${!CANDIDATE_MAP[@]}"; do
-                        local pn="${PR_NUM_MAP[$cand]:-}"
-                        local ph="${PR_MAP[$cand]:-}"
-                        if [[ "$cand" == "$tag_sha"* ]] || [[ "$tag_sha" == "$cand"* ]] || \
-                           [[ -n "$ph" && "$ph" == "$tag_sha"* ]] || [[ -n "$ph" && "$tag_sha" == "$ph"* ]] || \
-                           [[ -n "$pn" && "$tag_sha" == "pr-$pn" ]]; then
-                            echo -ne "\r\033[K" >&2
-                            printf '%s:%s' "$cand" "$mdigest"
-                            return 0
-                        fi
-                    done
-                 fi
-            fi
-
-            # Iterative deep search (Label check)
-            local manifest_url="${base}/manifests/${tag}"
-            local mresp mbody mdigest mtype
-            mresp=$(curl -sS -i -H "Authorization: Bearer ${bearer}" -H "Accept: ${accept_index}" "$manifest_url")
-            mbody=$(printf '%s' "$mresp" | awk 'BEGIN{p=0} /^\r?$/{p=1; next} p{print}')
-            mdigest=$(printf '%s' "$mresp" | awk 'BEGIN{IGNORECASE=1} /^docker-content-digest:/ {gsub(/\r/,""); print $2; exit}')
-            mtype=$(printf '%s' "$mbody" | jq -r '.mediaType // empty' 2>/dev/null || true)
-
-            local config_digest
-            if [[ "$mtype" == *"index"* || "$mtype" == *"manifest.list"* ]]; then
-                local child
-                child=$(printf '%s' "$mbody" | jq -r '
-                    .manifests[]
-                    | select(.platform.architecture == "amd64" and (.platform.os // "") != "unknown")
-                    | .digest' 2>/dev/null | head -1)
-                [[ -z "$child" ]] && child=$(printf '%s' "$mbody" | jq -r '.manifests[0].digest' 2>/dev/null | head -1)
-                [[ -z "$child" ]] && continue
-                local child_body
-                child_body=$(curl -sS -H "Authorization: Bearer ${bearer}" -H "Accept: ${accept_manifest}" "${base}/manifests/${child}")
-                config_digest=$(printf '%s' "$child_body" | jq -r '.config.digest // empty' 2>/dev/null || true)
-            else
-                config_digest=$(printf '%s' "$mbody" | jq -r '.config.digest // empty' 2>/dev/null || true)
-            fi
-
-            [[ -z "$config_digest" ]] && continue
-
-            local revision
-            revision=$(curl -sSL -H "Authorization: Bearer ${bearer}" "${base}/blobs/${config_digest}" \
-                | jq -r '.config.Labels["org.opencontainers.image.revision"] // empty' 2>/dev/null || true)
-
-            local match_str="$revision"
-            if ! matches_candidate "$match_str"; then
-                local tag_val="${tag#sha-}"
-                if matches_candidate "$tag_val"; then
-                    match_str="$tag_val"
-                fi
-            fi
-
-            if matches_candidate "$match_str"; then
-                for cand in "${!CANDIDATE_MAP[@]}"; do
-                    local pn="${PR_NUM_MAP[$cand]:-}"
-                    local ph="${PR_MAP[$cand]:-}"
-                    if [[ "$cand" == "$match_str"* ]] || [[ "$match_str" == "$cand"* ]] || \
-                       [[ -n "$ph" && "$ph" == "$match_str"* ]] || [[ -n "$ph" && "$match_str" == "$ph"* ]] || \
-                       [[ -n "$pn" && "$match_str" == "pr-$pn" ]]; then
-                        echo -ne "\r\033[K" >&2
-                        printf '%s:%s' "$cand" "$mdigest"
-                        return 0
-                    fi
-                done
-            fi
-        done < <(printf '%s' "$body" | jq -r '.tags[]?' 2>/dev/null)
-
-        if [[ -n "$link_hdr" ]]; then
-            local next
-            next=$(printf '%s' "$link_hdr" | grep -oE '<[^>]+>' | head -1 | tr -d '<>')
-            if [[ -n "$next" ]]; then
-                url="${next}"
-                [[ "$next" == /* ]] && url="https://ghcr.io${next}"
-                continue
-            fi
-        fi
-        url=""
-    done
-    echo -ne "\r\033[K" >&2
-    return 1
-}
+# (Iterative tag search has been completely removed to enforce strict history walking
+# and prevent arbitrary image discovery security risks).
 
 # ---- Resolve each package --------------------------------------------------
 IMAGES_JSON='{}'
@@ -413,16 +283,8 @@ for pkg in "${PKG_ORDER[@]}"; do
         fi
     done
 
-    # 2. Iterative Search (Fallback)
     if [[ -z "$result" ]]; then
-        echo "      (Direct probes failed; falling back to iterative tag search...)"
-        resolve_rc=0
-        result=$(resolve_digest "$image_path" "$bearer") || resolve_rc=$?
-        
-        if [[ "$resolve_rc" -eq 2 ]]; then
-            echo "::error::max_tags ($MAX_TAGS) exceeded resolving $pkg — no image found."
-            exit 1
-        fi
+        echo "      (Direct probes failed. Iterative tag search has been disabled for security reasons.)"
     fi
     
     if [[ -z "$result" ]]; then

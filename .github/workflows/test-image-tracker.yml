@@ -137,6 +137,7 @@ jobs:
             done < <(curl -sS -H "Authorization: Bearer ${bearer}" \
               "https://ghcr.io/v2/${image_path}/tags/list?n=200" \
               | jq -r '.tags[]' \
+              | grep -E '^sha-' \
               | grep -Ev '^(buildcache|latest|prod)$' \
               | grep -Ev '\.(sig|sbom|att)$')
 
