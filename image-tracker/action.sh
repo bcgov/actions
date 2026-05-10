@@ -112,7 +112,8 @@ for sha in "${CANDIDATES[@]}"; do
     if command -v gh &>/dev/null && [[ -n "$TOKEN" ]]; then
         # 1. Try to extract PR number from commit message subject (e.g. "feat: x (#123)")
         msg=$(git log -1 --format=%s "$sha" 2>/dev/null || true)
-        pr_from_msg=$(printf '%s' "$msg" | grep -oE '\(#[0-9]+\)$' | tr -d '()#' || true)
+        # Handle messages like "title (#123)" or "title (#123) "
+        pr_from_msg=$(printf '%s' "$msg" | grep -oE '\(#[0-9]+\)\s*$' | grep -oE '[0-9]+' || true)
         
         # 2. Query GitHub API for PR metadata
         pr_data=$(GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/commits/${sha}/pulls" --jq 'if length > 0 then .[0] | [.head.sha, .number, .title] | @tsv else empty end' 2>/dev/null || true)
@@ -120,10 +121,13 @@ for sha in "${CANDIDATES[@]}"; do
         # If no PR found and it's a merge commit, try the second parent (the PR branch)
         if [[ -z "$pr_data" ]]; then
             parents=$(git show -s --format=%P "$sha" 2>/dev/null || true)
-            if [[ "$parents" == *" "* ]]; then
-                second_parent=$(printf '%s' "$parents" | awk '{print $2}')
-                pr_data=$(GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/commits/${second_parent}/pulls" --jq 'if length > 0 then .[0] | [.head.sha, .number, .title] | @tsv else empty end' 2>/dev/null || true)
-            fi
+            # Simple check for multiple parents
+            case "$parents" in
+                *" "*)
+                    second_parent=$(printf '%s' "$parents" | awk '{print $2}')
+                    pr_data=$(GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/commits/${second_parent}/pulls" --jq 'if length > 0 then .[0] | [.head.sha, .number, .title] | @tsv else empty end' 2>/dev/null || true)
+                    ;;
+            esac
         fi
 
         if [[ -n "$pr_data" ]]; then
@@ -398,28 +402,27 @@ for pkg in "${PKG_ORDER[@]}"; do
     result=""
     # 1. Forensic Trace (Primary)
     # We walk history backwards and check if a tag exists for each commit (e.g. sha-<commit>).
-    # This is a secure, O(1) forensic link from commit to build.
-    # Every hit is still cryptographically verified via OCI labels in probe_tag.
     for candidate in "${CANDIDATES[@]}"; do
-        short_sha="${candidate:0:7}"
-        result=$(probe_tag "$image_path" "sha-${short_sha}" "$bearer" || true)
-        [[ -n "$result" ]] && break
+        local pr_head="${PR_MAP[$candidate]:-}"
+        local pr_num="${PR_NUM_MAP[$candidate]:-}"
         
-        if [[ "${#candidate}" -gt 7 ]]; then
-             result=$(probe_tag "$image_path" "sha-${candidate}" "$bearer" || true)
-             [[ -n "$result" ]] && break
-        fi
-
-        pr_head="${PR_MAP[$candidate]:-}"
+        # 1. Try PR Head SHA (e.g. sha-303d1cc) - The most reliable for squash-merges
         if [[ -n "$pr_head" ]]; then
-             result=$(probe_tag "$image_path" "sha-${pr_head:0:7}" "$bearer" || true)
-             [[ -n "$result" ]] && break
+            result=$(probe_tag "$image_path" "sha-${pr_head:0:7}" "$bearer" || true)
         fi
         
-        pr_num="${PR_NUM_MAP[$candidate]:-}"
-        if [[ -n "$pr_num" ]]; then
-             result=$(probe_tag "$image_path" "pr-${pr_num}" "$bearer" || true)
-             [[ -n "$result" ]] && break
+        # 2. Try PR Number (e.g. pr-461) - Standard PR build tag
+        if [[ -z "$result" && -n "$pr_num" ]]; then
+            result=$(probe_tag "$image_path" "pr-${pr_num}" "$bearer" || true)
+        fi
+        
+        # 3. Try Commit SHA (e.g. sha-5845400) - Standard commit build tag
+        if [[ -z "$result" ]]; then
+            result=$(probe_tag "$image_path" "sha-${candidate:0:7}" "$bearer" || true)
+        fi
+        
+        if [[ -n "$result" ]]; then
+            break
         fi
     done
 
