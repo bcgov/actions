@@ -61,27 +61,28 @@ if [[ -z "$PIVOT_SHA" && "$REVISION" =~ ^[0-9a-f]{7,40}$ ]]; then
         # If no PR found and it's a merge commit, try the second parent
         if [[ -z "$pr_data" ]]; then
             parents=$(git show -s --format=%P "${REVISION}^{commit}" 2>/dev/null || true)
-            if [[ $(echo "$parents" | wc -w) -ge 2 ]]; then
-                second_parent=$(echo "$parents" | awk '{print $2}')
+            # Check if it has at least 2 parents (is a merge commit)
+            if [[ "$parents" == *" "* ]]; then
+                second_parent=$(printf '%s' "$parents" | awk '{print $2}')
                 pr_data=$(GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/commits/${second_parent}/pulls" --jq 'if length > 0 then .[0] | [.head.sha, .number, .title] | @tsv else empty end' 2>/dev/null || true)
             fi
         fi
 
         if [[ -n "$pr_data" ]]; then
-            # Use temporary file and IFS to handle spaces in title correctly
-            echo "$pr_data" > .pr_data_tmp
-            IFS=$'\t' read -r head_sha pr_num pr_title < .pr_data_tmp
-            rm .pr_data_tmp
+            # Use a here-string and IFS to handle potential spaces/tabs in the title
+            {
+                IFS=$'\t' read -r head_sha pr_num pr_title
+            } <<< "$pr_data"
 
             if [[ -n "$pr_num" ]]; then
-                echo "  [i] Revision matches PR #$pr_num. Attempting to fetch PR ref..."
+                printf "  [i] Revision matches PR #%s. Attempting to fetch PR ref...\n" "$pr_num"
                 git fetch origin "pull/${pr_num}/head:refs/remotes/origin/pr/${pr_num}" --quiet || true
                 PIVOT_SHA=$(git rev-parse --verify --quiet "${REVISION}^{commit}" 2>/dev/null || true)
                 
                 # Store the title for the resolved SHA if successful
                 if [[ -n "$PIVOT_SHA" ]]; then
                     PR_TITLE_MAP["$PIVOT_SHA"]="$pr_title"
-                    [[ -n "$head_sha" ]] && PR_TITLE_MAP["$head_sha"]="$pr_title"
+                    [[ -n "$head_sha" && "$head_sha" != "null" ]] && PR_TITLE_MAP["$head_sha"]="$pr_title"
                 fi
             fi
         fi
@@ -109,23 +110,27 @@ for sha in "${CANDIDATES[@]}"; do
     
     # Fetch PR mapping on-demand for this candidate to resolve squash-merges
     if command -v gh &>/dev/null && [[ -n "$TOKEN" ]]; then
-        # Try finding PRs for the commit SHA directly
+        # 1. Try to extract PR number from commit message subject (e.g. "feat: x (#123)")
+        msg=$(git log -1 --format=%s "$sha" 2>/dev/null || true)
+        pr_from_msg=$(printf '%s' "$msg" | grep -oE '\(#[0-9]+\)$' | tr -d '()#' || true)
+        
+        # 2. Query GitHub API for PR metadata
         pr_data=$(GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/commits/${sha}/pulls" --jq 'if length > 0 then .[0] | [.head.sha, .number, .title] | @tsv else empty end' 2>/dev/null || true)
         
         # If no PR found and it's a merge commit, try the second parent (the PR branch)
         if [[ -z "$pr_data" ]]; then
             parents=$(git show -s --format=%P "$sha" 2>/dev/null || true)
-            if [[ $(echo "$parents" | wc -w) -ge 2 ]]; then
-                second_parent=$(echo "$parents" | awk '{print $2}')
+            if [[ "$parents" == *" "* ]]; then
+                second_parent=$(printf '%s' "$parents" | awk '{print $2}')
                 pr_data=$(GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/commits/${second_parent}/pulls" --jq 'if length > 0 then .[0] | [.head.sha, .number, .title] | @tsv else empty end' 2>/dev/null || true)
             fi
         fi
 
         if [[ -n "$pr_data" ]]; then
-            # Use a temporary file and IFS to handle potential spaces/tabs in the title
-            echo "$pr_data" > .pr_data_tmp
-            IFS=$'\t' read -r head_sha pr_num pr_title < .pr_data_tmp
-            rm .pr_data_tmp
+            # Use a here-string and IFS to handle potential spaces/tabs in the title
+            {
+                IFS=$'\t' read -r head_sha pr_num pr_title
+            } <<< "$pr_data"
             
             if [[ "$head_sha" != "null" && -n "$head_sha" ]]; then
                 PR_MAP["$sha"]="$head_sha"
@@ -134,6 +139,9 @@ for sha in "${CANDIDATES[@]}"; do
                 PR_TITLE_MAP["$sha"]="$pr_title"
                 PR_TITLE_MAP["$head_sha"]="$pr_title"
             fi
+        elif [[ -n "$pr_from_msg" ]]; then
+            # Fallback to PR number from commit message if API fails
+            PR_NUM_MAP["$sha"]="$pr_from_msg"
         fi
     fi
 done
@@ -286,7 +294,7 @@ resolve_digest() {
     local bearer="$2"
     local base="https://ghcr.io/v2/${image_path}"
 
-    local owner="${image_path%%/*}"
+    local owner_orig="${REPOSITORY%%/*}"
     local pkg="${image_path#*/}"
     local pkg_enc="${pkg//\//%2F}"
     
@@ -294,9 +302,9 @@ resolve_digest() {
     # We fetch the most recent digests from the GitHub API first because it's sorted by date.
     local digests=""
     if command -v gh &>/dev/null && [[ -n "$TOKEN" ]]; then
-        digests=$(GH_TOKEN="$TOKEN" gh api "/orgs/${owner}/packages/container/${pkg_enc}/versions?per_page=100" --jq '.[].name' 2>/dev/null || true)
+        digests=$(GH_TOKEN="$TOKEN" gh api "/orgs/${owner_orig}/packages/container/${pkg_enc}/versions?per_page=100" --jq '.[].name' 2>/dev/null || true)
         if [[ -z "$digests" ]]; then
-            digests=$(GH_TOKEN="$TOKEN" gh api "/users/${owner}/packages/container/${pkg_enc}/versions?per_page=100" --jq '.[].name' 2>/dev/null || true)
+            digests=$(GH_TOKEN="$TOKEN" gh api "/users/${owner_orig}/packages/container/${pkg_enc}/versions?per_page=100" --jq '.[].name' 2>/dev/null || true)
         fi
     fi
     
