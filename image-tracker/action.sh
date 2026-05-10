@@ -47,6 +47,7 @@ fi
 # On-demand PR map for squash-merge resolution
 declare -A PR_MAP
 declare -A PR_NUM_MAP
+declare -A PR_TITLE_MAP
 
 # Get the "pivot" commit (the starting point for history walking)
 PIVOT_SHA=$(git rev-parse --verify --quiet "${REVISION}^{commit}" 2>/dev/null || true)
@@ -55,13 +56,23 @@ PIVOT_SHA=$(git rev-parse --verify --quiet "${REVISION}^{commit}" 2>/dev/null ||
 if [[ -z "$PIVOT_SHA" && "$REVISION" =~ ^[0-9a-f]{7,40}$ ]]; then
     echo "  [w] Revision $REVISION not found in local history. Checking for associated PRs..."
     if command -v gh &>/dev/null && [[ -n "$TOKEN" ]]; then
-        pr_data=$(GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/commits/${REVISION}/pulls" --jq 'if length > 0 then .[0] | [.head.sha, .number] | @tsv else empty end' 2>/dev/null || true)
+        pr_data=$(GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/commits/${REVISION}/pulls" --jq 'if length > 0 then .[0] | [.head.sha, .number, .title] | @tsv else empty end' 2>/dev/null || true)
         if [[ -n "$pr_data" ]]; then
-            read -r head_sha pr_num <<< "$pr_data"
+            # Use temporary file to handle spaces in title correctly
+            echo "$pr_data" > .pr_data_tmp
+            read -r head_sha pr_num pr_title < .pr_data_tmp
+            rm .pr_data_tmp
+
             if [[ -n "$pr_num" ]]; then
                 echo "  [i] Revision matches PR #$pr_num. Attempting to fetch PR ref..."
                 git fetch origin "pull/${pr_num}/head:refs/remotes/origin/pr/${pr_num}" --quiet || true
                 PIVOT_SHA=$(git rev-parse --verify --quiet "${REVISION}^{commit}" 2>/dev/null || true)
+                
+                # Store the title for the resolved SHA if successful
+                if [[ -n "$PIVOT_SHA" ]]; then
+                    PR_TITLE_MAP["$PIVOT_SHA"]="$pr_title"
+                    [[ -n "$head_sha" ]] && PR_TITLE_MAP["$head_sha"]="$pr_title"
+                fi
             fi
         fi
     fi
@@ -88,13 +99,19 @@ for sha in "${CANDIDATES[@]}"; do
     
     # Fetch PR mapping on-demand for this candidate to resolve squash-merges
     if command -v gh &>/dev/null && [[ -n "$TOKEN" ]]; then
-        pr_data=$(GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/commits/${sha}/pulls" --jq 'if length > 0 then .[0] | [.head.sha, .number] | @tsv else empty end' 2>/dev/null || true)
+        pr_data=$(GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/commits/${sha}/pulls" --jq 'if length > 0 then .[0] | [.head.sha, .number, .title] | @tsv else empty end' 2>/dev/null || true)
         if [[ -n "$pr_data" ]]; then
-            read -r head_sha pr_num <<< "$pr_data"
+            # Use a temporary file to handle potential spaces in the title
+            echo "$pr_data" > .pr_data_tmp
+            read -r head_sha pr_num pr_title < .pr_data_tmp
+            rm .pr_data_tmp
+            
             if [[ "$head_sha" != "null" && -n "$head_sha" ]]; then
                 PR_MAP["$sha"]="$head_sha"
                 PR_NUM_MAP["$sha"]="$pr_num"
                 PR_NUM_MAP["$head_sha"]="$pr_num"
+                PR_TITLE_MAP["$sha"]="$pr_title"
+                PR_TITLE_MAP["$head_sha"]="$pr_title"
             fi
         fi
     fi
@@ -217,9 +234,11 @@ probe_tag() {
                     if [[ "$cand" == "$revision"* ]] || [[ "$revision" == "$cand"* ]] || \
                        [[ -n "$ph" && "$ph" == "$revision"* ]] || [[ -n "$revision" && "$revision" == "$ph"* ]] || \
                        [[ -n "$pn" && "$revision" == "pr-$pn" ]]; then
-                        # Get the commit message for this candidate
-                        local msg
-                        msg=$(git log -1 --format=%s "$cand" 2>/dev/null || echo "Unknown commit message")
+                        # Prefer the PR title if we have it, otherwise fallback to git log
+                        local msg="${PR_TITLE_MAP[$cand]:-}"
+                        if [[ -z "$msg" || "$msg" == "null" ]]; then
+                            msg=$(git log -1 --format=%s "$cand" 2>/dev/null || echo "Unknown commit message")
+                        fi
                         
                         # Return all metadata pipe-separated
                         printf '%s|%s|%s|%s|%s' "$cand" "$mdigest" "$created" "$pn" "$msg"
