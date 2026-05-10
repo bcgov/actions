@@ -102,6 +102,8 @@ declare -A PR_NUM_MAP
 declare -A PR_TITLE_MAP
 declare -A CANDIDATE_MAP
 declare -A IMAGE_PATHS
+declare -A IMAGES
+declare -a MISSING
 declare -a PKG_ORDER
 
 # ---- Git Ancestry Resolution -----------------------------------------------
@@ -435,6 +437,7 @@ for pkg in "${PKG_ORDER[@]}"; do
         } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
     fi
     
+    IMAGES["$pkg"]="$res"
     IMAGES_JSON=$(printf '%s' "$IMAGES_JSON" | jq -c --arg k "$pkg" --arg v "$ref" '.[$k] = $v')
 done
 
@@ -451,7 +454,8 @@ if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
         first_payload="${IMAGES["$first_pkg"]:-}"
         if [[ -n "$first_payload" ]]; then
             { IFS='|' read -r _ r_digest _ _ _; } <<< "$first_payload"
-            printf "image=ghcr.io/%s@%s\n" "${IMAGE_PATHS[$first_pkg]}" "$r_digest" >> "$GITHUB_OUTPUT"
+            local f_path="${IMAGE_PATHS["$first_pkg"]:-}"
+            printf "image=ghcr.io/%s@%s\n" "$f_path" "$r_digest" >> "$GITHUB_OUTPUT"
             printf "digest=%s\n" "$r_digest" >> "$GITHUB_OUTPUT"
             
             # JSON map of digests only
