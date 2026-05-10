@@ -109,7 +109,11 @@ for sha in "${CANDIDATES[@]}"; do
     
     # Fetch PR mapping on-demand for this candidate to resolve squash-merges
     if command -v gh &>/dev/null && [[ -n "$TOKEN" ]]; then
-        # Try finding PRs for the commit SHA directly
+        # 1. Try to extract PR number from commit message subject (e.g. "feat: x (#123)")
+        msg=$(git log -1 --format=%s "$sha" 2>/dev/null || true)
+        pr_from_msg=$(echo "$msg" | grep -oE '\(#[0-9]+\)$' | tr -d '()#' || true)
+        
+        # 2. Query GitHub API for PR metadata
         pr_data=$(GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/commits/${sha}/pulls" --jq 'if length > 0 then .[0] | [.head.sha, .number, .title] | @tsv else empty end' 2>/dev/null || true)
         
         # If no PR found and it's a merge commit, try the second parent (the PR branch)
@@ -134,6 +138,9 @@ for sha in "${CANDIDATES[@]}"; do
                 PR_TITLE_MAP["$sha"]="$pr_title"
                 PR_TITLE_MAP["$head_sha"]="$pr_title"
             fi
+        elif [[ -n "$pr_from_msg" ]]; then
+            # Fallback to PR number from commit message if API fails
+            PR_NUM_MAP["$sha"]="$pr_from_msg"
         fi
     fi
 done
@@ -286,6 +293,7 @@ resolve_digest() {
     local bearer="$2"
     local base="https://ghcr.io/v2/${image_path}"
 
+    local owner_orig="${REPOSITORY%%/*}"
     local owner="${image_path%%/*}"
     local pkg="${image_path#*/}"
     local pkg_enc="${pkg//\//%2F}"
@@ -294,9 +302,9 @@ resolve_digest() {
     # We fetch the most recent digests from the GitHub API first because it's sorted by date.
     local digests=""
     if command -v gh &>/dev/null && [[ -n "$TOKEN" ]]; then
-        digests=$(GH_TOKEN="$TOKEN" gh api "/orgs/${owner}/packages/container/${pkg_enc}/versions?per_page=100" --jq '.[].name' 2>/dev/null || true)
+        digests=$(GH_TOKEN="$TOKEN" gh api "/orgs/${owner_orig}/packages/container/${pkg_enc}/versions?per_page=100" --jq '.[].name' 2>/dev/null || true)
         if [[ -z "$digests" ]]; then
-            digests=$(GH_TOKEN="$TOKEN" gh api "/users/${owner}/packages/container/${pkg_enc}/versions?per_page=100" --jq '.[].name' 2>/dev/null || true)
+            digests=$(GH_TOKEN="$TOKEN" gh api "/users/${owner_orig}/packages/container/${pkg_enc}/versions?per_page=100" --jq '.[].name' 2>/dev/null || true)
         fi
     fi
     
