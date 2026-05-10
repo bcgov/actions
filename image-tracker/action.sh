@@ -218,13 +218,16 @@ probe_tag() {
                 fi
             fi
             
-            # Check label. If tag name matches a candidate, we can also fallback to that if label is somehow missing but tag exists.
+            # Prefer the OCI revision label, but if it is missing or does not match any
+            # candidate, allow a matching sha-derived tag value to stand in. This is safe
+            # because we only accept the tag when it matches one of the known candidates.
             if matches_candidate "$match_str"; then
                 # Find which candidate it matched
                 for cand in "${!CANDIDATE_MAP[@]}"; do
                     local pn="${PR_NUM_MAP[$cand]:-}"
+                    local ph="${PR_MAP[$cand]:-}"
                     if [[ "$cand" == "$match_str"* ]] || [[ "$match_str" == "$cand"* ]] || \
-                       [[ "${PR_MAP[$cand]:-}" == "$match_str"* ]] || [[ "$match_str" == "${PR_MAP[$cand]:-}"* ]] || \
+                       [[ -n "$ph" && "$ph" == "$match_str"* ]] || [[ -n "$ph" && "$match_str" == "$ph"* ]] || \
                        [[ -n "$pn" && "$match_str" == "pr-$pn" ]]; then
                         printf '%s:%s' "$cand" "$mdigest"
                         return 0
@@ -283,8 +286,9 @@ resolve_digest() {
                     # Find which candidate it matched
                     for cand in "${!CANDIDATE_MAP[@]}"; do
                         local pn="${PR_NUM_MAP[$cand]:-}"
+                        local ph="${PR_MAP[$cand]:-}"
                         if [[ "$cand" == "$tag_sha"* ]] || [[ "$tag_sha" == "$cand"* ]] || \
-                           [[ "${PR_MAP[$cand]:-}" == "$tag_sha"* ]] || [[ "$tag_sha" == "${PR_MAP[$cand]:-}"* ]] || \
+                           [[ -n "$ph" && "$ph" == "$tag_sha"* ]] || [[ -n "$ph" && "$tag_sha" == "$ph"* ]] || \
                            [[ -n "$pn" && "$tag_sha" == "pr-$pn" ]]; then
                             printf '%s:%s' "$cand" "$mdigest"
                             return 0
@@ -334,8 +338,9 @@ resolve_digest() {
             if matches_candidate "$match_str"; then
                 for cand in "${!CANDIDATE_MAP[@]}"; do
                     local pn="${PR_NUM_MAP[$cand]:-}"
+                    local ph="${PR_MAP[$cand]:-}"
                     if [[ "$cand" == "$match_str"* ]] || [[ "$match_str" == "$cand"* ]] || \
-                       [[ "${PR_MAP[$cand]:-}" == "$match_str"* ]] || [[ "$match_str" == "${PR_MAP[$cand]:-}"* ]] || \
+                       [[ -n "$ph" && "$ph" == "$match_str"* ]] || [[ -n "$ph" && "$match_str" == "$ph"* ]] || \
                        [[ -n "$pn" && "$match_str" == "pr-$pn" ]]; then
                         printf '%s:%s' "$cand" "$mdigest"
                         return 0
