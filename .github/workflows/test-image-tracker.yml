@@ -51,7 +51,7 @@ jobs:
           python3 -c "import yaml; yaml.safe_load(open('image-tracker/action.yml'))"
 
   functional:
-    name: Functional Tests (Real-World)
+    name: Functional Tests
     needs: unit
     runs-on: ubuntu-latest
     permissions:
