@@ -60,11 +60,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        repo:
+          - bcgov/quickstart-openshift
+          - miniontech/vexilon
         include:
-          - repo: MinionTech/vexilon
-            packages: agnav
           - repo: bcgov/quickstart-openshift
-            packages: frontend,backend
+            packages: frontend, backend
+          - repo: miniontech/vexilon
+            packages: agnav
     env:
       TARGET_REPO: ${{ matrix.repo }}
       TARGET_PACKAGES: ${{ matrix.packages }}
