@@ -236,7 +236,8 @@ probe_tag() {
     local base="https://ghcr.io/v2/${image_path}"
     local accept="application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json, */*"
     
-    local hfile=$(mktemp)
+    local hfile
+    hfile=$(mktemp)
     local mbody mdigest mtype
     
     mbody=$(curl -sS -L -D "$hfile" -H "Authorization: Bearer ${bearer}" -H "Accept: ${accept}" "${base}/manifests/${tag}")
@@ -258,7 +259,8 @@ probe_tag() {
 
     # Multi-arch Index Navigation
     if [[ "$mtype" == *"index"* || "$mtype" == *"manifest.list"* ]]; then
-        local cd=$(printf '%s' "$mbody" | jq -r '.manifests[] | select(.platform.architecture == "amd64" and (.platform.os // "") != "unknown") | .digest' 2>/dev/null | head -1)
+        local cd
+        cd=$(printf '%s' "$mbody" | jq -r '.manifests[] | select(.platform.architecture == "amd64" and (.platform.os // "") != "unknown") | .digest' 2>/dev/null | head -1)
         [[ -z "$cd" ]] && cd=$(printf '%s' "$mbody" | jq -r '.manifests[0].digest' 2>/dev/null | head -1)
         if [[ -n "$cd" ]]; then
             mbody=$(curl -sS -L -H "Authorization: Bearer ${bearer}" -H "Accept: ${accept}" "${base}/manifests/${cd}")
@@ -269,9 +271,11 @@ probe_tag() {
 
     # Config Blob Fallback
     if [[ -z "$revision" || "$revision" == "null" ]]; then
-        local cd_final=$(printf '%s' "$mbody" | jq -r '.config.digest // empty' 2>/dev/null || true)
+        local cd_final
+        cd_final=$(printf '%s' "$mbody" | jq -r '.config.digest // empty' 2>/dev/null || true)
         if [[ -n "$cd_final" ]]; then
-            local config=$(curl -sSL -H "Authorization: Bearer ${bearer}" "${base}/blobs/${cd_final}")
+            local config
+            config=$(curl -sSL -H "Authorization: Bearer ${bearer}" "${base}/blobs/${cd_final}")
             revision=$(printf '%s' "$config" | jq -r '.config.Labels["org.opencontainers.image.revision"] // empty' 2>/dev/null || true)
             [[ -z "$created" || "$created" == "null" ]] && created=$(printf '%s' "$config" | jq -r '.config.Labels["org.opencontainers.image.created"] // empty' 2>/dev/null || true)
         fi
@@ -345,7 +349,8 @@ resolve_digest() {
                 fi
             done
 
-            local res=$(probe_tag "$image_path" "$probe_ref" "$bearer" || true)
+            local res
+            res=$(probe_tag "$image_path" "$probe_ref" "$bearer" || true)
             if [[ -n "$res" ]]; then echo -ne "\r\033[K" >&2; echo "$res"; return 0; fi
         done <<< "$raw_data"
     fi
@@ -445,7 +450,7 @@ if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
     if [[ -n "$first_pkg" ]]; then
         first_payload="${IMAGES["$first_pkg"]:-}"
         if [[ -n "$first_payload" ]]; then
-            { IFS='|' read -r r_sha r_digest r_created r_pr r_msg; } <<< "$first_payload"
+            { IFS='|' read -r _ r_digest _ _ _; } <<< "$first_payload"
             printf "image=ghcr.io/%s@%s\n" "${IMAGE_PATHS[$first_pkg]}" "$r_digest" >> "$GITHUB_OUTPUT"
             printf "digest=%s\n" "$r_digest" >> "$GITHUB_OUTPUT"
             
