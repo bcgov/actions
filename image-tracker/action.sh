@@ -72,11 +72,11 @@ MAX_TAGS="${MAX_TAGS:-${INPUT_MAX_TAGS:-500}}"
 MAX_DEPTH="${MAX_DEPTH:-${INPUT_MAX_DEPTH:-1}}"
 
 # ---- Validation ------------------------------------------------------------
-if [[ ! "$MAX_TAGS" =~ ^[0-9]+$ ]]; then
+if [[ ! "$MAX_TAGS" =~ ^[0-9]+$ ]] || [[ "$MAX_TAGS" -le 0 ]]; then
     log_error "MAX_TAGS must be a positive integer."
     exit 1
 fi
-if [[ ! "$MAX_DEPTH" =~ ^[0-9]+$ ]]; then
+if [[ ! "$MAX_DEPTH" =~ ^[0-9]+$ ]] || [[ "$MAX_DEPTH" -le 0 ]]; then
     log_error "MAX_DEPTH must be a positive integer."
     exit 1
 fi
@@ -284,13 +284,19 @@ probe_tag() {
              local ph="${PR_MAP[$cand]:-}"
              local pn="${PR_NUM_MAP[$cand]:-}"
              
-             # Match if SHA prefix matches OR if it's a known PR tag OR if it's a digest match for the candidate
-             if [[ "$tag" == "sha-${cand:0:7}" || "$tag" == "pr-$pn" || ( -n "$ph" && "$tag" == "sha-${ph:0:7}" ) || "$revision" == "$cand"* ]]; then
+             # Decoupled decision: does the revision label match this candidate?
+             if [[ "$revision" == "$cand"* || ( -n "$ph" && "$revision" == "$ph"* ) ]]; then
                  local title="${PR_TITLE_MAP[$cand]:-}"
                  [[ -z "$title" || "$title" == "null" ]] && title=$(git log -1 --format=%s "$cand" 2>/dev/null || echo "Unknown commit message")
                  
+                 local display_ref="$tag"
+                 # Only use the tag name in the log if it follows our known patterns
+                 if [[ "$tag" == "sha-${cand:0:7}" || "$tag" == "pr-$pn" || ( -n "$ph" && "$tag" == "sha-${ph:0:7}" ) ]]; then
+                     display_ref="$tag"
+                 fi
+
                  # 1. Stderr for human logs
-                 local audit_msg="[✓] HIT: $tag ($mdigest)"
+                 local audit_msg="[✓] HIT: $display_ref ($mdigest)"
                  [[ -n "$pn" ]] && audit_msg+=" | PR #$pn"
                  [[ -n "$title" ]] && audit_msg+=": $title"
                  [[ -n "$created" ]] && audit_msg+=" | Built: $created"
