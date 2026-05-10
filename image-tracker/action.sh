@@ -51,8 +51,8 @@ log_endgroup() {
 if [[ -z "${REPOSITORY:-${INPUT_REPOSITORY:-${GITHUB_REPOSITORY:-}}}" ]]; then
     remote_url=$(git remote get-url origin 2>/dev/null || true)
     if [[ "$remote_url" == *"github.com"* ]]; then
-        # Parse owner/repo from https://github.com/owner/repo or git@github.com:owner/repo
-        REPOSITORY=$(printf '%s' "$remote_url" | sed -E 's/.*github.com[:\/](.*).git/\1/' | sed -E 's/.*github.com[:\/](.*)/\1/')
+        # Parse owner/repo and strip .git
+        REPOSITORY=$(printf '%s' "$remote_url" | sed -E 's|.*github.com[:/]([^/]+/[^/.]+).*|\1|')
     fi
 fi
 REPOSITORY="${REPOSITORY:-${INPUT_REPOSITORY:-${GITHUB_REPOSITORY:-}}}"
@@ -67,11 +67,19 @@ fi
 # 3. Other Settings
 REVISION="${REVISION:-${INPUT_REVISION:-HEAD}}"
 DIR="${DIR:-${INPUT_DIR:-.}}"
-TOKEN="${TOKEN:-${GITHUB_TOKEN:-}}"
+TOKEN="${TOKEN:-${INPUT_TOKEN:-${GITHUB_TOKEN:-}}}"
 MAX_TAGS="${MAX_TAGS:-${INPUT_MAX_TAGS:-500}}"
-MAX_DEPTH="${MAX_DEPTH:-${INPUT_MAX_DEPTH:-20}}"
+MAX_DEPTH="${MAX_DEPTH:-${INPUT_MAX_DEPTH:-1}}"
 
 # ---- Validation ------------------------------------------------------------
+if [[ ! "$MAX_TAGS" =~ ^[0-9]+$ ]]; then
+    log_error "MAX_TAGS must be a positive integer."
+    exit 1
+fi
+if [[ ! "$MAX_DEPTH" =~ ^[0-9]+$ ]]; then
+    log_error "MAX_DEPTH must be a positive integer."
+    exit 1
+fi
 if [[ -z "$PACKAGE_INPUT" ]]; then
     log_error "Missing required package names. Usage: $0 pkg1 [pkg2 ...]"
     exit 1
@@ -172,6 +180,11 @@ while IFS= read -r pkg; do
     PKG_ORDER+=("$pkg")
 done <<< "$package_list"
 
+if [[ ${#PKG_ORDER[@]} -eq 0 ]]; then
+    log_error "PACKAGE_INPUT did not contain any valid package names."
+    exit 1
+fi
+
 registry_token() {
     local repo="$1"
     if [[ -n "${TOKEN:-}" ]]; then
@@ -270,13 +283,21 @@ probe_tag() {
         for cand in "${!CANDIDATE_MAP[@]}"; do
              local ph="${PR_MAP[$cand]:-}"
              local pn="${PR_NUM_MAP[$cand]:-}"
-             if [[ "$tag" == "sha-${cand:0:7}" || "$tag" == "pr-$pn" || ( -n "$ph" && "$tag" == "sha-${ph:0:7}" ) ]]; then
+             
+             # Match if SHA prefix matches OR if it's a known PR tag OR if it's a digest match for the candidate
+             if [[ "$tag" == "sha-${cand:0:7}" || "$tag" == "pr-$pn" || ( -n "$ph" && "$tag" == "sha-${ph:0:7}" ) || "$revision" == "$cand"* ]]; then
                  local title="${PR_TITLE_MAP[$cand]:-}"
+                 [[ -z "$title" || "$title" == "null" ]] && title=$(git log -1 --format=%s "$cand" 2>/dev/null || echo "Unknown commit message")
+                 
+                 # 1. Stderr for human logs
                  local audit_msg="[✓] HIT: $tag ($mdigest)"
                  [[ -n "$pn" ]] && audit_msg+=" | PR #$pn"
                  [[ -n "$title" ]] && audit_msg+=": $title"
                  [[ -n "$created" ]] && audit_msg+=" | Built: $created"
-                 echo "$audit_msg"
+                 log_info "$audit_msg"
+                 
+                 # 2. Stdout for machine-readable pipe-delimited payload
+                 printf '%s|%s|%s|%s|%s' "$cand" "$mdigest" "$created" "$pn" "$title"
                  return 0
              fi
         done
@@ -370,7 +391,16 @@ for pkg in "${PKG_ORDER[@]}"; do
 
     if [[ -z "$res" ]]; then
         log_info "Forensic trace missed; falling back to iterative scan..."
-        res=$(resolve_digest "$path" "$bearer" || true)
+        if res=$(resolve_digest "$path" "$bearer"); then
+             :
+        else
+             rc=$?
+             if [[ $rc -eq 2 ]]; then
+                 log_error "Iterative scan stopped for $path because MAX_TAGS ($MAX_TAGS) was exceeded. Increase MAX_TAGS to continue."
+                 exit 2
+             fi
+             res=""
+        fi
     fi
 
     if [[ -z "$res" ]]; then
@@ -402,6 +432,22 @@ log_endgroup
 # Output results
 if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
     printf "images=%s\n" "$IMAGES_JSON" >> "$GITHUB_OUTPUT"
+    
+    # Restore legacy outputs for backward compatibility
+    # If multiple packages, these will represent the FIRST one (legacy behavior)
+    first_pkg="${PKG_ORDER[0]:-}"
+    if [[ -n "$first_pkg" ]]; then
+        first_payload="${IMAGES["$first_pkg"]:-}"
+        if [[ -n "$first_payload" ]]; then
+            { IFS='|' read -r r_sha r_digest r_created r_pr r_msg; } <<< "$first_payload"
+            printf "image=ghcr.io/%s@%s\n" "${IMAGE_PATHS[$first_pkg]}" "$r_digest" >> "$GITHUB_OUTPUT"
+            printf "digest=%s\n" "$r_digest" >> "$GITHUB_OUTPUT"
+            
+            # JSON map of digests only
+            DIGESTS_JSON=$(printf '%s' "$IMAGES_JSON" | jq -c 'map_values(split("@")[1])')
+            printf "digests=%s\n" "$DIGESTS_JSON" >> "$GITHUB_OUTPUT"
+        fi
+    fi
 else
     printf "\n--- Results ---\n%s\n" "$IMAGES_JSON"
 fi
