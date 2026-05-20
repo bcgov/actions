@@ -42,7 +42,7 @@ inputs:
   repository:
     description: Non-default repo to clone
     default: ${{ github.repository }}
-  token:
+  github_token:
     description: Specify token (GH or PAT), instead of inheriting one from the calling workflow
     default: ${{ github.token }}
   secrets:
@@ -221,7 +221,7 @@ runs:
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
-        password: ${{ inputs.token }}
+        password: ${{ inputs.github_token }}
 
     # If a build is not required, reuse a previous image
     - name: Recycle/retag Previous Images

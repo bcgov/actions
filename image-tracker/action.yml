@@ -18,7 +18,7 @@ inputs:
   dir:
     description: 'Working directory containing the git repository.'
     default: '.'
-  token:
+  github_token:
     description: 'GitHub token for GHCR auth (defaults to github.token).'
     default: ${{ github.token }}
   max_tags:
@@ -60,7 +60,7 @@ runs:
         INPUT_REVISION: ${{ inputs.revision }}
         INPUT_REPOSITORY: ${{ inputs.repository }}
         INPUT_DIR: ${{ inputs.dir }}
-        INPUT_TOKEN: ${{ inputs.token }}
+        INPUT_TOKEN: ${{ inputs.github_token }}
         INPUT_MAX_TAGS: ${{ inputs.max_tags }}
         INPUT_MAX_DEPTH: ${{ inputs.max_depth }}
       run: bash ${{ github.action_path }}/action.sh
