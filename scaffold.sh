@@ -45,14 +45,14 @@ $DESCRIPTION
 \`\`\`yaml
 - uses: bcgov/actions/$NAME@v1
   with:
-    token: \${{ secrets.GITHUB_TOKEN }}
+    github_token: \${{ secrets.GITHUB_TOKEN }}
 \`\`\`
 
 ## Inputs
 
 | Name | Description | Default |
 |------|-------------|---------|
-| \`token\` | GitHub token | \`\${{ github.token }}\` |
+| \`github_token\` | GitHub token | \`\${{ github.token }}\` |
 | \`debug\` | Enable debug logging | \`false\` |
 EOF
 
