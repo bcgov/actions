@@ -5,7 +5,7 @@ branding:
   color: "blue"
 
 inputs:
-  token:
+  github_token:
     description: "GitHub token (defaults to github.token)"
     default: "${{ github.token }}"
   debug:
@@ -20,7 +20,7 @@ runs:
   steps:
     - shell: bash
       env:
-        INPUT_TOKEN: "${{ inputs.token }}"
+        INPUT_TOKEN: "${{ inputs.github_token }}"
         INPUT_DEBUG: "${{ inputs.debug }}"
       run: |
         "${{ github.action_path }}/action.sh"

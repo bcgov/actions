@@ -77,7 +77,7 @@ Only GitHub Container Registry (ghcr.io) is supported so far.
     sbom: 'true'
 
     # Specify token (GH or PAT), instead of inheriting one from the calling workflow
-    token: ${{ secrets.GITHUB_TOKEN }}
+    github_token: ${{ secrets.GITHUB_TOKEN }}
 
     # Multiline input for secrets to mount.
     # https://docs.docker.com/build/ci/github-actions/secrets/#secret-mounts
@@ -149,7 +149,7 @@ builds:
           ${{ github.sha }}
           latest
         tag_fallback: test
-        token: ${{ secrets.GITHUB_TOKEN }}
+        github_token: ${{ secrets.GITHUB_TOKEN }}
         triggers: ('frontend/')
 ```
 
@@ -177,7 +177,7 @@ builds:
         tags: ${{ github.event.number }}
         tag_fallback: test
         repository: bcgov/nr-quickstart-typescript
-        token: ${{ secrets.GITHUB_TOKEN }}
+        github_token: ${{ secrets.GITHUB_TOKEN }}
         triggers: ${{ matrix.triggers }}
 
 ```
