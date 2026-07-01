@@ -20,7 +20,7 @@ The build will return a PR number as output.
 
 ```yaml
 - id: vars
-  uses: bcgov/actions/get-pr@v1
+  uses: bcgov/action-get-pr@vX.Y.Z
 
 - name: Echo PR number
   run: echo "PR: ${{ steps.vars.outputs.pr }}"
@@ -32,7 +32,7 @@ Private repositories may need to provide a GitHub token.
 
 ```yaml
 - id: vars
-  uses: bcgov/actions/get-pr@v1
+  uses: bcgov/action-get-pr@vX.Y.Z
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
 
