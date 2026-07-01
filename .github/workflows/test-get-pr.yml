@@ -97,20 +97,17 @@ jobs:
           echo "$output"
           echo "$output" | grep -q "PR: 39" || (echo "FAILED: Workflow Dispatch event" && exit 1)
 
-      # Scenario 6: Direct Push / Cowboy Protection fail-fast test
-      - name: Test Direct Push (Cowboy Fail-Fast)
+      # Scenario 6: Direct Push / Cowboy Protection fallback test (must not fail, returns empty PR)
+      - name: Test Direct Push (Cowboy Fallback)
         env:
           TEST_EVENT_NAME: push
           TEST_EVENT_AFTER: 0000000000000000000000000000000000000000
           INPUT_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TEST_REPOSITORY: bcgov/action-get-pr
         run: |
-          if node get-pr/index.js; then
-            echo "FAILED: Direct push should have failed"
-            exit 1
-          else
-            echo "PASSED: Direct push failed as expected!"
-          fi
+          output=$(node get-pr/index.js)
+          echo "$output"
+          echo "$output" | grep -E -q "PR:[[:space:]]*$" || (echo "FAILED: Direct push should have returned empty PR" && exit 1)
 
       # Scenario 7: Issues ignore list filtering tests (rules.yml)
       - name: Test issue ignore list filtering

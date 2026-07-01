@@ -44,7 +44,7 @@ async function main() {
 
     // Load ignore rules dynamically from rules.yml (dependency-free parser)
     let ignoreTitles = [];
-    const rulesPath = 'rules.yml';
+    const rulesPath = require('path').join(__dirname, 'rules.yml');
     if (fs.existsSync(rulesPath)) {
       try {
         const content = fs.readFileSync(rulesPath, 'utf8');
@@ -73,8 +73,8 @@ async function main() {
         }
       }
     }
-    console.error('Error: Standard issues do not have pull request numbers.');
-    process.exit(1);
+    logDebug('No PR number for standard issues; returning empty output.');
+    pr = '';
   } else if (eventName === 'merge_group') {
     console.log('Event type: merge queue');
     // Sourced natively from event payload
@@ -235,14 +235,14 @@ async function main() {
       }
     }
   } else {
-    console.error(`Event type: unknown or unexpected event '${eventName}'`);
-    process.exit(1);
+    logDebug(`Event type: unknown or unexpected event '${eventName}'`);
+    pr = '';
   }
 
-  // Validate PR
+  // Validate PR (keep action non-fatal; output empty when not resolvable)
   if (!/^\d+$/.test(pr)) {
-    console.error('Error: No valid PR number could be resolved for this event.');
-    process.exit(1);
+    logDebug('No valid PR number could be resolved for this event.');
+    pr = '';
   }
 
   console.log('Summary ---');
