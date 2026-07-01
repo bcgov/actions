@@ -1,3 +1,9 @@
+<!-- Badges -->
+[![Issues](https://img.shields.io/github/issues/bcgov/action-get-pr)](/../../issues)
+[![Pull Requests](https://img.shields.io/github/issues-pr/bcgov/action-get-pr)](/../../pulls)
+[![MIT License](https://img.shields.io/github/license/bcgov/action-get-pr.svg)](/LICENSE)
+[![Lifecycle](https://img.shields.io/badge/Lifecycle-Experimental-339999)](https://github.com/bcgov/repomountie/blob/master/doc/lifecycle-badges.md)
+
 # Get PR Number - Merges and Queues
 
 PR numbers are easy to come by in PRs, but passing those same numbers to releases, merge queues and PR-backed merges can get tricky. This action makes that convenient in the following cases:
@@ -15,6 +21,18 @@ The build will return a PR number as output.
 ```yaml
 - id: vars
   uses: bcgov/actions/get-pr@v1
+
+- name: Echo PR number
+  run: echo "PR: ${{ steps.vars.outputs.pr }}"
+```
+
+# Private Repositories
+
+Private repositories may need to provide a GitHub token.
+
+```yaml
+- id: vars
+  uses: bcgov/actions/get-pr@v1
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -22,15 +40,5 @@ The build will return a PR number as output.
   run: echo "PR: ${{ steps.vars.outputs.pr }}"
 ```
 
-## Inputs
-
-| Name | Description | Default |
-|------|-------------|---------|
-| `github_token` | GitHub token | `${{ github.token }}` |
-| `debug` | Enable debug logging | `false` |
-
-## Outputs
-
-| Name | Description |
-|------|-------------|
-| `pr` | Associated pull request number |
+<!-- # Acknowledgements
+This Action is provided courtesy of Forestry Digital Services, part of the Government of British Columbia. -->
