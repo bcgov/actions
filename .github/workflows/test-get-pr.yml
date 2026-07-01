@@ -1,0 +1,130 @@
+name: Test Get PR
+
+on:
+  pull_request:
+    paths:
+      - 'get-pr/**'
+      - '.github/workflows/test-get-pr.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'get-pr/**'
+      - '.github/workflows/test-get-pr.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  get-pr:
+    name: Run Local Get PR
+    runs-on: ubuntu-24.04
+    outputs:
+      pr: ${{ steps.vars.outputs.pr }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: vars
+        uses: ./get-pr
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+  verify-pr:
+    name: Verify PR number
+    needs: [get-pr]
+    env:
+      pr: ${{ needs.get-pr.outputs.pr }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Verify PR number
+        run: |
+          [ ! -z "${{ env.pr }}" ] || \
+            (echo "No PR number" && exit 1)
+          echo "PR: ${{ env.pr }}"
+
+  test-scenarios:
+    name: Test Scenarios
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      # Scenario 1: Mock a standard pull request event
+      - name: Test PR event
+        run: |
+          echo '{"pull_request": {"number": 40}}' > /tmp/event-pr.json
+          TEST_EVENT_NAME=pull_request TEST_EVENT_PATH=/tmp/event-pr.json node get-pr/index.js > output.txt
+          cat output.txt
+          grep -q "PR: 40" output.txt || (echo "FAILED: PR event" && exit 1)
+
+      # Scenario 3: Live API integration test for a Push event (PR Merge)
+      # We target the actual squash-merged commit SHA of PR #39 in action-get-pr: 8f9a16a1f7a7574b10e2fb473bfef0c4c4fff3d6.
+      - name: Test Push event (PR Merge)
+        env:
+          TEST_EVENT_NAME: push
+          TEST_EVENT_AFTER: 8f9a16a1f7a7574b10e2fb473bfef0c4c4fff3d6
+          INPUT_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TEST_REPOSITORY: bcgov/action-get-pr
+        run: |
+          output=$(node get-pr/index.js)
+          echo "$output"
+          echo "$output" | grep -q "PR: 39" || (echo "FAILED: Push event" && exit 1)
+
+      # Scenario 4: Live API integration test for a Release event
+      - name: Test Release event (PR Merge)
+        env:
+          TEST_EVENT_NAME: release
+          TEST_SHA: 8f9a16a1f7a7574b10e2fb473bfef0c4c4fff3d6
+          INPUT_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TEST_REPOSITORY: bcgov/action-get-pr
+        run: |
+          output=$(node get-pr/index.js)
+          echo "$output"
+          echo "$output" | grep -q "PR: 39" || (echo "FAILED: Release event" && exit 1)
+
+      # Scenario 5: Live API integration test for manual Workflow Dispatch event
+      - name: Test Workflow Dispatch event (PR Merge)
+        env:
+          TEST_EVENT_NAME: workflow_dispatch
+          TEST_SHA: 8f9a16a1f7a7574b10e2fb473bfef0c4c4fff3d6
+          INPUT_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TEST_REPOSITORY: bcgov/action-get-pr
+        run: |
+          output=$(node get-pr/index.js)
+          echo "$output"
+          echo "$output" | grep -q "PR: 39" || (echo "FAILED: Workflow Dispatch event" && exit 1)
+
+      # Scenario 6: Direct Push / Cowboy Protection fallback test (must not fail, returns empty PR)
+      - name: Test Direct Push (Cowboy Fallback)
+        env:
+          TEST_EVENT_NAME: push
+          TEST_EVENT_AFTER: 0000000000000000000000000000000000000000
+          INPUT_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TEST_REPOSITORY: bcgov/action-get-pr
+        run: |
+          output=$(node get-pr/index.js)
+          echo "$output"
+          echo "$output" | grep -E -q "PR:[[:space:]]*$" || (echo "FAILED: Direct push should have returned empty PR" && exit 1)
+
+      # Scenario 7: Issues ignore list filtering tests (rules.yml)
+      - name: Test issue ignore list filtering
+        run: |
+          # Copy rules.yml to root temporarily since rules.yml resolver uses CWD
+          cp get-pr/rules.yml ./rules.yml
+          
+          # Test Renovate Dependency Dashboard
+          echo '{"issue": {"title": "Dependency Dashboard"}}' > /tmp/event-renovate.json
+          TEST_EVENT_NAME=issues TEST_EVENT_PATH=/tmp/event-renovate.json node get-pr/index.js > output.txt
+          cat output.txt
+          grep -q 'Ignore rule matched for "Dependency Dashboard"' output.txt || (echo "FAILED: Dependency Dashboard filter" && exit 1)
+
+          # Test ZAP Security Report
+          echo '{"issue": {"title": "ZAP Security Report"}}' > /tmp/event-zap.json
+          TEST_EVENT_NAME=issues TEST_EVENT_PATH=/tmp/event-zap.json node get-pr/index.js > output.txt
+          cat output.txt
+          grep -q 'Ignore rule matched for "ZAP Security Report"' output.txt || (echo "FAILED: ZAP Security Report filter" && exit 1)
+          
+          rm ./rules.yml

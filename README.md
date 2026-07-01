@@ -31,6 +31,10 @@ Resolve file-based change triggers for multi-package repositories.
 Generic GHCR container builder with automatic tag management.
 - **Uses:** `bcgov/actions/builder-ghcr@main`
 
+### [get-pr](./get-pr/)
+Resolve the Pull Request number for merge queues, squash merges, pushes, and releases.
+- **Uses:** `bcgov/actions/get-pr@main`
+
 ---
 
 ## 🛠 Scaffolding a New Action

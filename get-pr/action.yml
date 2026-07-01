@@ -5,31 +5,17 @@ branding:
   color: blue
 
 inputs:
-  github_token:
-    description: "Specify token (GH or PAT), instead of inheriting one from the calling workflow"
-    required: false
-    default: "${{ github.token }}"
   debug:
-    description: "Enable debug logging"
-    required: false
-    default: 'false'
+    description: Enable debug logging
+    default: "false"
+  github_token:
+    description: Specify token (GH or PAT), instead of inheriting one from the calling workflow
+    default: ${{ github.token }}
 
 outputs:
   pr:
     description: "Associated pull request number"
-    value: "${{ steps.run_script.outputs.pr }}"
 
 runs:
-  using: "composite"
-  steps:
-    - name: Run Notifier
-      id: run_script
-      shell: bash
-      env:
-        INPUT_TOKEN: "${{ inputs.github_token }}"
-        INPUT_DEBUG: "${{ inputs.debug }}"
-        MERGE_GROUP_HEAD_REF: "${{ github.event.merge_group.head_ref }}"
-        GITHUB_EVENT_AFTER: "${{ github.event.after }}"
-        GITHUB_EVENT_NUMBER: "${{ github.event.number }}"
-      run: |
-        "${{ github.action_path }}/action.sh"
+  using: node24
+  main: index.js
