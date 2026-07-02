@@ -1,13 +1,9 @@
-import {error, getInput, info} from '@actions/core'
+import {error, getInput, info, setFailed} from '@actions/core'
 import {context, getOctokit} from '@actions/github'
 
 // Action input
-const markdown = getInput('add_markdown')
-const token = getInput('github_token')
-
-if (!markdown || !token) {
-  error('Error: please verify input!')
-}
+const markdown = getInput('add_markdown', {required: true})
+const token = getInput('github_token', {required: true})
 
 /**
  * Normalizes text for comparison by trimming and normalizing whitespace
@@ -41,7 +37,7 @@ function removeCheckboxes(text: string): string {
 async function action(): Promise<void> {
   // Ensure pull request exists
   if (!context.payload.pull_request) {
-    error('Error: No pull request found in context. Exiting.')
+    setFailed('Error: No pull request found in context. Exiting.')
     return
   }
 
@@ -116,6 +112,6 @@ async function action(): Promise<void> {
   try {
     await action()
   } catch (err) {
-    error(`Unexpected error: ${err instanceof Error ? err.message : err}`)
+    setFailed(`Unexpected error: ${err instanceof Error ? err.message : String(err)}`)
   }
 })()

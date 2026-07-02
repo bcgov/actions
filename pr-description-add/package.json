@@ -12,7 +12,7 @@
     "format": "prettier --write '**/*.ts'",
     "format-check": "prettier --check '**/*.ts'",
     "lint": "eslint src/**/*.ts",
-    "package": "ncc build --source-map --license LICENSE"
+    "package": "ncc build lib/main.js -o dist --source-map --license LICENSE"
   },
   "repository": {
     "type": "git",
