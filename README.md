@@ -24,7 +24,7 @@ Forensic history traversal to resolve stable image SHAs from Tags or SHAs.
 - **Uses:** `bcgov/actions/image-tracker@main`
 
 ### [diff-triggers](./diff-triggers/)
-Resolve file-based change triggers for multi-package repositories.
+Checks git diff for file and path changes to conditionally trigger workflow jobs.
 - **Uses:** `bcgov/actions/diff-triggers@main`
 
 ### [builder-ghcr](./builder-ghcr/)

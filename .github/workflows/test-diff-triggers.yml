@@ -1,0 +1,101 @@
+name: Test Diff Triggers
+
+on:
+  pull_request:
+    paths:
+      - 'diff-triggers/**'
+      - '.github/workflows/test-diff-triggers.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'diff-triggers/**'
+      - '.github/workflows/test-diff-triggers.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-triggers-match:
+    name: Test Match (Expected: true)
+    runs-on: ubuntu-24.04
+    outputs:
+      triggered: ${{ steps.test.outputs.triggered }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./diff-triggers
+        id: test
+        with:
+          triggers: ('diff-triggers/' 'action.yml' '.github/')
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+  test-triggers-no-match:
+    name: Test No Match (Expected: false)
+    runs-on: ubuntu-24.04
+    outputs:
+      triggered: ${{ steps.test.outputs.triggered }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./diff-triggers
+        id: test
+        with:
+          triggers: ('path/to/nowhere')
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+  test-triggers-omitted:
+    name: Test Omitted (Expected: true)
+    runs-on: ubuntu-24.04
+    outputs:
+      triggered: ${{ steps.test.outputs.triggered }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./diff-triggers
+        id: test
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+  test-custom-ref:
+    name: Test Custom Ref (Expected: true)
+    runs-on: ubuntu-24.04
+    outputs:
+      triggered: ${{ steps.test.outputs.triggered }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # Fetch all history so HEAD~2 is available
+      - uses: ./diff-triggers
+        id: test
+        with:
+          triggers: ('diff-triggers/' 'action.yml' '.github/')
+          ref: "HEAD~2"
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+  verify-results:
+    name: Verify Results
+    needs: [test-triggers-match, test-triggers-no-match, test-triggers-omitted, test-custom-ref]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Assert outputs
+        run: |
+          echo "Match triggered: ${{ needs.test-triggers-match.outputs.triggered }} (expected: true)"
+          echo "No-Match triggered: ${{ needs.test-triggers-no-match.outputs.triggered }} (expected: false)"
+          echo "Omitted triggered: ${{ needs.test-triggers-omitted.outputs.triggered }} (expected: true)"
+          echo "Custom Ref triggered: ${{ needs.test-custom-ref.outputs.triggered }} (expected: true)"
+          
+          if [[ "${{ needs.test-triggers-match.outputs.triggered }}" != "true" ]]; then
+            echo "Error: test-triggers-match failed"
+            exit 1
+          fi
+          if [[ "${{ needs.test-triggers-no-match.outputs.triggered }}" != "false" ]]; then
+            echo "Error: test-triggers-no-match failed"
+            exit 1
+          fi
+          if [[ "${{ needs.test-triggers-omitted.outputs.triggered }}" != "true" ]]; then
+            echo "Error: test-triggers-omitted failed"
+            exit 1
+          fi
+          if [[ "${{ needs.test-custom-ref.outputs.triggered }}" != "true" ]]; then
+            echo "Error: test-custom-ref failed"
+            exit 1
+          fi
+          echo "All diff-triggers integration test cases passed successfully!"
