@@ -79,15 +79,22 @@ Only GitHub Container Registry (ghcr.io) is supported so far.
     # Specify token (GH or PAT), instead of inheriting one from the calling workflow
     github_token: ${{ secrets.GITHUB_TOKEN }}
 
+    # Specify username for registry login; defaults to github.actor
+    # Useful when using a PAT or service account
+    username: ${{ github.actor }}
+
     # Multiline input for secrets to mount.
+    # Note: GITHUB_TOKEN is no longer injected by default. If your build needs it
+    # (e.g. to pull private packages), you must explicitly pass it here.
     # https://docs.docker.com/build/ci/github-actions/secrets/#secret-mounts
     secrets: |
+        GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
         MY_SECRET=${{ secrets.MY_SECRET }}
         ANOTHER_SECRET=${{ secrets.ANOTHER_SECRET }}
 
     # Enable automatic tag and label generation using docker/metadata-action
-    # String value, not boolean. Defaults to 'false'
-    # When enabled, generates tags according to the rules specified in metadata_tag_rules (e.g., branch names, semver tags, SHAs, PR numbers, if configured)
+    # Enabled by default. Set to 'false' to disable.
+    # metadata_tag_rules defaults are used if not provided.
     metadata_tags: 'true'
 
     # Flavor configuration for metadata-action (optional)
@@ -97,14 +104,19 @@ Only GitHub Container Registry (ghcr.io) is supported so far.
 
     # Custom tag rules for metadata-action (optional)
     # Only used when metadata_tags is enabled
-    # Tag rules are required when metadata_tags is enabled; no tags will be generated unless explicit rules are provided
+    # Sensible defaults are provided; override with your own rules if needed
     metadata_tag_rules: |
+        type=sha,format=short
         type=ref,event=branch
         type=ref,event=pr
+        type=raw,value=latest,enable={{is_default_branch}}
         type=semver,pattern={{version}}
         type=semver,pattern={{major}}.{{minor}}
         type=semver,pattern={{major}}
-        type=sha
+
+    # SBOM generation is enabled by default as a security best practice
+    # String value, not boolean
+    sbom: 'true'
 
     ### Deprecated
 
@@ -113,6 +125,23 @@ Only GitHub Container Registry (ghcr.io) is supported so far.
     tag: do not use!
 
 ```
+
+# Private Repository Support
+
+This action supports building from and pushing to private repositories. 
+
+### Authentication
+
+- **Same Repository/Organization**: By default, the action uses the automatic `GITHUB_TOKEN`. Ensure your workflow has `contents: read` and `packages: write` permissions.
+- **Cross-Organization**: To build from a private repository in a different organization, provide a **Personal Access Token (PAT)** with `repo` scope via the `github_token` input and specify the associated `username`.
+
+### Security
+
+To prevent credential leakage, this action:
+- Uses `persist-credentials: false` during all checkout steps.
+- Performs a clean registry login using the provided `username` and `github_token` before any manifest or build operations.
+- Follows the principle of least privilege by **not** automatically injecting `GITHUB_TOKEN` into the Docker build process. If your build needs a token (e.g., to pull private packages), you must explicitly provide it via the `secrets` input.
+
 
 # Example, Single Build
 
@@ -184,7 +213,7 @@ builds:
 
 # Example, Metadata Tags for Automatic Tagging
 
-Use docker/metadata-action to automatically generate tags and labels according to user-provided tag rules (e.g., branch names, semantic versions, PRs, and commit SHAs, if configured).
+Metadata tags are enabled by default with sensible tag rules. Override rules or flavor as needed.
 
 ```yaml
 builds:
@@ -196,22 +225,20 @@ builds:
         package: frontend
         tag_fallback: test
         triggers: ('frontend/')
-        # Enable metadata-action integration
-        metadata_tags: 'true'
-        # Configure automatic 'latest' tag
+        # Override flavor (optional)
         metadata_flavor: |
           latest=true
-        # Define tagging rules
+        # Override tag rules (optional - sensible defaults are used if omitted)
         metadata_tag_rules: |
+          type=sha,format=short
           type=ref,event=branch
           type=ref,event=pr
+          type=raw,value=latest,enable={{is_default_branch}}
           type=semver,pattern={{version}}
           type=semver,pattern={{major}}.{{minor}}
-          type=semver,pattern={{major}}
-          type=sha
 ```
 
-This will generate tags like:
+Default tag rules generate tags like:
 - For branch pushes: `main`, `develop`, etc.
 - For PRs: `pr-123`
 - For semver tags: `v1.2.3`, `1.2`, `1`, `latest`
@@ -294,11 +321,12 @@ Two SBOM formats are generated and uploaded as workflow artifacts:
 
 | Output     | Description                                 |
 |------------|---------------------------------------------|
-| `digest`   | Digest of the built or retagged image       |
+| `digest`   | Immutable digest (only on fresh builds)     |
 | `triggered`| Whether a build was triggered (`true/false`)|
 | `labels`   | OCI labels generated by metadata-action (when metadata_tags is enabled) |
 | `annotations` | OCI annotations generated by metadata-action (when metadata_tags is enabled) |
-| `labels`   | OCI labels generated by metadata-action (when enabled) |
+| `registry_host` | The registry host name, always `ghcr.io` |
+| `image_path` | The full image path including the tag, always with a leading slash, in the format `/owner/repo/image:tag` (or `/owner/repo:tag` when the package matches the repository name) |
 
 New image digest (SHA).  This applies to build and retags.
 
