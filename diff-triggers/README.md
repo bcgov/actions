@@ -26,10 +26,11 @@ Check triggers against a diff of changed files. Supports PR events (including fo
 ```yaml
 - uses: bcgov/actions/diff-triggers@vX.Y.Z
   with:
-    ### Required
+    ### Recommended
 
     # Paths used to check against file change (diff)
     # Supports quoted strings with spaces: ('backend/' 'my path/file.txt')
+    # If omitted, the action always fires
     triggers: ('backend/' 'frontend/')
 
     ### Optional

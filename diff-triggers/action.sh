@@ -33,6 +33,20 @@ while IFS= read -r line; do
   [[ -n "$line" ]] && TRIGGERS+=("$line")
 done < <(grep -o "'[^']*'" <<< "$TRIGGERS_STR" | sed "s/'//g")
 
+# Fallback for unquoted formats: "./path1/ ./path2/" or "./path1/,./path2/"
+if [[ ${#TRIGGERS[@]} -eq 0 ]]; then
+  NORMALIZED="${TRIGGERS_STR//,/ }"
+  for trigger in ${NORMALIZED}; do
+    [[ -n "$trigger" ]] && TRIGGERS+=("$trigger")
+  done
+fi
+
+# Ensure parsing resolved at least one trigger path to check
+if [[ ${#TRIGGERS[@]} -eq 0 ]]; then
+  echo "::error::Could not parse any triggers from input: $TRIGGERS_STR"
+  exit 1
+fi
+
 # Determine reference to compare against
 # PR events: default to base repo default branch if ref omitted
 # Non-PR events: default to HEAD^ if ref omitted
@@ -51,6 +65,10 @@ else
 fi
 
 BASE_REMOTE_URL="${EVENT_PR_BASE_CLONE_URL:-$EVENT_REPOSITORY_CLONE_URL}"
+# Ensure remote URL is authenticated (required for private repos)
+if [[ -n "${INPUT_GITHUB_TOKEN:-}" && "$BASE_REMOTE_URL" == https://github.com/* ]]; then
+  BASE_REMOTE_URL="https://x-access-token:${INPUT_GITHUB_TOKEN}@github.com/${BASE_REMOTE_URL#https://github.com/}"
+fi
 if git remote get-url base >/dev/null 2>&1; then
   git remote set-url base "$BASE_REMOTE_URL"
 else
@@ -72,7 +90,7 @@ MATCHED_TRIGGERS=()
 DETAILS_LOG=""
 
 for t in "${TRIGGERS[@]}"; do
-  DIFF_OUTPUT=$(git diff "$COMPARE_REF" --name-only -- "$t")
+  DIFF_OUTPUT=$(git diff "$COMPARE_REF" HEAD --name-only -- "$t")
   if [[ -n "$DIFF_OUTPUT" ]]; then
     TRIGGERED=true
     MATCHED_TRIGGERS+=("$t")
