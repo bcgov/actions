@@ -111,4 +111,4 @@ Contributions are always welcome!  Please send us pull requests or get in touch 
 
 ## Acknowledgements
 
-This Action is provided courtesty of NRIDS Architecture and Forestry Digital Services, parts of the Government of British Columbia.
+This Action is provided courtesy of NRIDS Architecture and Forestry Digital Services, parts of the Government of British Columbia.
