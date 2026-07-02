@@ -1,0 +1,63 @@
+name: Test Add to PR Descriptions
+
+on:
+  pull_request:
+    paths:
+      - 'pr-description-add/**'
+      - '.github/workflows/test-pr-description-add.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'pr-description-add/**'
+      - '.github/workflows/test-pr-description-add.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  test:
+    name: Test Action
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      # Test action using the local action definition
+      - uses: ./pr-description-add
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          add_markdown: |
+            ---
+
+            # Things!
+            ## Excitement!
+            [Links!](https://google.ca)
+            `Code!`
+
+      # Test with different inputs
+      - uses: ./pr-description-add
+        with:
+          add_markdown: |
+            ---
+
+            # Things!
+            ## Excitement!
+            [Links!](https://google.ca)
+            `Code!`
+
+      # Test checkbox handling - should not duplicate when checkbox state changes
+      - uses: ./pr-description-add
+        with:
+          add_markdown: |
+            ## Checkbox Test
+            - [ ] Unchecked item
+            - [x] Checked item
+
+      # Verify checkbox content is not duplicated when run again
+      - uses: ./pr-description-add
+        with:
+          add_markdown: |
+            ## Checkbox Test
+            - [ ] Unchecked item
+            - [x] Checked item
