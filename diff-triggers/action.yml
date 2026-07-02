@@ -1,29 +1,49 @@
-name: 'Diff Triggers'
-description: 'Triggers a build based on file differences using git diff.'
+name: Diff Triggers
+description: Check if changed files match trigger paths. Returns true if any trigger matches, false otherwise. Always returns true if triggers are omitted.
+branding:
+  icon: package
+  color: blue
 
 inputs:
   triggers:
-    description: 'The files or directories to trigger a build'
-    required: true
+    description: Paths used to trigger an event; e.g. ('./backend/' './frontend/'); always trigger if omitted
+    required: false
   ref:
-    description: 'The ref to compare against (default: origin/main or HEAD~1)'
-    default: ''
+    description: Reference to compare against (e.g., 'main', 'HEAD^', commit SHA). Defaults to base repo default branch for PRs, or HEAD^ for non-PR events. Local refs (HEAD^, HEAD~2) work for non-PR events; remote refs (branches, tags, SHAs) work for all events
+    required: false
+  github_token:
+    description: Specify token (GH or PAT), instead of inheriting one from the calling workflow
+    default: ${{ github.token }}
   annotations:
-    description: 'Whether to enable GitHub annotations'
+    description: Emit workflow summary annotations (`::notice::`) for fired/not fired results. Set to false to suppress annotations
+    required: false
     default: 'true'
 
 outputs:
   triggered:
-    description: 'Whether the build was triggered'
+    description: Boolean result of triggers
     value: ${{ steps.diff.outputs.triggered }}
 
 runs:
-  using: 'composite'
+  using: composite
   steps:
+    - uses: actions/checkout@v6
+      with:
+        token: ${{ inputs.github_token }}
+        repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+        ref: ${{ github.event.pull_request.head.sha || github.ref }}
+        fetch-depth: ${{ github.event.pull_request && 1 || 0 }}
+
     - id: diff
       shell: bash
       env:
         INPUT_TRIGGERS: ${{ inputs.triggers }}
         INPUT_REF: ${{ inputs.ref }}
         INPUT_ANNOTATIONS: ${{ inputs.annotations }}
+        INPUT_GITHUB_TOKEN: ${{ inputs.github_token }}
+        GITHUB_WORKFLOW: ${{ github.workflow }}
+        GITHUB_JOB: ${{ github.job }}
+        EVENT_PR_BASE_DEFAULT_BRANCH: ${{ github.event.pull_request.base.repo.default_branch }}
+        EVENT_PR_BASE_CLONE_URL: ${{ github.event.pull_request.base.repo.clone_url }}
+        EVENT_REPOSITORY_CLONE_URL: ${{ github.event.repository.clone_url }}
       run: bash ${{ github.action_path }}/action.sh
