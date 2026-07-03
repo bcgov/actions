@@ -91,6 +91,7 @@ out
 .nuxt
 dist
 !pr-description-add/dist/
+!test-and-analyse/dist/
 
 # Gatsby files
 .cache/

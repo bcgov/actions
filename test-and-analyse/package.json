@@ -1,0 +1,35 @@
+{
+  "name": "action-test-and-analyse",
+  "version": "1.0.0",
+  "description": "GitHub Actions composite action for running tests and code analysis with SonarCloud integration",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "^24.0.0"
+  },
+  "dependencies": {
+    "@actions/core": "^3.0.0",
+    "fast-xml-parser": "^5.5.11",
+    "glob": "^13.0.6"
+  },
+  "scripts": {
+    "test": "vitest",
+    "lint": "eslint src/**",
+    "format": "prettier --write src/**",
+    "build": "ncc build src/index.js -o dist --minify"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bcgov/action-test-and-analyse.git"
+  },
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@vercel/ncc": "^0.44.0",
+    "@vitest/coverage-v8": "^4.1.4",
+    "eslint": "^10.2.0",
+    "knip": "^6.0.0",
+    "prettier": "^3.3.3",
+    "vitest": "^4.1.4"
+  }
+}
