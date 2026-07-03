@@ -104,7 +104,7 @@ jobs:
           java_version: ${{ matrix.java_version || '21' }}
           repository: ${{ matrix.repository }}
           triggers: ${{ matrix.triggers }}
-          sonar_token: ${{ matrix.name == 'frontend-basic' && secrets.SONAR_TOKEN_FRONTEND || secrets.SONAR_TOKEN }}
+          sonar_token: ${{ secrets.SONAR_TOKEN }}
           require_sonar: ${{ matrix.require_sonar == true && github.event.pull_request.head.repo.full_name == github.repository && 'true' || 'false' }}
           cache: ${{ matrix.cache || 'npm' }}
 
