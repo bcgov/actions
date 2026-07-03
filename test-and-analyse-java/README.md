@@ -1,5 +1,5 @@
 **BREAKING CHANGES in v1.0:**
-* **java_version is now required (previously defaulted to 17)**
+* **java-version is now required (previously defaulted to 17)**
 * **sonar_project_token has been renamed sonar_token**
 
 <!-- Badges -->
