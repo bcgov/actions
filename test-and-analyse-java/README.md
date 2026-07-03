@@ -19,7 +19,7 @@ This action runs tests, dependent on triggers, optionally sending results and co
 
 Conditional triggers are used to determine whether tests need to be run.  If triggers are matched, then the appropriate code has changed and should be tested.  Tests always run if no triggers are provided.  Untriggered runs do little other than report a success.
 
-Only Java is supported by this action.  Please see our [JavaScript action](https://github.com/bcgov/action-test-and-analyse) or upcoming Python action as required.
+Only Java is supported by this action.  Please see our [JavaScript action](../test-and-analyse/) or upcoming Python action as required.
 
 # Usage
 
