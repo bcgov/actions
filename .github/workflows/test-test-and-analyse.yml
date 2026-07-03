@@ -27,7 +27,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        name: [backend-triggered, backend-not-triggered, frontend-basic, frontend-no-triggers, waste-frontend, java-basic]
+        name: [backend-triggered, backend-not-triggered, frontend-basic, frontend-no-triggers, waste-frontend, java-basic, fom-autodiscover]
         include:
           - name: backend-triggered
             dir: backend
