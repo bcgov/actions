@@ -49,7 +49,7 @@ inputs:
     pattern: "^(true|false)$"
 
   triggers:
-    description: Paths (array) used to trigger a build; e.g. ('./backend/' './frontend/)
+    description: Paths (array) used to trigger a build; e.g. ('./backend/' './frontend/')
 
   ### Usually a bad idea / not recommended
   diff_branch:
