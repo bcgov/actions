@@ -41,26 +41,8 @@ Universal Test and Analyze with Triggers, SonarCloud, and Multi-Language Support
 
 ---
 
-## 🛠 Scaffolding a New Action
-
-Use the included scaffolding script to create a new action following our standards.
-
-\`\`\`bash
-# From the root of this repo:
-chmod +x scaffold.sh
-./scaffold.sh <action-name> "Optional description"
-\`\`\`
-
-This will:
-1. Create a new directory.
-2. Seed it with the standard \`action.yml\`.
-3. Provide a base \`action.sh\` script.
-4. Generate a starter \`README.md\`.
-
----
-
 ## ✨ Standards & Principles
 
-1. **Standard Inputs**: All actions SHOULD support \`github_token\` and \`debug\` inputs.
-2. **Bash-First**: Prefer **Composite Actions** calling dedicated shell scripts (\`action.sh\`) for simple logic.
+1. **Standard Inputs**: All actions SHOULD support `github_token` and `debug` inputs.
+2. **Node-First**: Prefer **Node.js Actions** (v24 with ESLint and Vitest) to ensure type safety, robust test coverage, and secure API integration.
 3. **Consistent Branding**: Icons/Colors should reflect purpose (Build = blue, Fail/Alert = red).
