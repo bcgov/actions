@@ -24,7 +24,7 @@ Only Java is supported by this action.  Please see our [JavaScript action](../te
 # Usage
 
 ```yaml
-- uses: bcgov/action-test-and-analyse-java@x.y.z
+- uses: bcgov/actions/test-and-analyse-java@x.y.z
   with:
     ### Required
 
