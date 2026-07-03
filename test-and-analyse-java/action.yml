@@ -16,7 +16,7 @@ inputs:
     pattern: "^[a-zA-Z0-9._/-]+$"
 
   java-version:
-    description: Java version, defaults to 17 (LTS)
+    description: Java version (required)
     required: true
     pattern: '^[0-9]+(\.[0-9]+)*$'
 
