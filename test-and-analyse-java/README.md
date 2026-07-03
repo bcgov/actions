@@ -3,9 +3,9 @@
 * **sonar_project_token has been renamed sonar_token**
 
 <!-- Badges -->
-[![Issues](https://img.shields.io/github/issues/bcgov/action-test-and-analyse-java)](/../../issues)
-[![Pull Requests](https://img.shields.io/github/issues-pr/bcgov/action-test-and-analyse-java)](/../../pulls)
-[![MIT License](https://img.shields.io/github/license/bcgov/action-test-and-analyse-java.svg)](/LICENSE)
+[![Issues](https://img.shields.io/github/issues/bcgov/actions)](/../../issues)
+[![Pull Requests](https://img.shields.io/github/issues-pr/bcgov/actions)](/../../pulls)
+[![MIT License](https://img.shields.io/github/license/bcgov/actions.svg)](/LICENSE)
 [![Lifecycle](https://img.shields.io/badge/Lifecycle-Experimental-339999)](https://github.com/bcgov/repomountie/blob/master/doc/lifecycle-badges.md)
 
 <!-- Reference-Style link -->
