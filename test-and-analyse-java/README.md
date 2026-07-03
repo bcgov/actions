@@ -86,7 +86,7 @@ Only Java is supported by this action.  Please see our [JavaScript action](../te
 
 Run tests and provide results to SonarCloud.  This is a full workflow that runs on pull requests, merge to main and workflow_dispatch.  Use a GitHub Action secret to provide ${{ secrets.SONAR_TOKEN }}.
 
-The specified triggers will be used to decide whether this job runs tests and analysis or just exists successfully.
+The specified triggers will be used to decide whether this job runs tests and analysis or just exits successfully.
 
 Create or modify a GitHub workflow, like below.  E.g. `./github/workflows/tests.yml`
 
