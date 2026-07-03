@@ -212,7 +212,7 @@ Has the action been triggered by path changes? \[true|false\]
 
 # Sonar Project Token
 
-SonarCloud project tokens are free, available from [SonarCloud] or your organization's aministrators.
+SonarCloud project tokens are free, available from [SonarCloud] or your organization's administrators.
 
 For BC Government projects, please create an [issue for our platform team](https://github.com/BCDevOps/devops-requests/issues/new/choose).
 
