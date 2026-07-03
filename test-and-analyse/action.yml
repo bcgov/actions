@@ -49,6 +49,14 @@ inputs:
   sonar_token:
     description: Sonar token, provide unpopulated token for pre-setup (will skip)
 
+  sonar_project_token:
+    description: "DEPRECATED: Renamed to sonar_token."
+    default: ""
+
+  sonar_comment_token:
+    description: "DEPRECATED: Removed (ignored by SonarCloud)."
+    default: ""
+
   triggers:
     description: Paths (array) used to trigger a build; e.g. ('./backend/' './frontend/)
 

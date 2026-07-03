@@ -106,11 +106,12 @@ async function run() {
 
     let testResults = { total: 0, passed: 0, failed: 0, skipped: 0 };
     if (language === 'java' || language === 'python') {
-        const xmlFiles = findJUnitXmlFiles(dir);
-        if (xmlFiles.length > 0) {
-            core.info(`Found ${xmlFiles.length} XML test reports.`);
-            testResults = summarizeJUnitXmlFiles(xmlFiles);
-        }
+      const reportDir = fs.existsSync(dir) ? dir : '.';
+      const xmlFiles = findJUnitXmlFiles(reportDir);
+      if (xmlFiles.length > 0) {
+        core.info(`Found ${xmlFiles.length} XML test reports.`);
+        testResults = summarizeJUnitXmlFiles(xmlFiles);
+      }
     }
     
     core.setOutput('unused_files', stats.unusedFiles);

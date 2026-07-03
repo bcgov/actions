@@ -1,13 +1,13 @@
 
 **BREAKING CHANGES in v1.0:**
-* **node_version is now required (previously defaulted to 16)**
+* **node_version default is now 24 (previously defaulted to 16)**
 * **sonar_comment_token has been removed (ignored by SonarCloud)**
 * **sonar_project_token has been renamed sonar_token**
 
 <!-- Badges -->
 [![Issues](https://img.shields.io/github/issues/bcgov/action-test-and-analyse)](/../../issues)
 [![Pull Requests](https://img.shields.io/github/issues-pr/bcgov/action-test-and-analyse)](/../../pulls)
-[![MIT License](https://img.shields.io/github/license/bcgov/action-test-and-analyse.svg)](/LICENSE)
+[![Apache-2.0 License](https://img.shields.io/github/license/bcgov/action-test-and-analyse.svg)](/LICENSE)
 [![Lifecycle](https://img.shields.io/badge/Lifecycle-Experimental-339999)](https://github.com/bcgov/repomountie/blob/master/doc/lifecycle-badges.md)
 
 <!-- Reference-Style link -->
@@ -89,7 +89,7 @@
 
     # Branch to clone and process
     # Useful for consuming non-default branches, like in testing
-    # Defants to empty, cloning the default branch
+    # Defaults to empty, cloning the default branch
     branch: ""
 ```
 
@@ -104,8 +104,6 @@ This example demonstrates the default behavior with supply chain scanning enable
 Create or modify a GitHub workflow, like below.  E.g. `./github/workflows/tests.yml`
 
 Note: Provide an unpopulated SONAR_TOKEN until one is provisioned.  SonarCloud will only run once populated, allowing for pre-setup.
-
-```
 
 # Example: Java (Maven) with Native SonarCloud Reporting
 
@@ -238,7 +236,7 @@ Has the action been triggered by path changes? \[true|false\]
 
 # Sonar Project Token
 
-SonarCloud project tokens are free, available from [SonarCloud] or your organization's aministrators.
+SonarCloud project tokens are free, available from [SonarCloud] or your organization's administrators.
 
 For BC Government projects, please create an [issue for our platform team](https://github.com/BCDevOps/devops-requests/issues/new/choose).
 
@@ -405,4 +403,4 @@ Please contribute your ideas!  [Issues] and [pull requests] are appreciated.
 
 <!-- # Acknowledgements
 
-This Action is provided courtesty of the Forestry Suite of Applications, part of the Government of British Columbia. -->
+This Action is provided courtesy of the Forestry Suite of Applications, part of the Government of British Columbia. -->

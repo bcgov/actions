@@ -1,0 +1,128 @@
+name: Test Test and Analyse
+
+on:
+  pull_request:
+    paths:
+      - 'test-and-analyse/**'
+      - '.github/workflows/test-test-and-analyse.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'test-and-analyse/**'
+      - '.github/workflows/test-test-and-analyse.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  tests:
+    name: Test Action
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [backend-triggered, backend-not-triggered, frontend-basic, frontend-no-triggers, waste-frontend, java-basic]
+        include:
+          - name: backend-triggered
+            dir: backend
+            triggers: ""
+            expected_triggered: true
+            repository: bcgov/quickstart-openshift
+            test_command: npm install --no-package-lock && npm run test:cov
+          - name: backend-not-triggered
+            dir: backend
+            triggers: "('not-existent-path/')"
+            expected_triggered: false
+            repository: bcgov/quickstart-openshift
+            test_command: npm install --no-package-lock && npm run test:cov
+          - name: frontend-basic
+            dir: frontend
+            triggers: ""
+            expected_triggered: true
+            repository: bcgov/quickstart-openshift
+            test_command: npm install --no-package-lock && npm run test:cov
+          - name: frontend-no-triggers
+            dir: frontend
+            expected_triggered: true
+            dep_scan: off
+            test_command: npm install --no-package-lock && npm run test:cov
+            repository: bcgov/quickstart-openshift
+          - name: waste-frontend
+            dir: frontend
+            expected_triggered: true
+            dep_scan: warn
+            test_command: echo "Good enough for testing knip!"
+            repository: bcgov/nr-waste-plus
+          - name: java-basic
+            dir: backend
+            language: java
+            java_version: "17"
+            triggers: ""
+            expected_triggered: true
+            repository: bcgov/nr-forest-client
+            test_command: timeout 10m mvn -B verify sonar:sonar -P all-tests -DskipTests -Dsonar.host.url=https://sonarcloud.io -Dsonar.organization=bcgov-sonarcloud -Dsonar.projectKey=bcgov_bcgov/action-test-and-analyse_java-native
+            cache: "none" # Explicitly disable cache
+          - name: fom-autodiscover
+            dir: ""
+            triggers: ""
+            expected_triggered: true
+            repository: bcgov/nr-fom
+            test_command: echo "Testing autodiscover on nr-fom"
+            expected_config: ".github/knip.json"
+            cache: "none"
+    steps:
+      # 1. Checkout the Action (this repo) at the root
+      - name: Checkout Action
+        uses: actions/checkout@v6
+
+      # 2. Checkout the Test Project manually to avoid collisions
+      - name: Checkout Test Project
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ matrix.repository }}
+          path: test-project
+          fetch-depth: 0
+
+      # 3. Use the local action (./test-and-analyse) to analyze the project
+      - id: action
+        uses: ./test-and-analyse
+        with:
+          skip_checkout: "true"
+          commands: |
+            ${{ matrix.test_command }}
+          # Point the action to the subfolder where the project lives
+          dir: test-project/${{ matrix.dir }}
+          node_version: "24"
+          language: ${{ matrix.language || 'node' }}
+          java_version: ${{ matrix.java_version || '21' }}
+          repository: ${{ matrix.repository }}
+          triggers: ${{ matrix.triggers }}
+          sonar_token: ${{ secrets.SONAR_TOKEN }}
+          cache: ${{ matrix.cache || 'npm' }}
+
+      - name: Verify trigger behavior
+        run: |
+          echo "🔍 Verifying trigger behavior for ${{ matrix.name }}"
+          if [ "${{ steps.action.outputs.triggered }}" != "${{ matrix.expected_triggered }}" ]; then
+            echo "❌ ${{ matrix.name }}: expected triggered=${{ matrix.expected_triggered }}, got ${{ steps.action.outputs.triggered }}"
+            exit 1
+          fi
+          echo "✅ ${{ matrix.name }}: expected triggered=${{ matrix.expected_triggered }}, got ${{ steps.action.outputs.triggered }}"
+
+      - name: Verify discovered knip config
+        if: matrix.expected_config != ''
+        run: |
+          echo "🔍 Verifying discovered Knip config for ${{ matrix.name }}"
+          CONFIG_OUT="${{ steps.action.outputs.knip_config }}"
+          EXPECTED_SUFFIX="${{ matrix.expected_config }}"
+          if [[ "$CONFIG_OUT" != *"$EXPECTED_SUFFIX" ]]; then
+            echo "❌ Expected knip_config output to end with '$EXPECTED_SUFFIX', got '$CONFIG_OUT'"
+            exit 1
+          fi
+          echo "✅ Discovered Knip config correctly matched: $CONFIG_OUT"
