@@ -35,6 +35,10 @@ Generic GHCR container builder with automatic tag management.
 Resolve the Pull Request number for merge queues, squash merges, pushes, and releases.
 - **Uses:** `bcgov/actions/get-pr@main`
 
+### [test-and-analyse](./test-and-analyse/)
+Universal Test and Analyze with Triggers, SonarCloud, and Multi-Language Support.
+- **Uses:** `bcgov/actions/test-and-analyse@main`
+
 ---
 
 ## 🛠 Scaffolding a New Action
