@@ -175,12 +175,17 @@ async function run() {
       }
     }
 
+    const failures = [];
     if (language === 'node' && hasKnipIssues && depScan === 'error') {
-      core.setFailed(`Knip found ${stats.totalIssues} unused items.`);
+      failures.push(`Knip found ${stats.totalIssues} unused items.`);
     }
 
     if (hasTestFailures) {
-        core.setFailed(`${testResults.failed} tests failed in the ${language} project.`);
+      failures.push(`${testResults.failed} tests failed in the ${language} project.`);
+    }
+
+    if (failures.length > 0) {
+      core.setFailed(failures.join(' '));
     }
 
   } catch (error) {
