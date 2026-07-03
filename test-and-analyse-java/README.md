@@ -167,7 +167,7 @@ jobs:
             triggers: ('backend/' 'charts/backend')
     steps:
       - uses: actions/checkout@v5
-      - uses: bcgov/action-test-and-analyse-java@x.y.z
+      - uses: bcgov/actions/test-and-analyse-java@x.y.z
         with:
           commands: |
             ./mvnw test
