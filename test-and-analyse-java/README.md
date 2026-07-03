@@ -110,7 +110,7 @@ jobs:
     name: Unit Tests
     runs-on: ubuntu-24.04
     steps:
-      - uses: bcgov/action-test-and-analyse-java@x.y.z
+      - uses: bcgov/actions/test-and-analyse-java@x.y.z
         with:
           commands: |
             ./mvnw test
