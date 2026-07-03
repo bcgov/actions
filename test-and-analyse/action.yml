@@ -49,14 +49,6 @@ inputs:
   sonar_token:
     description: Sonar token, provide unpopulated token for pre-setup (will skip)
 
-  sonar_project_token:
-    description: "DEPRECATED: Renamed to sonar_token."
-    default: ""
-
-  sonar_comment_token:
-    description: "DEPRECATED: Removed (ignored by SonarCloud)."
-    default: ""
-
   triggers:
     description: Paths (array) used to trigger a build; e.g. ('./backend/' './frontend/)
 
@@ -113,22 +105,6 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: Warnings for breaking changes
-      shell: bash
-      run: |
-        # Warnings for breaking changes
-        if [ ! -z "${{ inputs.sonar_project_token }}" ]; then
-          echo -e "\n⚠️  Breaking change: sonar_project_token renamed"
-          echo -e "\n\tAction: rename sonar_project_token to sonar_token\n"
-          exit 1
-        fi
-
-        if [ ! -z "${{ inputs.sonar_comment_token }}" ]; then
-          echo -e "\n⚠️  Breaking change: sonar_comment_token deprecated"
-          echo -e "\n\tAction: remove sonar_comment_token parameter\n"
-          exit 1
-        fi
-
     # Send triggers to diff action (only if triggers are provided)
     - id: diff
       shell: bash
