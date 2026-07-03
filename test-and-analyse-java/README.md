@@ -195,7 +195,7 @@ Has the action been triggered by path changes? \[true|false\]
 
 ```yaml
 - id: test
-  uses: bcgov/action-test-and-analyse-java@x.y.z
+  uses: bcgov/actions/test-and-analyse-java@x.y.z
   with:
     commands: |
       mvn -B verify -P all-tests checkstyle:checkstyle -Dcheckstyle.skip=false
