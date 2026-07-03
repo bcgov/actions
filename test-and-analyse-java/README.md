@@ -78,7 +78,7 @@ Only Java is supported by this action.  Please see our [JavaScript action](../te
 
     # Branch to clone and process
     # Useful for consuming non-default branches, like in testing
-    # Defants to empty, cloning the default branch
+    # Defaults to empty, cloning the default branch
     branch: ""
 ```
 
