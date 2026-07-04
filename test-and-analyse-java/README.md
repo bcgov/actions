@@ -58,8 +58,7 @@ Only Java is supported by this action.  Please see our [JavaScript action](../te
     # Available from sonarcloud.io or your organization administrator
     # BCGov i.e. https://github.com/BCDevOps/devops-requests/issues/new/choose
     # Provide an unpopulated token for pre-setup, section will be skipped
-    sonar_token:
-      description: ${{ secrets.SONAR_TOKEN }}
+    sonar_token: ${{ secrets.SONAR_TOKEN }}
 
     # Bash array to diff for build triggering
     # Optional, defaults to nothing, which forces a build
