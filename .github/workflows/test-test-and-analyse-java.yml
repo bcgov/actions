@@ -1,0 +1,72 @@
+name: Test Test And Analyse Java
+
+on:
+  pull_request:
+    paths:
+      - 'test-and-analyse-java/**'
+      - '.github/workflows/test-test-and-analyse-java.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'test-and-analyse-java/**'
+      - '.github/workflows/test-test-and-analyse-java.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  test-java:
+    name: Run Java Integration Test
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: action
+        uses: ./test-and-analyse-java
+        with:
+          commands: |
+            mvn -B verify -P all-tests checkstyle:checkstyle -Dcheckstyle.skip=false
+          dir: backend
+          java-distribution: temurin
+          java-version: "17"
+          repository: bcgov/nr-forest-client
+          sonar_args: >
+            -Dsonar.exclusions=**/coverage/**
+            -Dsonar.organization=bcgov-nr
+            -Dsonar.projectKey=action-test-and-analyse-java
+          sonar_enforce_compliance: false
+          sonar_token: ${{ secrets.SONAR_TOKEN }}
+
+      - name: Check triggered output
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Triggered: ${{ steps.action.outputs.triggered }}"
+          if [ "${{ steps.action.outputs.triggered }}" != "true" ]; then
+            echo "❌ Expected 'true' but got: ${{ steps.action.outputs.triggered }}"
+            exit 1
+          fi
+
+  results:
+    name: Results
+    needs: [test-java]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Aggregate results
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ needs.test-java.result }}" = "success" ]; then
+            echo "✅ All tests passed"
+            exit 0
+          else
+            echo "❌ Test failed"
+            exit 1
+          fi

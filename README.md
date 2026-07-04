@@ -39,6 +39,10 @@ Resolve the Pull Request number for merge queues, squash merges, pushes, and rel
 Universal Test and Analyze with Triggers, SonarCloud, and Multi-Language Support.
 - **Uses:** `bcgov/actions/test-and-analyse@main`
 
+### [test-and-analyse-java](./test-and-analyse-java/)
+Run Java unit tests, can analyse with SonarCloud.
+- **Uses:** `bcgov/actions/test-and-analyse-java@main`
+
 ---
 
 ## ✨ Standards & Principles
