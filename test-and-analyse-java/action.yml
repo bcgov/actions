@@ -81,7 +81,7 @@ runs:
         # Warnings for breaking changes
 
         # sonar_project_token renamed sonar_token
-        if [ ! -z "${{ inputs.sonar_project_token }}" ]; then
+        if [ -n "${{ inputs.sonar_project_token }}" ] && [ "${{ inputs.sonar_project_token }}" != "__OMITTED__" ]; then
           echo -e "\nsonar_project_token renamed.  Please correct this and try again."
           echo -e "\n\tAction: rename sonar_project_token to sonar_token\n"
           exit 1
