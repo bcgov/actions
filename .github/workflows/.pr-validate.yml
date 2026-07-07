@@ -1,0 +1,71 @@
+name: .PR Validate
+
+on:
+  workflow_call:
+    inputs:
+      ### Typical / recommended
+      conventional_commits:
+        description: 'Enforce conventional commits?'
+        default: true
+        required: false
+        type: boolean
+      reject_forks:
+        description: 'Reject forks? [true|false]'
+        default: true
+        required: false
+        type: boolean
+      markdown_links:
+        description: 'Links for PR description'
+        required: false
+        type: string
+
+jobs:
+  checks:
+    name: Checks
+    permissions:
+      pull-requests: write
+    runs-on: ubuntu-24.04
+    steps:
+      # Conventional commits
+      - name: Conventional Commits
+        uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
+        if: inputs.conventional_commits
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Check for forks
+      - name: Fork Check
+        if: inputs.reject_forks && github.event.pull_request.head.repo.fork
+        run: exit 1
+
+      # Add PR Description, doesn't work with forks
+      - name: PR Description
+        if: inputs.markdown_links != '' && !github.event.pull_request.head.repo.fork
+        uses: bcgov/action-pr-description-add@9bf88aec33edb7c00ed72f9305aa1721d0cdab9f # v2.0.3
+        env:
+          DOMAIN: apps.silver.devops.gov.bc.ca
+          PREFIX: ${{ github.event.repository.name }}
+        with:
+          add_markdown: |
+            ---
+
+            Thanks for the PR!
+
+            Deployments, as required, will be available below:
+            ${{ inputs.markdown_links }}
+
+            Please create PRs in draft mode.  Mark as ready to enable:
+            - [Analysis Workflow](https://github.com/${{ github.repository }}/actions/workflows/analysis.yml)
+
+            After merge, new images are deployed in:
+            - [Merge Workflow](https://github.com/${{ github.repository }}/actions/workflows/merge.yml)
+
+      # Notify of any failures
+      - name: Errors
+        if: failure()
+        run: |
+          echo "Validation failed!  Possible reasons:"
+          echo " - Forks are not supported"
+          echo " - Conventional commits required for PR titles and merges"
+          echo "    https://www.conventionalcommits.org/en/v1.0.0/"
+          exit 1

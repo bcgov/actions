@@ -16,4 +16,4 @@ jobs:
     if: (! github.event.pull_request.draft)
     permissions:
       pull-requests: write
-    uses: bcgov/quickstart-openshift-helpers/.github/workflows/.pr-validate.yml@a11ad3d1b9288fb40757c4314a62eb86ff227931 # v1.2.1
+    uses: ./.github/workflows/.pr-validate.yml
