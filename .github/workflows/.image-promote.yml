@@ -39,7 +39,12 @@ jobs:
       packages: ${{ steps.packages.outputs.packages }}
     steps:
       - id: packages
-        run: echo "packages=$(jq -cn '$ARGS.positional' --args ${{ inputs.packages }})" >> $GITHUB_OUTPUT
+        shell: bash
+        env:
+          PACKAGES: ${{ inputs.packages }}
+        run: |
+          read -r -a pkgs <<< "$PACKAGES"
+          echo "packages=$(jq -cn '$ARGS.positional' --args "${pkgs[@]}")" >> "$GITHUB_OUTPUT"
 
   retags:
     name: Retag Image
