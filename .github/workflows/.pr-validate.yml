@@ -33,7 +33,7 @@ jobs:
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
-          path: .github/actions-checkout
+          path: .github/bcgov-actions
 
       # Conventional commits
       - name: Conventional Commits
@@ -50,7 +50,7 @@ jobs:
       # Add PR Description, doesn't work with forks
       - name: PR Description
         if: inputs.markdown_links != '' && !github.event.pull_request.head.repo.fork
-        uses: ./.github/actions-checkout/pr-description-add
+        uses: ./.github/bcgov-actions/pr-description-add
         env:
           DOMAIN: apps.silver.devops.gov.bc.ca
           PREFIX: ${{ github.event.repository.name }}
