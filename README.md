@@ -43,6 +43,10 @@ Universal Test and Analyze with Triggers, SonarCloud, and Multi-Language Support
 Run Java unit tests, can analyse with SonarCloud.
 - **Uses:** `bcgov/actions/test-and-analyse-java@main`
 
+### [actionlint](./actionlint/)
+Lint GitHub Actions workflow files with caching and rate-limit proof execution.
+- **Uses:** `bcgov/actions/actionlint@main`
+
 ---
 
 ## ✨ Standards & Principles
