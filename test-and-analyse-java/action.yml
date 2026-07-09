@@ -89,7 +89,7 @@ runs:
 
     # Send triggers to diff action, but only for pull requests
     - id: diff
-      uses: bcgov/actions/diff-triggers@main
+      uses: ./diff-triggers
       with:
         triggers: ${{ (github.event_name == 'pull_request' && inputs.triggers) || '' }}
         ref: ${{ inputs.diff_branch }}
