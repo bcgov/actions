@@ -29,7 +29,7 @@ jobs:
     steps:
       # Checkout actions repository dynamically to access local actions
       - name: Checkout Actions Repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
