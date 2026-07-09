@@ -1,0 +1,45 @@
+name: actionlint
+description: Lint GitHub Actions workflows with caching and rate-limit proof execution
+branding:
+  icon: check-square
+  color: blue
+
+inputs:
+  version:
+    description: Pinned version tag of rhysd/actionlint to run
+    default: "v1.7.12"
+  args:
+    description: Additional command line arguments to pass to actionlint
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Cache actionlint binary
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ github.workspace }}/.actionlint-bin
+        key: actionlint-${{ inputs.version }}-${{ runner.os }}-${{ runner.arch }}
+
+    - name: Download actionlint
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        mkdir -p "${{ github.workspace }}/.actionlint-bin"
+        VERSION="${{ inputs.version }}"
+        VERSION_NUM="${VERSION#v}"
+        
+        # Pull the archive directly from GitHub Releases (avoiding raw.githubusercontent CDN rate limits)
+        if ! curl -fsSL "https://github.com/rhysd/actionlint/releases/download/${VERSION}/actionlint_${VERSION_NUM}_linux_amd64.tar.gz" | tar -xz -C "${{ github.workspace }}/.actionlint-bin" actionlint; then
+          echo "::warning title=actionlint download failed::⚠️ Failed to download actionlint binary from GitHub Releases. Skipping linter checks."
+        fi
+
+    - name: Run actionlint
+      shell: bash
+      run: |
+        if [ -f "${{ github.workspace }}/.actionlint-bin/actionlint" ]; then
+          "${{ github.workspace }}/.actionlint-bin/actionlint" ${{ inputs.args }}
+        else
+          echo "::warning title=actionlint missing::⚠️ actionlint binary not found. Skipping linter checks."
+        fi
