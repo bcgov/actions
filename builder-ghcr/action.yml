@@ -148,7 +148,7 @@ runs:
     # against another repository's branch is not meaningful in this context.
     - id: diff
       if: inputs.repository == github.repository
-      uses: bcgov/action-diff-triggers@a80e4b3cf77b7e05f84e74030e3bfa08b717a574 # v1.2.1
+      uses: ./diff-triggers
       with:
         triggers: ${{ inputs.triggers }}
         ref: ${{ inputs.diff_branch }}
