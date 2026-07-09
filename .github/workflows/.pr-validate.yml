@@ -23,9 +23,18 @@ jobs:
   checks:
     name: Checks
     permissions:
+      contents: read
       pull-requests: write
     runs-on: ubuntu-24.04
     steps:
+      # Checkout actions repository dynamically to access local actions
+      - name: Checkout Actions Repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .github/actions-checkout
+
       # Conventional commits
       - name: Conventional Commits
         uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
@@ -41,7 +50,7 @@ jobs:
       # Add PR Description, doesn't work with forks
       - name: PR Description
         if: inputs.markdown_links != '' && !github.event.pull_request.head.repo.fork
-        uses: bcgov/actions/pr-description-add@v0.3.0
+        uses: ./.github/actions-checkout/pr-description-add
         env:
           DOMAIN: apps.silver.devops.gov.bc.ca
           PREFIX: ${{ github.event.repository.name }}
