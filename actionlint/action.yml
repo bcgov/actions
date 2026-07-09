@@ -7,7 +7,7 @@ branding:
 inputs:
   version:
     description: Pinned version tag of rhysd/actionlint to run
-    default: "v1.7.12"
+    default: "v1.7.12" # renovate: datasource=github-releases depName=rhysd/actionlint
   args:
     description: Additional command line arguments to pass to actionlint
     default: ""
