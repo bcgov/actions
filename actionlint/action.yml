@@ -6,8 +6,8 @@ branding:
 
 inputs:
   version:
-    description: Pinned version tag of rhysd/actionlint to run
-    default: "v1.7.12" # renovate: datasource=github-releases depName=rhysd/actionlint
+    description: Pinned version tag of rhysd/actionlint to run (e.g. v1.7.12). Defaults to version in .tool-versions.
+    default: ""
   args:
     description: Additional command line arguments to pass to actionlint
     default: ""
@@ -15,19 +15,35 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Resolve actionlint version
+      id: version-resolver
+      shell: bash
+      run: |
+        VERSION="${{ inputs.version }}"
+        if [ -z "${VERSION}" ]; then
+          if [ -f "${{ github.action_path }}/.tool-versions" ]; then
+            VERSION="v$(awk '$1 == "actionlint" {print $2}' "${{ github.action_path }}/.tool-versions")"
+          elif [ -f "${{ github.workspace }}/.tool-versions" ]; then
+            VERSION="v$(awk '$1 == "actionlint" {print $2}' "${{ github.workspace }}/.tool-versions")"
+          else
+            VERSION="v1.7.12"
+          fi
+        fi
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
     - name: Cache actionlint binary
       id: cache
       uses: actions/cache@v4
       with:
         path: ${{ github.workspace }}/.actionlint-bin
-        key: actionlint-${{ inputs.version }}-${{ runner.os }}-${{ runner.arch }}
+        key: actionlint-${{ steps.version-resolver.outputs.version }}-${{ runner.os }}-${{ runner.arch }}
 
     - name: Download actionlint
       if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
       run: |
         mkdir -p "${{ github.workspace }}/.actionlint-bin"
-        VERSION="${{ inputs.version }}"
+        VERSION="${{ steps.version-resolver.outputs.version }}"
         VERSION_NUM="${VERSION#v}"
         
         # Pull the archive directly from GitHub Releases (avoiding raw.githubusercontent CDN rate limits)
