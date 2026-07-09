@@ -42,20 +42,42 @@ runs:
       if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
       run: |
+        OS=""
+        if [ "${{ runner.os }}" = "Linux" ]; then
+          OS="linux"
+        elif [ "${{ runner.os }}" = "macOS" ]; then
+          OS="darwin"
+        fi
+
+        ARCH=""
+        if [ "${{ runner.arch }}" = "X64" ]; then
+          ARCH="amd64"
+        elif [ "${{ runner.arch }}" = "ARM64" ]; then
+          ARCH="arm64"
+        fi
+
+        if [ -z "$OS" ] || [ -z "$ARCH" ]; then
+          echo "::warning title=actionlint unsupported platform::⚠️ OS '${{ runner.os }}' or Arch '${{ runner.arch }}' is not supported. Skipping download."
+          exit 0
+        fi
+
         mkdir -p "${{ github.workspace }}/.actionlint-bin"
         VERSION="${{ steps.version-resolver.outputs.version }}"
         VERSION_NUM="${VERSION#v}"
         
         # Pull the archive directly from GitHub Releases (avoiding raw.githubusercontent CDN rate limits)
-        if ! curl -fsSL "https://github.com/rhysd/actionlint/releases/download/${VERSION}/actionlint_${VERSION_NUM}_linux_amd64.tar.gz" | tar -xz -C "${{ github.workspace }}/.actionlint-bin" actionlint; then
+        if ! curl -fsSL "https://github.com/rhysd/actionlint/releases/download/${VERSION}/actionlint_${VERSION_NUM}_${OS}_${ARCH}.tar.gz" | tar -xz -C "${{ github.workspace }}/.actionlint-bin" actionlint; then
           echo "::warning title=actionlint download failed::⚠️ Failed to download actionlint binary from GitHub Releases. Skipping linter checks."
         fi
 
     - name: Run actionlint
       shell: bash
+      env:
+        ACTIONLINT_ARGS: ${{ inputs.args }}
       run: |
-        if [ -f "${{ github.workspace }}/.actionlint-bin/actionlint" ]; then
-          "${{ github.workspace }}/.actionlint-bin/actionlint" ${{ inputs.args }}
+        ACTIONLINT_BIN="${{ github.workspace }}/.actionlint-bin/actionlint"
+        if [ -x "$ACTIONLINT_BIN" ]; then
+          "$ACTIONLINT_BIN" $ACTIONLINT_ARGS
         else
-          echo "::warning title=actionlint missing::⚠️ actionlint binary not found. Skipping linter checks."
+          echo "::warning title=actionlint missing::⚠️ actionlint binary not found or not executable. Skipping linter checks."
         fi
