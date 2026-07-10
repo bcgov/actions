@@ -87,6 +87,14 @@ runs:
           exit 1
         fi
 
+    - name: Checkout for Diff
+      uses: actions/checkout@v7
+      with:
+        token: ${{ github.token }}
+        repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+        ref: ${{ github.event.pull_request.head.sha || github.ref }}
+        fetch-depth: ${{ (github.event.pull_request && !inputs.diff_branch) && 1 || 0 }}
+
     - id: diff
       shell: bash
       env:

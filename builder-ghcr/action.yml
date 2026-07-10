@@ -146,6 +146,14 @@ runs:
     # fork's head branch against the base repository's target branch.
     # External repos: Skip for external repo builds because diffing the current branch
     # against another repository's branch is not meaningful in this context.
+    - name: Checkout for Diff
+      uses: actions/checkout@v7
+      with:
+        token: ${{ inputs.github_token }}
+        repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+        ref: ${{ github.event.pull_request.head.sha || github.ref }}
+        fetch-depth: ${{ (github.event.pull_request && !inputs.diff_branch) && 1 || 0 }}
+
     - id: diff
       if: inputs.repository == github.repository
       shell: bash
