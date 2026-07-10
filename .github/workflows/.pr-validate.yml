@@ -33,6 +33,7 @@ jobs:
         with:
           sparse-checkout: .github/workflows
           sparse-checkout-cone-mode: false
+          path: calling-repo
 
       # Checkout actions repository dynamically to access local actions
       - name: Checkout Actions Repo
@@ -41,11 +42,12 @@ jobs:
           repository: bcgov/actions
           ref: ${{ github.action_ref || 'main' }}
           path: .github/bcgov-actions
-          clean: false
 
       # Run actionlint
       - name: Actionlint
         uses: ./.github/bcgov-actions/actionlint
+        with:
+          args: "calling-repo/.github/workflows"
 
       # Conventional commits
       - name: Conventional Commits
