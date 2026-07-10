@@ -27,6 +27,13 @@ jobs:
       pull-requests: write
     runs-on: ubuntu-24.04
     steps:
+      # Checkout calling repository workflows for linting
+      - name: Checkout calling repository
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/workflows
+          sparse-checkout-cone-mode: false
+
       # Checkout actions repository dynamically to access local actions
       - name: Checkout Actions Repo
         uses: actions/checkout@v7
@@ -34,6 +41,11 @@ jobs:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
           path: .github/bcgov-actions
+          clean: false
+
+      # Run actionlint
+      - name: Actionlint
+        uses: ./.github/bcgov-actions/actionlint
 
       # Conventional commits
       - name: Conventional Commits

@@ -25,6 +25,8 @@ runs:
             VERSION="v$(awk '$1 == "actionlint" {print $2}' "${{ github.workspace }}/.tool-versions")"
           elif [ -f "${{ github.action_path }}/.tool-versions" ]; then
             VERSION="v$(awk '$1 == "actionlint" {print $2}' "${{ github.action_path }}/.tool-versions")"
+          elif [ -f "${{ github.action_path }}/../.tool-versions" ]; then
+            VERSION="v$(awk '$1 == "actionlint" {print $2}' "${{ github.action_path }}/../.tool-versions")"
           else
             VERSION="v1.7.12"
           fi
