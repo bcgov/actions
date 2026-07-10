@@ -129,6 +129,14 @@ runs:
           echo "triggered=false" >> $GITHUB_OUTPUT # Default
         fi
 
+    - name: Checkout for Diff
+      if: inputs.triggers != ''
+      uses: actions/checkout@v7
+      with:
+        repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+        ref: ${{ github.event.pull_request.head.sha || github.ref }}
+        fetch-depth: 0
+
     - id: diff_actual
       if: inputs.triggers != ''
       shell: bash
