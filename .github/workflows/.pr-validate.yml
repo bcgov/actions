@@ -38,8 +38,8 @@ jobs:
       - name: Checkout Actions Repo
         uses: actions/checkout@v7
         with:
-          repository: ${{ job.workflow_repository }}
-          ref: ${{ job.workflow_sha }}
+          repository: bcgov/actions
+          ref: ${{ github.action_ref || 'main' }}
           path: .github/bcgov-actions
           clean: false
 

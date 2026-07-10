@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   test-triggers-match:
-    name: Test Match (Expected: true)
+    name: "Test Match (Expected: true)"
     runs-on: ubuntu-24.04
     outputs:
       triggered: ${{ steps.test.outputs.triggered }}

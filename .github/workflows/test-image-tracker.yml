@@ -163,7 +163,10 @@ jobs:
             fi
 
             # Ensure the commit is locally reachable.
-            ( cd target && git fetch --quiet origin "${found_rev}" 2>/dev/null || true )
+            (
+              cd target
+              git fetch --quiet origin "${found_rev}" 2>/dev/null || true
+            )
 
             # Run image-tracker for this package.
             export GITHUB_OUTPUT; GITHUB_OUTPUT=$(mktemp)

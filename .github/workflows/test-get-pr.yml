@@ -37,7 +37,7 @@ jobs:
     steps:
       - name: Verify PR number
         run: |
-          [ ! -z "${{ env.pr }}" ] || \
+          [ -n "${pr}" ] || \
             (echo "No PR number" && exit 1)
           echo "PR: ${{ env.pr }}"
 
