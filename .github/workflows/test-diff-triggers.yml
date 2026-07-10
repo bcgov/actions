@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   test-triggers-match:
-    name: Test Match (Expected: true)
+    name: "Test Match (Expected: true)"
     runs-on: ubuntu-24.04
     outputs:
       triggered: ${{ steps.test.outputs.triggered }}
@@ -30,7 +30,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
   test-triggers-no-match:
-    name: Test No Match (Expected: false)
+    name: "Test No Match (Expected: false)"
     runs-on: ubuntu-24.04
     outputs:
       triggered: ${{ steps.test.outputs.triggered }}
@@ -43,7 +43,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
   test-triggers-omitted:
-    name: Test Omitted (Expected: true)
+    name: "Test Omitted (Expected: true)"
     runs-on: ubuntu-24.04
     outputs:
       triggered: ${{ steps.test.outputs.triggered }}
@@ -55,7 +55,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
   test-custom-ref:
-    name: Test Custom Ref (Expected: true)
+    name: "Test Custom Ref (Expected: true)"
     runs-on: ubuntu-24.04
     outputs:
       triggered: ${{ steps.test.outputs.triggered }}

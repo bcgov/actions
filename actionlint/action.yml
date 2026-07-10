@@ -1,0 +1,71 @@
+name: actionlint
+description: Lint GitHub Actions workflows with caching and rate-limit proof execution
+branding:
+  icon: check-square
+  color: blue
+
+inputs:
+  version:
+    description: Pinned version tag of rhysd/actionlint to run (e.g. v1.7.12). Defaults to version in .tool-versions.
+    default: ""
+  args:
+    description: Additional command line arguments to pass to actionlint
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve actionlint version
+      id: version-resolver
+      shell: bash
+      run: |
+        VERSION="${{ inputs.version }}"
+        if [ -z "${VERSION}" ]; then
+          if [ -f "${{ github.workspace }}/.tool-versions" ]; then
+            VERSION="v$(awk '$1 == "actionlint" {print $2}' "${{ github.workspace }}/.tool-versions")"
+          elif [ -f "${{ github.action_path }}/.tool-versions" ]; then
+            VERSION="v$(awk '$1 == "actionlint" {print $2}' "${{ github.action_path }}/.tool-versions")"
+          elif [ -f "${{ github.action_path }}/../.tool-versions" ]; then
+            VERSION="v$(awk '$1 == "actionlint" {print $2}' "${{ github.action_path }}/../.tool-versions")"
+          else
+            VERSION="v1.7.12"
+          fi
+        fi
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+    - name: Cache actionlint binary
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ github.workspace }}/.actionlint-bin
+        key: actionlint-${{ steps.version-resolver.outputs.version }}-${{ runner.os }}-${{ runner.arch }}
+
+    - name: Download actionlint
+      if: runner.os == 'Linux' && runner.arch == 'X64' && steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        ACTIONLINT_VERSION: ${{ steps.version-resolver.outputs.version }}
+      run: |
+        set -euo pipefail
+        mkdir -p "${{ github.workspace }}/.actionlint-bin"
+        VERSION="${ACTIONLINT_VERSION}"
+        VERSION_NUM="${VERSION#v}"
+        
+        # Pull the archive directly from GitHub Releases (avoiding raw.githubusercontent CDN rate limits)
+        if ! curl -fsSL "https://github.com/rhysd/actionlint/releases/download/${VERSION}/actionlint_${VERSION_NUM}_linux_amd64.tar.gz" | tar -xz -C "${{ github.workspace }}/.actionlint-bin" actionlint; then
+          echo "::warning title=actionlint download failed::Failed to download actionlint binary from GitHub Releases. Skipping linter checks."
+        fi
+
+    - name: Run actionlint
+      if: runner.os == 'Linux' && runner.arch == 'X64'
+      shell: bash
+      env:
+        ACTIONLINT_ARGS: ${{ inputs.args }}
+      run: |
+        set -euo pipefail
+        ACTIONLINT_BIN="${{ github.workspace }}/.actionlint-bin/actionlint"
+        if [ -x "$ACTIONLINT_BIN" ]; then
+          "$ACTIONLINT_BIN" $ACTIONLINT_ARGS
+        else
+          echo "::warning title=actionlint missing::actionlint binary not found. Skipping linter checks."
+        fi
