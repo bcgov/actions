@@ -147,6 +147,7 @@ runs:
     # External repos: Skip for external repo builds because diffing the current branch
     # against another repository's branch is not meaningful in this context.
     - name: Checkout for Diff
+      if: inputs.repository == github.repository
       uses: actions/checkout@v7
       with:
         repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
