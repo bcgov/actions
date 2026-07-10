@@ -39,8 +39,10 @@ jobs:
       - name: Checkout Actions Repo
         uses: actions/checkout@v7
         with:
-          repository: bcgov/actions
-          ref: ${{ github.action_ref || 'main' }}
+          # actionlint: ignore
+          repository: ${{ job.workflow_repository }}
+          # actionlint: ignore
+          ref: ${{ job.workflow_sha }}
           path: .github/bcgov-actions
 
       # Run actionlint
@@ -87,8 +89,9 @@ jobs:
       - name: Errors
         if: failure()
         run: |
-          echo "Validation failed!  Possible reasons:"
-          echo " - Forks are not supported"
-          echo " - Conventional commits required for PR titles and merges"
-          echo "    https://www.conventionalcommits.org/en/v1.0.0/"
-          exit 1
+          echo "### ⚠️ PR Validation Failed" >> $GITHUB_STEP_SUMMARY
+          echo "Please inspect the workflow log outputs above to find the exact step that failed." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### Common Validation Requirements:" >> $GITHUB_STEP_SUMMARY
+          echo "- **Conventional Commits**: PR titles must follow the [Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/)." >> $GITHUB_STEP_SUMMARY
+          echo "- **Forks**: Direct pull requests from external forks are not supported by the runner validation pipelines." >> $GITHUB_STEP_SUMMARY
