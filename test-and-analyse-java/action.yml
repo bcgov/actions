@@ -87,12 +87,19 @@ runs:
           exit 1
         fi
 
-    # Send triggers to diff action, but only for pull requests
     - id: diff
-      uses: ./diff-triggers
-      with:
-        triggers: ${{ (github.event_name == 'pull_request' && inputs.triggers) || '' }}
-        ref: ${{ inputs.diff_branch }}
+      shell: bash
+      env:
+        INPUT_TRIGGERS: ${{ (github.event_name == 'pull_request' && inputs.triggers) || '' }}
+        INPUT_REF: ${{ inputs.diff_branch }}
+        INPUT_ANNOTATIONS: "true"
+        INPUT_GITHUB_TOKEN: ${{ github.token }}
+        GITHUB_WORKFLOW: ${{ github.workflow }}
+        GITHUB_JOB: ${{ github.job }}
+        EVENT_PR_BASE_DEFAULT_BRANCH: ${{ github.event.pull_request.base.repo.default_branch }}
+        EVENT_PR_BASE_CLONE_URL: ${{ github.event.pull_request.base.repo.clone_url }}
+        EVENT_REPOSITORY_CLONE_URL: ${{ github.event.repository.clone_url }}
+      run: bash ${{ github.action_path }}/../diff-triggers/action.sh
 
     - uses: actions/checkout@v6
       with:

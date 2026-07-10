@@ -148,10 +148,19 @@ runs:
     # against another repository's branch is not meaningful in this context.
     - id: diff
       if: inputs.repository == github.repository
-      uses: ./diff-triggers
-      with:
-        triggers: ${{ inputs.triggers }}
-        ref: ${{ inputs.diff_branch }}
+      shell: bash
+      env:
+        INPUT_TRIGGERS: ${{ inputs.triggers }}
+        INPUT_REF: ${{ inputs.diff_branch }}
+        INPUT_ANNOTATIONS: "true"
+        INPUT_GITHUB_TOKEN: ${{ inputs.github_token }}
+        GITHUB_WORKFLOW: ${{ github.workflow }}
+        GITHUB_JOB: ${{ github.job }}
+        EVENT_PR_BASE_DEFAULT_BRANCH: ${{ github.event.pull_request.base.repo.default_branch }}
+        EVENT_PR_BASE_CLONE_URL: ${{ github.event.pull_request.base.repo.clone_url }}
+        EVENT_REPOSITORY_CLONE_URL: ${{ github.event.repository.clone_url }}
+      run: bash ${{ github.action_path }}/../diff-triggers/action.sh
+
 
     # Log in to GHCR (for both retag and build operations)
     # This must happen before manifest inspection in 'Check for builds' to support private images
