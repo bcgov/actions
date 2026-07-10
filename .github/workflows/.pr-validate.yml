@@ -49,7 +49,7 @@ jobs:
       - name: Actionlint
         uses: ./.github/bcgov-actions/actionlint
         with:
-          args: "calling-repo/.github/workflows"
+          args: "calling-repo/.github/workflows/*"
 
       # Conventional commits
       - name: Conventional Commits
