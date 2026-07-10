@@ -32,7 +32,7 @@ runs:
         token: ${{ inputs.github_token }}
         repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
         ref: ${{ github.event.pull_request.head.sha || github.ref }}
-        fetch-depth: ${{ github.event.pull_request && 1 || 0 }}
+        fetch-depth: ${{ (github.event.pull_request && !inputs.ref) && 1 || 0 }}
 
     - id: diff
       shell: bash
