@@ -62,12 +62,12 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 0 # Fetch all history so HEAD~2 is available
+          fetch-depth: 0 # Fetch all history so refs are available
       - uses: ./diff-triggers
         id: test
         with:
           triggers: ('diff-triggers/' 'action.yml' '.github/')
-          ref: "HEAD~2"
+          ref: ${{ github.event.pull_request.base.ref || 'HEAD~1' }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
   verify-results:
