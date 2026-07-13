@@ -4,11 +4,7 @@
 * **sonar_comment_token has been removed (ignored by SonarCloud)**
 * **sonar_project_token has been renamed sonar_token**
 
-<!-- Badges -->
-[![Issues](https://img.shields.io/github/issues/bcgov/action-test-and-analyse)](/../../issues)
-[![Pull Requests](https://img.shields.io/github/issues-pr/bcgov/action-test-and-analyse)](/../../pulls)
-[![Apache-2.0 License](https://img.shields.io/github/license/bcgov/action-test-and-analyse.svg)](/LICENSE)
-[![Lifecycle](https://img.shields.io/badge/Lifecycle-Experimental-339999)](https://github.com/bcgov/repomountie/blob/master/doc/lifecycle-badges.md)
+
 
 <!-- Reference-Style link -->
 [SonarCloud]: https://sonarcloud.io
@@ -20,7 +16,7 @@
  This action runs tests and analysis across the BC Gov ecosystem, optionally sending results and coverage to [SonarCloud](https://sonarcloud.io). It supports **Node.js, Java, and Python** projects with unified reporting, supply chain scanning, and dependency analysis.
 
 > [!IMPORTANT]
-> **Deprecation Notice**: This action now natively supports Java. If you are using `bcgov/action-test-and-analyse-java`, you should migrate to this universal action. The Java-specific repository is now considered redundant.
+> **Deprecation Notice**: This action now natively supports Java. If you are using `bcgov/actions/test-and-analyse-java`, you should migrate to this universal action. The Java-specific action is now considered redundant.
  
  Conditional triggers are used to determine whether tests need to be run. If triggers are matched, the appropriate code is tested. Tests always run if no triggers are provided.
  
@@ -32,7 +28,7 @@
 # Usage
 
 ```yaml
-- uses: bcgov/action-test-and-analyse@v2
+- uses: bcgov/actions/test-and-analyse@vX.Y.Z
   with:
     ### Language Selection
     # Primary language of the project. Options: node (default), java, python
@@ -115,7 +111,7 @@ jobs:
     name: Java Tests
     runs-on: ubuntu-24.04
     steps:
-      - uses: bcgov/action-test-and-analyse@v2
+      - uses: bcgov/actions/test-and-analyse@vX.Y.Z
         with:
           language: java
           java_version: "21"
@@ -138,7 +134,7 @@ jobs:
     name: Python Tests
     runs-on: ubuntu-24.04
     steps:
-      - uses: bcgov/action-test-and-analyse@v2
+      - uses: bcgov/actions/test-and-analyse@vX.Y.Z
         with:
           language: python
           python_version: "3.12"
@@ -159,7 +155,7 @@ jobs:
     name: Test and Analyze
     runs-on: ubuntu-24.04
     steps:
-      - uses: bcgov/action-test-and-analyse@v2
+      - uses: bcgov/actions/test-and-analyse@vX.Y.Z
         with:
           commands: |
             npm ci
@@ -190,8 +186,8 @@ jobs:
             token: SONAR_TOKEN_FRONTEND
             triggers: ('backend/' 'charts/backend')
     steps:
-      - uses: actions/checkout@v5
-      - uses: bcgov/action-test-and-analyse@v2
+      - uses: actions/checkout@v7
+      - uses: bcgov/actions/test-and-analyse@vX.Y.Z
         with:
           commands: |
             npm ci
@@ -200,8 +196,8 @@ jobs:
           node_version: "20"
           sonar_args: |
             -Dsonar.exclusions=**/coverage/**,**/node_modules/**
-            -Dsonar.organization=bcgov-nr
-            -Dsonar.projectKey=bcgov-nr_action-test-and-analyse_${{ matrix.dir }}
+            -Dsonar.organization=bcgov-sonarcloud
+            -Dsonar.projectKey=bcgov_${{ github.repository }}_${{ matrix.dir }}
           sonar_token: ${{ secrets[matrix.token] }}
           triggers: ${{ matrix.triggers }}
           repository: bcgov/quickstart-openshift
@@ -218,7 +214,7 @@ Has the action been triggered by path changes? \[true|false\]
 
 ```yaml
 - id: test
-  uses: bcgov/action-test-and-analyse@v2
+  uses: bcgov/actions/test-and-analyse@vX.Y.Z
   with:
     commands: |
       npm ci
@@ -257,7 +253,7 @@ Supply chain scanning is enabled by default. No configuration is required - it w
 ⚠️ **WARNING**: Disabling supply chain scanning is dangerous and strongly discouraged. It leaves your project vulnerable to malicious packages, typosquatting, and supply chain attacks. Only disable if absolutely necessary and you understand the security risks. If you must disable, set `supply_scan: false` in your workflow:
 
 ```yaml
-- uses: bcgov/action-test-and-analyse@v2
+- uses: bcgov/actions/test-and-analyse@vX.Y.Z
   with:
     commands: |
       npm ci
@@ -291,7 +287,7 @@ The `dep_scan` parameter supports three modes:
 ### Example: Warn Mode (Default)
 
 ```yaml
-- uses: bcgov/action-test-and-analyse@v2
+- uses: bcgov/actions/test-and-analyse@vX.Y.Z
   with:
     commands: |
       npm ci
@@ -304,7 +300,7 @@ The `dep_scan` parameter supports three modes:
 ### Example: Error Mode (Enforce Cleanup)
 
 ```yaml
-- uses: bcgov/action-test-and-analyse@v2
+- uses: bcgov/actions/test-and-analyse@vX.Y.Z
   with:
     commands: |
       npm ci
@@ -343,7 +339,7 @@ The default configuration excludes the following packages that are commonly flag
 When `knip_config` is not provided, the action uses its default configuration. If you need a custom configuration, specify it using the `knip_config` parameter:
 
 ```yaml
-- uses: bcgov/action-test-and-analyse@v2
+- uses: bcgov/actions/test-and-analyse@vX.Y.Z
   with:
     dep_scan: error
     knip_config: "configs/custom.knip.json"  # Path is relative to the GitHub workspace root, not to the `dir` input

@@ -4,10 +4,6 @@
 
 ---
 
-[![MIT License](https://img.shields.io/github/license/bcgov/actions.svg)](/LICENSE)
-[![Issues](https://img.shields.io/github/issues/bcgov/actions)](/../../issues)
-[![Pull Requests](https://img.shields.io/github/issues-pr/bcgov/actions)](/../../pulls)
-
 # Diff File Changes with Triggers
 
 Check triggers against a diff of changed files. Supports PR events (including fork PRs), push events, workflow_dispatch, and other GitHub Actions events. Useful for conditional builds and deployments based on file changes.
