@@ -1,6 +1,3 @@
-[![MIT License](https://img.shields.io/github/license/bcgov/actions.svg)](/LICENSE)
-[![Issues](https://img.shields.io/github/issues/bcgov/actions)](/../../issues)
-[![Pull Requests](https://img.shields.io/github/issues-pr/bcgov/actions)](/../../pulls)
 
 # Lint GitHub Actions Workflows
 

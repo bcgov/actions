@@ -1,8 +1,3 @@
-<!-- Badges -->
-[![Issues](https://img.shields.io/github/issues/bcgov/actions)](/../../issues)
-[![Pull Requests](https://img.shields.io/github/issues-pr/bcgov/actions)](/../../pulls)
-[![MIT License](https://img.shields.io/github/license/bcgov/actions.svg)](/LICENSE)
-[![Lifecycle](https://img.shields.io/badge/Lifecycle-Experimental-339999)](https://github.com/bcgov/repomountie/blob/master/doc/lifecycle-badges.md)
 
 # Conditional Container Builder with Fallback, Attestations and SBOMs (Software Bill of Materials)
 

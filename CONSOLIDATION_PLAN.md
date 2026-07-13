@@ -55,10 +55,7 @@ actions-openshift/
 
 **Phase 2: Migration with Backwards Compatibility**
 1. Migrate each action to its new location.
-2. Update old action repositories to be **thin wrapper actions** that:
-   - Call the new consolidated action location.
-   - Maintain the same interface/inputs.
-   - Add **::warning::** deprecation notices.
+2. Add **::warning::** deprecation notices to the old action repositories. *(Note: We initially planned to use thin wrapper actions to call the new locations, but this caused logging problems, so we only added deprecation warnings.)*
 
 **Phase 3: Update Workflows & Deprecation**
 1. Update internal workflows to use new locations.

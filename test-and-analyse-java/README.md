@@ -2,11 +2,7 @@
 * **java-version is now required (previously defaulted to 17)**
 * **sonar_project_token has been renamed sonar_token**
 
-<!-- Badges -->
-[![Issues](https://img.shields.io/github/issues/bcgov/actions)](/../../issues)
-[![Pull Requests](https://img.shields.io/github/issues-pr/bcgov/actions)](/../../pulls)
-[![MIT License](https://img.shields.io/github/license/bcgov/actions.svg)](/LICENSE)
-[![Lifecycle](https://img.shields.io/badge/Lifecycle-Experimental-339999)](https://github.com/bcgov/repomountie/blob/master/doc/lifecycle-badges.md)
+
 
 <!-- Reference-Style link -->
 [SonarCloud]: https://sonarcloud.io

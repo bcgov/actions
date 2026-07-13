@@ -1,5 +1,10 @@
 # bcgov/actions (Shared GitHub Actions)
 
+[![Issues](https://img.shields.io/github/issues/bcgov/actions)](/../../issues)
+[![Pull Requests](https://img.shields.io/github/issues-pr/bcgov/actions)](/../../pulls)
+[![Apache-2.0 License](https://img.shields.io/github/license/bcgov/actions.svg)](/LICENSE)
+[![Lifecycle](https://img.shields.io/badge/Lifecycle-Experimental-339999)](https://github.com/bcgov/repomountie/blob/master/doc/lifecycle-badges.md)
+
 A centralized repository for custom GitHub Actions used across the `bcgov` organization. 
 
 ---
