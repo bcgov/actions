@@ -67,7 +67,7 @@ jobs:
         id: test
         with:
           triggers: ('diff-triggers/' 'action.yml' '.github/')
-          ref: ${{ github.event.pull_request.base.ref || 'HEAD~1' }}
+          ref: ${{ github.event.pull_request.base.sha || 'HEAD~1' }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
   verify-results:
