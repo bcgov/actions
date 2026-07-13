@@ -76,12 +76,16 @@ else
 fi
 
 # If BASE_REF starts with HEAD, it's a local ref - use it directly
-# Otherwise, fetch from remote and prefix
+# Otherwise, fetch from remote and determine if prefix is needed (e.g. for branches)
 if [[ "$BASE_REF" == HEAD* ]]; then
   COMPARE_REF="$BASE_REF"
 else
   git fetch base "$BASE_REF"
-  COMPARE_REF="base/$BASE_REF"
+  if git rev-parse --verify --quiet "refs/remotes/base/$BASE_REF" >/dev/null 2>&1; then
+    COMPARE_REF="base/$BASE_REF"
+  else
+    COMPARE_REF="$BASE_REF"
+  fi
 fi
 
 # Check all triggers and collect results
