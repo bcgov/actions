@@ -4,6 +4,16 @@ A centralized repository for custom GitHub Actions used across the `bcgov` organ
 
 ---
 
+## 🔒 Version Pinning Policy
+
+> **Never reference these actions with `@main`.** Always pin to a release tag (e.g. `@v1.2.3`) or, better yet, a full commit SHA.
+>
+> Usage examples in this repo intentionally use `@vX.Y.Z` — a placeholder that **will not resolve**. This is by design: copy-paste should fail until you look up the [latest release](../../releases) and pick a real version.
+>
+> All actions in this repository are versioned and released together as a single suite.
+
+---
+
 ## 🧪 Testing & PR Guidelines
 
 To maintain "Boss Level" consistency across all our actions, every PR should:
@@ -17,35 +27,35 @@ To maintain "Boss Level" consistency across all our actions, every PR should:
 
 ### [workflow-notifier](./workflow-notifier/)
 Find `CODEOWNERS` and coordinate notifications (GitHub Issues) on job failures.
-- **Uses:** `bcgov/actions/workflow-notifier@main`
+- **Uses:** `bcgov/actions/workflow-notifier@vX.Y.Z`
 
 ### [image-tracker](./image-tracker/)
 Forensic history traversal to resolve stable image SHAs from Tags or SHAs.
-- **Uses:** `bcgov/actions/image-tracker@main`
+- **Uses:** `bcgov/actions/image-tracker@vX.Y.Z`
 
 ### [diff-triggers](./diff-triggers/)
 Checks git diff for file and path changes to conditionally trigger workflow jobs.
-- **Uses:** `bcgov/actions/diff-triggers@main`
+- **Uses:** `bcgov/actions/diff-triggers@vX.Y.Z`
 
 ### [builder-ghcr](./builder-ghcr/)
 Generic GHCR container builder with automatic tag management.
-- **Uses:** `bcgov/actions/builder-ghcr@main`
+- **Uses:** `bcgov/actions/builder-ghcr@vX.Y.Z`
 
 ### [get-pr](./get-pr/)
 Resolve the Pull Request number for merge queues, squash merges, pushes, and releases.
-- **Uses:** `bcgov/actions/get-pr@main`
+- **Uses:** `bcgov/actions/get-pr@vX.Y.Z`
 
 ### [test-and-analyse](./test-and-analyse/)
 Universal Test and Analyze with Triggers, SonarCloud, and Multi-Language Support.
-- **Uses:** `bcgov/actions/test-and-analyse@main`
+- **Uses:** `bcgov/actions/test-and-analyse@vX.Y.Z`
 
 ### [test-and-analyse-java](./test-and-analyse-java/)
 Run Java unit tests, can analyse with SonarCloud.
-- **Uses:** `bcgov/actions/test-and-analyse-java@main`
+- **Uses:** `bcgov/actions/test-and-analyse-java@vX.Y.Z`
 
 ### [actionlint](./actionlint/)
 Lint GitHub Actions workflow files with caching and rate-limit proof execution.
-- **Uses:** `bcgov/actions/actionlint@main`
+- **Uses:** `bcgov/actions/actionlint@vX.Y.Z`
 
 ---
 

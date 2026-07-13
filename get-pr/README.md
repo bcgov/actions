@@ -1,7 +1,7 @@
 <!-- Badges -->
-[![Issues](https://img.shields.io/github/issues/bcgov/action-get-pr)](/../../issues)
-[![Pull Requests](https://img.shields.io/github/issues-pr/bcgov/action-get-pr)](/../../pulls)
-[![MIT License](https://img.shields.io/github/license/bcgov/action-get-pr.svg)](/LICENSE)
+[![Issues](https://img.shields.io/github/issues/bcgov/actions)](/../../issues)
+[![Pull Requests](https://img.shields.io/github/issues-pr/bcgov/actions)](/../../pulls)
+[![MIT License](https://img.shields.io/github/license/bcgov/actions.svg)](/LICENSE)
 [![Lifecycle](https://img.shields.io/badge/Lifecycle-Experimental-339999)](https://github.com/bcgov/repomountie/blob/master/doc/lifecycle-badges.md)
 
 # Get PR Number - Merges and Queues
@@ -20,7 +20,7 @@ The build will return a PR number as output.
 
 ```yaml
 - id: vars
-  uses: bcgov/action-get-pr@vX.Y.Z
+  uses: bcgov/actions/get-pr@vX.Y.Z
 
 - name: Echo PR number
   run: echo "PR: ${{ steps.vars.outputs.pr }}"
@@ -32,7 +32,7 @@ Private repositories may need to provide a GitHub token.
 
 ```yaml
 - id: vars
-  uses: bcgov/action-get-pr@vX.Y.Z
+  uses: bcgov/actions/get-pr@vX.Y.Z
   with:
     github_token: ${{ secrets.GITHUB_TOKEN }}
 

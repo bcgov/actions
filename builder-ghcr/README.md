@@ -1,7 +1,7 @@
 <!-- Badges -->
-[![Issues](https://img.shields.io/github/issues/bcgov/action-builder-ghcr)](/../../issues)
-[![Pull Requests](https://img.shields.io/github/issues-pr/bcgov/action-builder-ghcr)](/../../pulls)
-[![MIT License](https://img.shields.io/github/license/bcgov/action-builder-ghcr.svg)](/LICENSE)
+[![Issues](https://img.shields.io/github/issues/bcgov/actions)](/../../issues)
+[![Pull Requests](https://img.shields.io/github/issues-pr/bcgov/actions)](/../../pulls)
+[![MIT License](https://img.shields.io/github/license/bcgov/actions.svg)](/LICENSE)
 [![Lifecycle](https://img.shields.io/badge/Lifecycle-Experimental-339999)](https://github.com/bcgov/repomountie/blob/master/doc/lifecycle-badges.md)
 
 # Conditional Container Builder with Fallback, Attestations and SBOMs (Software Bill of Materials)
@@ -21,7 +21,7 @@ Only GitHub Container Registry (ghcr.io) is supported so far.
 # Usage
 
 ```yaml
-- uses: bcgov/action-builder-ghcr@vX.Y.X
+- uses: bcgov/actions/builder-ghcr@vX.Y.Z
   with:
     ### Required
 
@@ -149,7 +149,7 @@ builds:
   runs-on: ubuntu-24.04
   steps:
     - name: Builds
-      uses: bcgov/action-builder-ghcr@vX.Y.Z
+      uses: bcgov/actions/builder-ghcr@vX.Y.Z
       with:
         package: frontend
         tag_fallback: test
@@ -165,7 +165,7 @@ builds:
   runs-on: ubuntu-24.04
   steps:
     - name: Builds
-      uses: bcgov/action-builder-ghcr@vX.Y.Z
+      uses: bcgov/actions/builder-ghcr@vX.Y.Z
       with:
         package: frontend
         build_context: ./
@@ -195,9 +195,9 @@ builds:
         - package: frontend
           triggers: ('frontend/')
   steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - name: Test Builds
-      uses: bcgov/action-builder-ghcr@vX.Y.Z
+      uses: bcgov/actions/builder-ghcr@vX.Y.Z
       with:
         package: ${{ matrix.package }}
         tags: ${{ github.event.number }}
@@ -217,7 +217,7 @@ builds:
   runs-on: ubuntu-24.04
   steps:
     - name: Builds with Metadata Tags
-      uses: bcgov/action-builder-ghcr@vX.Y.Z
+      uses: bcgov/actions/builder-ghcr@vX.Y.Z
       with:
         package: frontend
         tag_fallback: test
@@ -329,7 +329,7 @@ New image digest (SHA).  This applies to build and retags.
 
 ```yaml
 - id: digest
-  uses: bcgov/action-builder-ghcr@vX.Y.Z
+  uses: bcgov/actions/builder-ghcr@vX.Y.Z
   ...
 
 - name: Echo digest
@@ -342,7 +342,7 @@ Has an image been built?  [true|false]
 
 ```yaml
 - id: trigger
-  uses: bcgov/action-builder-ghcr@vX.Y.Z
+  uses: bcgov/actions/builder-ghcr@vX.Y.Z
   ...
 
 - name: Echo build trigger

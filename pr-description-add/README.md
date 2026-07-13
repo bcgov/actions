@@ -1,11 +1,7 @@
 <!-- Badges -->
-[![Release](https://github.com/bcgov/action-pr-description-add/actions/workflows/release.yml/badge.svg)](https://github.com/bcgov/action-pr-description-add/actions/workflows/release.yml)
-[![CodeQL](https://github.com/bcgov/action-pr-description-add/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/bcgov/action-pr-description-add/actions/workflows/github-code-scanning/codeql)
-[![Contributors](https://img.shields.io/github/contributors/bcgov/action-pr-description-add)](/../../graphs/contributors)
-[![Forks](https://img.shields.io/github/forks/bcgov/action-pr-description-add)](/../../network/members)
-[![Stargazers](https://img.shields.io/github/stars/bcgov/action-pr-description-add)](/../../stargazers)
-[![Issues](https://img.shields.io/github/issues/bcgov/action-pr-description-add)](/../../issues)
-[![MIT License](https://img.shields.io/github/license/bcgov/action-pr-description-add.svg)](/LICENSE)
+[![Issues](https://img.shields.io/github/issues/bcgov/actions)](/../../issues)
+[![Pull Requests](https://img.shields.io/github/issues-pr/bcgov/actions)](/../../pulls)
+[![MIT License](https://img.shields.io/github/license/bcgov/actions.svg)](/LICENSE)
 [![Lifecycle](https://img.shields.io/badge/Lifecycle-Experimental-339999)](https://github.com/bcgov/repomountie/blob/master/doc/lifecycle-badges.md)
 
 # Add to Pull Request Descriptions
@@ -40,7 +36,7 @@ Forks receive purposefully limited rights, preventing this action from running s
 
 ## Example #1, minimal
 
-Create or modify a GitHub workflow, like below.  E.g. `./github/workflows/pr-append.yml`
+Create or modify a GitHub workflow, like below.  E.g. `.github/workflows/pr-append.yml`
 
 ```yaml
 name: "Add to Pull Request Description"
@@ -51,7 +47,7 @@ jobs:
   test:
     runs-on: ubuntu-24.04
     steps:
-      - uses: bcgov/action-pr-description-add@main
+      - uses: bcgov/actions/pr-description-add@vX.Y.Z
         with:
           add_markdown: |
             ---
@@ -77,7 +73,7 @@ jobs:
       pull-requests: write
     runs-on: ubuntu-24.04
     steps:
-      - uses: bcgov/action-pr-description-add@main
+      - uses: bcgov/actions/pr-description-add@vX.Y.Z
         with:
           github_token: "${{ secrets.GITHUB_TOKEN }}"
           add_markdown: |
