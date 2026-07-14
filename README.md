@@ -63,14 +63,6 @@ Universal Test and Analyze with Triggers, SonarCloud, and Multi-Language Support
   uses: bcgov/actions/test-and-analyse@vX.Y.Z # Replace with latest release tag
 ```
 
-### [test-and-analyse-java](./test-and-analyse-java/)
-Run Java unit tests, can analyse with SonarCloud.
-
-```yaml
-- name: Test Java
-  uses: bcgov/actions/test-and-analyse-java@vX.Y.Z # Replace with latest release tag
-```
-
 ### [workflow-notifier](./workflow-notifier/)
 Find `CODEOWNERS` and coordinate notifications (GitHub Issues) on job failures.
 
