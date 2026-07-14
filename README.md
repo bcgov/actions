@@ -63,6 +63,9 @@ Universal Test and Analyze with Triggers, SonarCloud, and Multi-Language Support
   uses: bcgov/actions/test-and-analyse@vX.Y.Z # Replace with latest release tag
 ```
 
+### ~~test-and-analyse-java~~ (Consolidated)
+**Deprecated**: This Java-specific utility has been consolidated into [test-and-analyse](./test-and-analyse/). Please migrate to `test-and-analyse` with `language: java` specified.
+
 ### [workflow-notifier](./workflow-notifier/)
 Find `CODEOWNERS` and coordinate notifications (GitHub Issues) on job failures.
 
