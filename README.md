@@ -56,20 +56,18 @@ Add markdown content to Pull Request descriptions dynamically.
 ```
 
 ### [test-and-analyse](./test-and-analyse/)
-Universal Test and Analyze with Triggers, SonarCloud, and Multi-Language Support.
+Universal Test and Analyze with Triggers, SonarCloud, and Multi-Language Support. Supports the following runtimes:
+- **Node.js**: Testing, dependency analysis with Knip, and safe-chain supply scanning (default).
+- **Java**: Maven/Gradle tests and SonarCloud analysis (using input `language: java`).
+- **Python**: Pytest runs and JUnit XML parsing (using input `language: python`).
 
 ```yaml
 - name: Test and Analyze
   uses: bcgov/actions/test-and-analyse@vX.Y.Z # Replace with latest release tag
 ```
 
-### [test-and-analyse-java](./test-and-analyse-java/)
-Run Java unit tests, can analyse with SonarCloud.
-
-```yaml
-- name: Test Java
-  uses: bcgov/actions/test-and-analyse-java@vX.Y.Z # Replace with latest release tag
-```
+### ~~test-and-analyse-java~~ (Consolidated)
+**Deprecated**: This Java-specific utility has been consolidated into [test-and-analyse](./test-and-analyse/). Please migrate to `test-and-analyse` with `language: java` specified.
 
 ### [workflow-notifier](./workflow-notifier/)
 Find `CODEOWNERS` and coordinate notifications (GitHub Issues) on job failures.
@@ -83,6 +81,6 @@ Find `CODEOWNERS` and coordinate notifications (GitHub Issues) on job failures.
 
 > **Never reference these actions with `@main`.** Always pin to a release tag (e.g. `@v1.2.3`) or, better yet, a full commit SHA.
 >
-> Usage examples in this repo intentionally use `@vX.Y.Z` — a placeholder that **will not resolve**. This is by design.  Copy-paste should fail until you look up the [latest release](../../releases) and pick a real version.
+> Usage examples in this repo intentionally use a placeholder that **will not resolve** (`@vX.Y.Z`).  Copy-paste should fail until you look up the [latest release](../../releases) and pick a real version.
 >
 > All actions in this repository are versioned and released together as a single suite.

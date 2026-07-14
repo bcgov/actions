@@ -16,7 +16,7 @@
  This action runs tests and analysis across the BC Gov ecosystem, optionally sending results and coverage to [SonarCloud](https://sonarcloud.io). It supports **Node.js, Java, and Python** projects with unified reporting, supply chain scanning, and dependency analysis.
 
 > [!IMPORTANT]
-> **Deprecation Notice**: This action now natively supports Java. If you are using `bcgov/actions/test-and-analyse-java`, you should migrate to this universal action. The Java-specific action is now considered redundant.
+> **Deprecation Notice**: The Java-specific action (`bcgov/actions/test-and-analyse-java`) has been removed. Please migrate to this universal action (`bcgov/actions/test-and-analyse`) with `language: java` specified.
  
  Conditional triggers are used to determine whether tests need to be run. If triggers are matched, the appropriate code is tested. Tests always run if no triggers are provided.
  

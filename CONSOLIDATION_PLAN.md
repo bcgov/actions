@@ -28,7 +28,6 @@ actions/
 ├── image-tracker/
 ├── pr-description-add/
 ├── test-and-analyse/
-├── test-and-analyse-java/
 ├── workflow-notifier/  # (Formerly report-failures)
 ├── README.md
 └── LICENSE
