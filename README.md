@@ -81,6 +81,6 @@ Find `CODEOWNERS` and coordinate notifications (GitHub Issues) on job failures.
 
 > **Never reference these actions with `@main`.** Always pin to a release tag (e.g. `@v1.2.3`) or, better yet, a full commit SHA.
 >
-> Usage examples in this repo intentionally use `@vX.Y.Z` — a placeholder that **will not resolve**. This is by design.  Copy-paste should fail until you look up the [latest release](../../releases) and pick a real version.
+> Usage examples in this repo intentionally use a placeholder that **will not resolve** (`@vX.Y.Z`).  Copy-paste should fail until you look up the [latest release](../../releases) and pick a real version.
 >
 > All actions in this repository are versioned and released together as a single suite.
