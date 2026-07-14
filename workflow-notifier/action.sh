@@ -8,12 +8,6 @@ function log_debug() {
   fi
 }
 
-log_debug "Starting workflow-notifier"
-log_debug "  title: ${INPUT_TITLE:-}"
-log_debug "  labels: ${INPUT_LABELS:-}"
-log_debug "  assign: ${INPUT_ASSIGN:-}"
-log_debug "  dry_run: ${INPUT_DRY_RUN:-}"
-log_debug "  token: [MASKED]"
 
 # 1. Discover CODEOWNERS (root, .github/, docs/)
 CODEOWNERS_PATH=""
