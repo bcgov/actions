@@ -56,7 +56,10 @@ Add markdown content to Pull Request descriptions dynamically.
 ```
 
 ### [test-and-analyse](./test-and-analyse/)
-Universal Test and Analyze with Triggers, SonarCloud, and Multi-Language Support.
+Universal Test and Analyze with Triggers, SonarCloud, and Multi-Language Support. Supports the following runtimes:
+- **Node.js**: Testing, dependency analysis with Knip, and safe-chain supply scanning (default).
+- **Java**: Maven/Gradle tests and SonarCloud analysis (using input `language: java`).
+- **Python**: Pytest runs and JUnit XML parsing (using input `language: python`).
 
 ```yaml
 - name: Test and Analyze
