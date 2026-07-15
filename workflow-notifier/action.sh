@@ -1,6 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
+if [ "${INPUT_DEBUG:-}" == "true" ]; then
+  set -x
+fi
+
 # Helper functions for consistency across all actions
 function log_debug() {
   if [ "${INPUT_DEBUG:-}" == "true" ]; then
@@ -52,7 +56,7 @@ if [ -n "${INPUT_LABELS:-}" ]; then
 fi
 
 # Handle assignment (limit 10 for GitHub)
-if [ "${INPUT_ASSIGN}" == "true" ] && [ -n "$ASSIGNEES" ]; then
+if [ "${INPUT_ASSIGN:-}" == "true" ] && [ -n "$ASSIGNEES" ]; then
   CLEAN_ASSIGNEES=$(echo "$ASSIGNEES" | cut -d',' -f1-10)
   GH_ARGS+=(--assignee "$CLEAN_ASSIGNEES")
 fi
@@ -66,13 +70,13 @@ for i in "${!REDACTED_GH_ARGS[@]}"; do
 done
 
 log_debug "Constructed gh arguments: gh ${REDACTED_GH_ARGS[*]}"
-if [ "${INPUT_DRY_RUN}" == "true" ]; then
+if [ "${INPUT_DRY_RUN:-}" == "true" ]; then
   echo "::notice ::[DRY RUN] Would create issue: gh ${REDACTED_GH_ARGS[*]}"
   ISSUE_NUM="0"
   ISSUE_URL="https://github.com/${GITHUB_REPOSITORY}/issues/dry-run"
 else
   log_debug "Executing gh CLI to create issue"
-  ISSUE_URL=$(GH_TOKEN="${INPUT_TOKEN}" gh "${GH_ARGS[@]}")
+  ISSUE_URL=$(GH_TOKEN="${INPUT_TOKEN:-}" gh "${GH_ARGS[@]}")
   ISSUE_NUM=$(echo "$ISSUE_URL" | grep -oE '[0-9]+$' || echo "0")
 fi
 
