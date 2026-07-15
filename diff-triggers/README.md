@@ -25,11 +25,11 @@ The action supports multiple formats for the `triggers` input:
 
 | Format | Example |
 |---|---|
-| Parenthesized (bash-style) | `('backend/' 'frontend/')` |
-| JSON array | `["backend/", "frontend/"]` |
+| JSON array (recommended) | `["backend/", "frontend/"]` |
 | Comma-separated | `backend/,frontend/` |
 | Semicolon-separated | `backend/;frontend/` |
 | Space-separated | `backend/ frontend/` |
+| Parenthesized (legacy) | `('backend/' 'frontend/')` |
 
 # Usage
 
@@ -43,7 +43,7 @@ steps:
       # Paths used to check against file change (diff)
       # Supports multiple formats (see Trigger Formats above)
       # If omitted, the action always fires
-      triggers: ('backend/' 'frontend/')
+      triggers: '["backend/", "frontend/"]'
 
       ### Optional
 
@@ -71,7 +71,7 @@ The action provides detailed logging directly in the step output for easy debugg
 - **Banner** — A collapsible group clearly showing triggered/not-triggered status, with supplementary caller context in brackets: `[workflow / job]`
 - **Collapsible details** — Trigger configuration and per-trigger match results inside the group
 - **Ref source** — Shows whether comparison ref came from explicit input (`input`) or default behavior (`default`)
-- **Annotations** — Optional `::notice::` annotations (enabled by default; `annotations: true`) that appear in the workflow summary and annotations tab (e.g., `::notice title=Diff Triggers::✅ Fired. Triggers: ('backend/')`)
+- **Annotations** — Optional `::notice::` annotations (enabled by default; `annotations: true`) that appear in the workflow summary and annotations tab (e.g., `::notice title=Diff Triggers::✅ Fired. Triggers: ["backend/"]`)
 
 # Examples
 
@@ -100,7 +100,7 @@ jobs:
       - uses: bcgov/actions/diff-triggers@vX.Y.Z
         id: test
         with:
-          triggers: ('backend/' 'frontend/')
+          triggers: '["backend/", "frontend/"]'
 
   build:
     name: Build if Triggered
@@ -130,7 +130,7 @@ jobs:
       - uses: bcgov/actions/diff-triggers@vX.Y.Z
         id: test
         with:
-          triggers: ('backend/' 'frontend/')
+          triggers: '["backend/", "frontend/"]'
           # ref defaults to HEAD^ for push events
 ```
 
@@ -150,7 +150,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: bcgov/actions/diff-triggers@vX.Y.Z
         with:
-          triggers: ('backend/')
+          triggers: '["backend/"]'
           # ref defaults to HEAD^ for non-PR events
           # Can override: ref: main
 ```
@@ -164,7 +164,7 @@ steps:
       fetch-depth: 0
   - uses: bcgov/actions/diff-triggers@vX.Y.Z
     with:
-      triggers: ('backend/')
+      triggers: '["backend/"]'
       ref: abc123def456  # Compare against specific commit
 ```
 
@@ -186,5 +186,5 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
       - uses: bcgov/actions/diff-triggers@vX.Y.Z
         with:
-          triggers: ('backend/')
+          triggers: '["backend/"]'
 ```
