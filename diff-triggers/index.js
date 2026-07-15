@@ -159,14 +159,9 @@ async function main() {
     }
 
     try {
-      run('git remote get-url base');
       run(`git remote set-url base "${authedUrl}"`);
     } catch {
-      try {
-        run(`git remote add base "${authedUrl}"`);
-      } catch {
-        run(`git remote set-url base "${authedUrl}"`);
-      }
+      run(`git remote add base "${authedUrl}"`);
     }
   }
 
