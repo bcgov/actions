@@ -8,7 +8,7 @@ inputs:
   triggers:
     description: >-
       Paths used to trigger an event. Supports JSON arrays (["frontend/", "backend/"]),
-      parenthesized bash-style lists ('frontend/' 'backend/'), and delimited strings
+      parenthesized bash-style lists: ('frontend/' 'backend/'), and delimited strings
       separated by spaces, commas, or semicolons. Always triggers if omitted.
     required: false
   ref:

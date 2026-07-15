@@ -22,13 +22,17 @@ function parseTriggers(raw) {
   if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
     try {
       const parsed = JSON.parse(trimmed);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.map(t => String(t).trim()).filter(Boolean);
+      if (Array.isArray(parsed)) {
+        const arr = parsed.map(t => String(t).trim()).filter(Boolean);
+        if (arr.length > 0) return arr;
+        console.error(`::error::Could not parse any triggers from input: ${raw}`);
+        process.exit(1);
       }
     } catch {
       // Not valid JSON — fall through to other methods
     }
   }
+
 
   // 2. Multiline string (true GitHub Actions standard)
   // If there are newlines, split line-by-line and allow spaces per line
@@ -200,13 +204,7 @@ async function main() {
   let detailsLog = '';
 
   for (const t of triggers) {
-    let diffOutput = '';
-    try {
-      diffOutput = run(`git diff "${compareRef}" HEAD --name-only -- "${t}"`);
-    } catch {
-      // git diff returns non-zero when there are no changes or ref issues
-      diffOutput = '';
-    }
+    const diffOutput = run(`git diff "${compareRef}" HEAD --name-only -- "${t}"`);
 
     if (diffOutput) {
       triggered = true;
@@ -219,6 +217,7 @@ async function main() {
       detailsLog += `  ✘ '${t}'\n`;
     }
   }
+
 
   // ── Phase 6: Output and logging ────────────────────────────────────
   if (triggered) {
