@@ -49,6 +49,7 @@
     "@eslint/compat": "^2.1.0",
     "@octokit/plugin-paginate-rest@<11.4.1": "11.4.1",
     "@octokit/request@<9.2.1": "9.2.1",
-    "undici@<5.29.0": "5.29.0"
+    "undici": "^6.27.0",
+    "js-yaml": "^4.2.0"
   }
 }

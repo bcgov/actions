@@ -112,6 +112,8 @@ async function action(): Promise<void> {
   try {
     await action()
   } catch (err) {
-    setFailed(`Unexpected error: ${err instanceof Error ? err.message : String(err)}`)
+    setFailed(
+      `Unexpected error: ${err instanceof Error ? err.message : String(err)}`
+    )
   }
 })()
