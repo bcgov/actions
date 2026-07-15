@@ -5,11 +5,6 @@ on:
     paths:
       - 'pr-description-add/**'
       - '.github/workflows/test-pr-description-add.yml'
-  push:
-    branches: [main]
-    paths:
-      - 'pr-description-add/**'
-      - '.github/workflows/test-pr-description-add.yml'
   workflow_dispatch:
 
 permissions:
