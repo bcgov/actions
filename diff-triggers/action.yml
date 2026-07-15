@@ -6,44 +6,30 @@ branding:
 
 inputs:
   triggers:
-    description: Paths used to trigger an event; e.g. ('./backend/' './frontend/'); always trigger if omitted
+    description: >-
+      Paths used to trigger an event. Supports JSON arrays (["frontend/", "backend/"]),
+      parenthesized bash-style lists ('frontend/' 'backend/'), and delimited strings
+      separated by spaces, commas, or semicolons. Always triggers if omitted.
     required: false
   ref:
-    description: Reference to compare against (e.g., 'main', 'HEAD^', commit SHA). Defaults to base repo default branch for PRs, or HEAD^ for non-PR events. Local refs (HEAD^, HEAD~2) work for non-PR events; remote refs (branches, tags, SHAs) work for all events
+    description: >-
+      Reference to compare against (e.g., 'main', 'HEAD^', commit SHA).
+      Defaults to base repo default branch for PRs, or HEAD^ for non-PR events.
+      Local refs (HEAD^, HEAD~2) work for non-PR events;
+      remote refs (branches, tags, SHAs) work for all events.
     required: false
   github_token:
     description: Specify token (GH or PAT), instead of inheriting one from the calling workflow
     default: ${{ github.token }}
   annotations:
-    description: Emit workflow summary annotations (`::notice::`) for fired/not fired results. Set to false to suppress annotations
+    description: Emit workflow summary annotations (::notice::) for fired/not fired results. Set to false to suppress annotations
     required: false
     default: 'true'
 
 outputs:
   triggered:
     description: Boolean result of triggers
-    value: ${{ steps.diff.outputs.triggered }}
 
 runs:
-  using: composite
-  steps:
-    - uses: actions/checkout@v6
-      with:
-        token: ${{ inputs.github_token }}
-        repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
-        ref: ${{ github.event.pull_request.head.sha || github.ref }}
-        fetch-depth: ${{ (github.event.pull_request && !inputs.ref) && 1 || 0 }}
-
-    - id: diff
-      shell: bash
-      env:
-        INPUT_TRIGGERS: ${{ inputs.triggers }}
-        INPUT_REF: ${{ inputs.ref }}
-        INPUT_ANNOTATIONS: ${{ inputs.annotations }}
-        INPUT_GITHUB_TOKEN: ${{ inputs.github_token }}
-        GITHUB_WORKFLOW: ${{ github.workflow }}
-        GITHUB_JOB: ${{ github.job }}
-        EVENT_PR_BASE_DEFAULT_BRANCH: ${{ github.event.pull_request.base.repo.default_branch }}
-        EVENT_PR_BASE_CLONE_URL: ${{ github.event.pull_request.base.repo.clone_url }}
-        EVENT_REPOSITORY_CLONE_URL: ${{ github.event.repository.clone_url }}
-      run: bash ${{ github.action_path }}/action.sh
+  using: node24
+  main: index.js

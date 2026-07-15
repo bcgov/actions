@@ -1,6 +1,8 @@
-## ⚠️ BREAKING CHANGES in v1.0
+## ⚠️ BREAKING CHANGES in v2.0
 
-- **`diff_branch` replaced with `ref`, which supports branches, commit SHAs, tags, and relative refs**
+- **Rewritten in Node.js** — The action now uses `node24` instead of a composite bash script
+- **Checkout is required** — Callers must add an `actions/checkout` step before invoking this action. The action no longer performs its own checkout.
+- **`diff_branch` replaced with `ref`** (since v1.0), which supports branches, commit SHAs, tags, and relative refs
 
 ---
 
@@ -10,38 +12,52 @@ Check triggers against a diff of changed files. Supports PR events (including fo
 
 ## Features
 
-- ✅ **Fork PR Support**: Automatically handles fork and non-fork PRs
+- ✅ **Fork PR Support**: Handles fork and non-fork PRs (caller must checkout the correct ref)
 - ✅ **Push Event Support**: Works with push events for deployer workflows
 - ✅ **Flexible Ref Comparison**: Compare against any ref (branch, commit SHA, HEAD^, etc.)
 - ✅ **Smart Path Matching**: Uses git pathspec matching for accurate trigger detection
-- ✅ **Space Handling**: Properly handles trigger paths containing spaces
+- ✅ **Multiple Trigger Formats**: JSON arrays, comma/semicolon/space-separated, and bash-style parenthesized lists
 - ✅ **Visible Logging**: Prominent banners and collapsible details in step logs, plus notice annotations in workflow summary and annotations views
+
+## Trigger Formats
+
+The action supports multiple formats for the `triggers` input:
+
+| Format | Example |
+|---|---|
+| Parenthesized (bash-style) | `('backend/' 'frontend/')` |
+| JSON array | `["backend/", "frontend/"]` |
+| Comma-separated | `backend/,frontend/` |
+| Semicolon-separated | `backend/;frontend/` |
+| Space-separated | `backend/ frontend/` |
 
 # Usage
 
 ```yaml
-- uses: bcgov/actions/diff-triggers@vX.Y.Z
-  with:
-    ### Recommended
+steps:
+  - uses: actions/checkout@v6
+  - uses: bcgov/actions/diff-triggers@vX.Y.Z
+    with:
+      ### Recommended
 
-    # Paths used to check against file change (diff)
-    # Supports quoted strings with spaces: ('backend/' 'my path/file.txt')
-    # If omitted, the action always fires
-    triggers: ('backend/' 'frontend/')
+      # Paths used to check against file change (diff)
+      # Supports multiple formats (see Trigger Formats above)
+      # If omitted, the action always fires
+      triggers: ('backend/' 'frontend/')
 
-    ### Optional
+      ### Optional
 
-    # Reference to compare against
-    # - PR events: defaults to base repo default branch
-    # - Other events (push, workflow_dispatch, etc.): defaults to HEAD^
-    ref: main  # Branch, commit SHA, tag, or local ref (HEAD^, HEAD~2). Local refs work for non-PR events only
+      # Reference to compare against
+      # - PR events: defaults to base repo default branch
+      # - Other events (push, workflow_dispatch, etc.): defaults to HEAD^
+      ref: main  # Branch, commit SHA, tag, or local ref (HEAD^, HEAD~2). Local refs work for non-PR events only
 
-    # Specify token (GH or PAT), instead of inheriting one from the calling workflow
-    github_token: ${{ github.token }}
+      # Specify token (GH or PAT), instead of inheriting one from the calling workflow
+      github_token: ${{ github.token }}
 
-    # Emit workflow summary/annotations notices (default: true)
-    # Set false to suppress notices while keeping step logs
-    annotations: true
+      # Emit workflow summary/annotations notices (default: true)
+      # Set false to suppress notices while keeping step logs
+      annotations: true
 ```
 
 # Output
@@ -80,6 +96,7 @@ jobs:
       triggered: ${{ steps.test.outputs.triggered }}
     runs-on: ubuntu-24.04
     steps:
+      - uses: actions/checkout@v6
       - uses: bcgov/actions/diff-triggers@vX.Y.Z
         id: test
         with:
@@ -109,6 +126,7 @@ jobs:
   check:
     runs-on: ubuntu-24.04
     steps:
+      - uses: actions/checkout@v6
       - uses: bcgov/actions/diff-triggers@vX.Y.Z
         id: test
         with:
@@ -129,6 +147,7 @@ jobs:
     name: Check Triggers
     runs-on: ubuntu-24.04
     steps:
+      - uses: actions/checkout@v6
       - uses: bcgov/actions/diff-triggers@vX.Y.Z
         with:
           triggers: ('backend/')
@@ -139,24 +158,32 @@ jobs:
 ## Compare Against Specific Commit
 
 ```yaml
-- uses: bcgov/actions/diff-triggers@vX.Y.Z
-  with:
-    triggers: ('backend/')
-    ref: abc123def456  # Compare against specific commit
+steps:
+  - uses: actions/checkout@v6
+    with:
+      fetch-depth: 0
+  - uses: bcgov/actions/diff-triggers@vX.Y.Z
+    with:
+      triggers: ('backend/')
+      ref: abc123def456  # Compare against specific commit
 ```
 
 ## Fork PR Support
 
-The action automatically handles fork PRs in `pull_request_target` context - no configuration needed!
+For fork PRs, ensure your checkout step references the correct head:
 
 ```yaml
 on:
-  pull_request_target:  # Works with fork PRs!
+  pull_request_target:
 
 jobs:
   check:
     runs-on: ubuntu-24.04
     steps:
+      - uses: actions/checkout@v6
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
       - uses: bcgov/actions/diff-triggers@vX.Y.Z
         with:
           triggers: ('backend/')
