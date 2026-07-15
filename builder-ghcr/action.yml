@@ -167,7 +167,7 @@ runs:
         EVENT_PR_BASE_DEFAULT_BRANCH: ${{ github.event.pull_request.base.repo.default_branch }}
         EVENT_PR_BASE_CLONE_URL: ${{ github.event.pull_request.base.repo.clone_url }}
         EVENT_REPOSITORY_CLONE_URL: ${{ github.event.repository.clone_url }}
-      run: bash ${{ github.action_path }}/../diff-triggers/action.sh
+      run: node ${{ github.action_path }}/../diff-triggers/index.js
 
 
     # Log in to GHCR (for both retag and build operations)

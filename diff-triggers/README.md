@@ -1,21 +1,28 @@
-## ⚠️ BREAKING CHANGES in v1.0
-
-- **`diff_branch` replaced with `ref`, which supports branches, commit SHAs, tags, and relative refs**
-
----
-
 # Diff File Changes with Triggers
+
 
 Check triggers against a diff of changed files. Supports PR events (including fork PRs), push events, workflow_dispatch, and other GitHub Actions events. Useful for conditional builds and deployments based on file changes.
 
 ## Features
 
-- ✅ **Fork PR Support**: Automatically handles fork and non-fork PRs
+- ✅ **Fork PR Support**: Handles fork and non-fork PRs (caller must checkout the correct ref)
 - ✅ **Push Event Support**: Works with push events for deployer workflows
 - ✅ **Flexible Ref Comparison**: Compare against any ref (branch, commit SHA, HEAD^, etc.)
 - ✅ **Smart Path Matching**: Uses git pathspec matching for accurate trigger detection
-- ✅ **Space Handling**: Properly handles trigger paths containing spaces
+- ✅ **Multiple Trigger Formats**: JSON arrays, comma/semicolon/space-separated, and bash-style parenthesized lists
 - ✅ **Visible Logging**: Prominent banners and collapsible details in step logs, plus notice annotations in workflow summary and annotations views
+
+## Trigger Formats
+
+The action supports multiple formats for the `triggers` input:
+
+| Format | Example | Description |
+|---|---|---|
+| **Multiline string (recommended)** | `triggers: \|\n  backend/\n  frontend/` | True GitHub Actions standard. Supports spaces in paths without quotes. |
+| **JSON array** | `triggers: '["backend/", "frontend/"]'` | Inline list. Requires quotes to escape YAML parsing. |
+| **Comma-separated** | `triggers: backend/,frontend/` | Quick inline format for simple paths. |
+| **Semicolon-separated** | `triggers: backend/;frontend/` | Quick inline format for simple paths. |
+| **Parenthesized (legacy)** | `triggers: ('backend/' 'frontend/')` | Legacy bash-style format (deprecated). |
 
 # Usage
 
@@ -24,24 +31,26 @@ Check triggers against a diff of changed files. Supports PR events (including fo
   with:
     ### Recommended
 
-    # Paths used to check against file change (diff)
-    # Supports quoted strings with spaces: ('backend/' 'my path/file.txt')
-    # If omitted, the action always fires
-    triggers: ('backend/' 'frontend/')
+      # Paths used to check against file change (diff)
+      # Supports multiple formats (see Trigger Formats above)
+      # If omitted, the action always fires
+      triggers: |
+        backend/
+        frontend/
 
-    ### Optional
+      ### Optional
 
-    # Reference to compare against
-    # - PR events: defaults to base repo default branch
-    # - Other events (push, workflow_dispatch, etc.): defaults to HEAD^
-    ref: main  # Branch, commit SHA, tag, or local ref (HEAD^, HEAD~2). Local refs work for non-PR events only
+      # Reference to compare against
+      # - PR events: defaults to base repo default branch
+      # - Other events (push, workflow_dispatch, etc.): defaults to HEAD^
+      ref: main  # Branch, commit SHA, tag, or local ref (HEAD^, HEAD~2). Local refs work for non-PR events only
 
-    # Specify token (GH or PAT), instead of inheriting one from the calling workflow
-    github_token: ${{ github.token }}
+      # Specify token (GH or PAT), instead of inheriting one from the calling workflow
+      github_token: ${{ github.token }}
 
-    # Emit workflow summary/annotations notices (default: true)
-    # Set false to suppress notices while keeping step logs
-    annotations: true
+      # Emit workflow summary/annotations notices (default: true)
+      # Set false to suppress notices while keeping step logs
+      annotations: true
 ```
 
 # Output
@@ -55,7 +64,7 @@ The action provides detailed logging directly in the step output for easy debugg
 - **Banner** — A collapsible group clearly showing triggered/not-triggered status, with supplementary caller context in brackets: `[workflow / job]`
 - **Collapsible details** — Trigger configuration and per-trigger match results inside the group
 - **Ref source** — Shows whether comparison ref came from explicit input (`input`) or default behavior (`default`)
-- **Annotations** — Optional `::notice::` annotations (enabled by default; `annotations: true`) that appear in the workflow summary and annotations tab (e.g., `::notice title=Diff Triggers::✅ Fired. Triggers: ('backend/')`)
+- **Annotations** — Optional `::notice::` annotations (enabled by default; `annotations: true`) that appear in the workflow summary and annotations tab (e.g., `::notice title=Diff Triggers::✅ Fired. Triggers: ["backend/"]`)
 
 # Examples
 
@@ -83,7 +92,9 @@ jobs:
       - uses: bcgov/actions/diff-triggers@vX.Y.Z
         id: test
         with:
-          triggers: ('backend/' 'frontend/')
+          triggers: |
+            backend/
+            frontend/
 
   build:
     name: Build if Triggered
@@ -112,7 +123,9 @@ jobs:
       - uses: bcgov/actions/diff-triggers@vX.Y.Z
         id: test
         with:
-          triggers: ('backend/' 'frontend/')
+          triggers: |
+            backend/
+            frontend/
           # ref defaults to HEAD^ for push events
 ```
 
@@ -131,7 +144,8 @@ jobs:
     steps:
       - uses: bcgov/actions/diff-triggers@vX.Y.Z
         with:
-          triggers: ('backend/')
+          triggers: |
+            backend/
           # ref defaults to HEAD^ for non-PR events
           # Can override: ref: main
 ```
@@ -141,11 +155,12 @@ jobs:
 ```yaml
 - uses: bcgov/actions/diff-triggers@vX.Y.Z
   with:
-    triggers: ('backend/')
+    triggers: |
+      backend/
     ref: abc123def456  # Compare against specific commit
 ```
 
-## Fork PR Support
+# Fork PR Support
 
 The action automatically handles fork PRs in `pull_request_target` context - no configuration needed!
 
@@ -159,5 +174,7 @@ jobs:
     steps:
       - uses: bcgov/actions/diff-triggers@vX.Y.Z
         with:
-          triggers: ('backend/')
+          triggers: |
+            backend/
+```
 ```

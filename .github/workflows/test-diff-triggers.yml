@@ -26,7 +26,10 @@ jobs:
       - uses: ./diff-triggers
         id: test
         with:
-          triggers: ('diff-triggers/' 'action.yml' '.github/')
+          triggers: |
+            diff-triggers/
+            action.yml
+            .github/
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
   test-triggers-no-match:
@@ -39,7 +42,8 @@ jobs:
       - uses: ./diff-triggers
         id: test
         with:
-          triggers: ('path/to/nowhere')
+          triggers: |
+            path/to/nowhere
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
   test-triggers-omitted:
@@ -66,13 +70,68 @@ jobs:
       - uses: ./diff-triggers
         id: test
         with:
-          triggers: ('diff-triggers/' 'action.yml' '.github/')
+          triggers: |
+            diff-triggers/
+            action.yml
+            .github/
           ref: ${{ github.event.pull_request.base.sha || 'HEAD~1' }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+  test-legacy-bash-format:
+    name: "Test Legacy Bash Format (Expected: true)"
+    runs-on: ubuntu-24.04
+    outputs:
+      triggered: ${{ steps.test.outputs.triggered }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./diff-triggers
+        id: test
+        with:
+          triggers: ('diff-triggers/' 'action.yml' '.github/')
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+  test-comma-separated-triggers:
+    name: "Test Comma-Separated Triggers (Expected: true)"
+    runs-on: ubuntu-24.04
+    outputs:
+      triggered: ${{ steps.test.outputs.triggered }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./diff-triggers
+        id: test
+        with:
+          triggers: 'diff-triggers/,action.yml,.github/'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+  test-semicolon-separated-triggers:
+    name: "Test Semicolon-Separated Triggers (Expected: true)"
+    runs-on: ubuntu-24.04
+    outputs:
+      triggered: ${{ steps.test.outputs.triggered }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./diff-triggers
+        id: test
+        with:
+          triggers: 'diff-triggers/;action.yml;.github/'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+  test-json-array-triggers:
+    name: "Test JSON Array Triggers (Expected: true)"
+    runs-on: ubuntu-24.04
+    outputs:
+      triggered: ${{ steps.test.outputs.triggered }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./diff-triggers
+        id: test
+        with:
+          triggers: '["diff-triggers/", "action.yml", ".github/"]'
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
   verify-results:
     name: Verify Results
-    needs: [test-triggers-match, test-triggers-no-match, test-triggers-omitted, test-custom-ref]
+    needs: [test-triggers-match, test-triggers-no-match, test-triggers-omitted, test-custom-ref, test-legacy-bash-format, test-comma-separated-triggers, test-semicolon-separated-triggers, test-json-array-triggers]
     runs-on: ubuntu-24.04
     steps:
       - name: Assert outputs
@@ -98,4 +157,27 @@ jobs:
             echo "Error: test-custom-ref failed"
             exit 1
           fi
+          
+          echo "Legacy bash format triggered: ${{ needs.test-legacy-bash-format.outputs.triggered }} (expected: true)"
+          echo "Comma-separated triggered: ${{ needs.test-comma-separated-triggers.outputs.triggered }} (expected: true)"
+          echo "Semicolon-separated triggered: ${{ needs.test-semicolon-separated-triggers.outputs.triggered }} (expected: true)"
+          echo "JSON Array triggered: ${{ needs.test-json-array-triggers.outputs.triggered }} (expected: true)"
+          
+          if [[ "${{ needs.test-legacy-bash-format.outputs.triggered }}" != "true" ]]; then
+            echo "Error: test-legacy-bash-format failed"
+            exit 1
+          fi
+          if [[ "${{ needs.test-comma-separated-triggers.outputs.triggered }}" != "true" ]]; then
+            echo "Error: test-comma-separated-triggers failed"
+            exit 1
+          fi
+          if [[ "${{ needs.test-semicolon-separated-triggers.outputs.triggered }}" != "true" ]]; then
+            echo "Error: test-semicolon-separated-triggers failed"
+            exit 1
+          fi
+          if [[ "${{ needs.test-json-array-triggers.outputs.triggered }}" != "true" ]]; then
+            echo "Error: test-json-array-triggers failed"
+            exit 1
+          fi
           echo "All diff-triggers integration test cases passed successfully!"
+
