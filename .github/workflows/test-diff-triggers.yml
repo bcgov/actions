@@ -109,9 +109,25 @@ jobs:
           triggers: 'diff-triggers/;action.yml;.github/'
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
+  test-multiline-triggers:
+    name: "Test Multiline Triggers (Expected: true)"
+    runs-on: ubuntu-24.04
+    outputs:
+      triggered: ${{ steps.test.outputs.triggered }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./diff-triggers
+        id: test
+        with:
+          triggers: |
+            diff-triggers/
+            action.yml
+            .github/
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
   verify-results:
     name: Verify Results
-    needs: [test-triggers-match, test-triggers-no-match, test-triggers-omitted, test-custom-ref, test-legacy-bash-format, test-comma-separated-triggers, test-semicolon-separated-triggers]
+    needs: [test-triggers-match, test-triggers-no-match, test-triggers-omitted, test-custom-ref, test-legacy-bash-format, test-comma-separated-triggers, test-semicolon-separated-triggers, test-multiline-triggers]
     runs-on: ubuntu-24.04
     steps:
       - name: Assert outputs
@@ -141,6 +157,7 @@ jobs:
           echo "Legacy bash format triggered: ${{ needs.test-legacy-bash-format.outputs.triggered }} (expected: true)"
           echo "Comma-separated triggered: ${{ needs.test-comma-separated-triggers.outputs.triggered }} (expected: true)"
           echo "Semicolon-separated triggered: ${{ needs.test-semicolon-separated-triggers.outputs.triggered }} (expected: true)"
+          echo "Multiline triggered: ${{ needs.test-multiline-triggers.outputs.triggered }} (expected: true)"
           
           if [[ "${{ needs.test-legacy-bash-format.outputs.triggered }}" != "true" ]]; then
             echo "Error: test-legacy-bash-format failed"
@@ -154,4 +171,9 @@ jobs:
             echo "Error: test-semicolon-separated-triggers failed"
             exit 1
           fi
+          if [[ "${{ needs.test-multiline-triggers.outputs.triggered }}" != "true" ]]; then
+            echo "Error: test-multiline-triggers failed"
+            exit 1
+          fi
           echo "All diff-triggers integration test cases passed successfully!"
+

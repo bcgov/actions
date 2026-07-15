@@ -30,13 +30,22 @@ function parseTriggers(raw) {
     }
   }
 
-  // 2. Strip outer parentheses (bash-style)
+  // 2. Multiline string (true GitHub Actions standard)
+  // If there are newlines, split line-by-line and allow spaces per line
+  if (trimmed.includes('\n')) {
+    return trimmed
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(Boolean);
+  }
+
+  // 3. Strip outer parentheses (bash-style)
   let cleaned = trimmed;
   if (cleaned.startsWith('(') && cleaned.endsWith(')')) {
     cleaned = cleaned.slice(1, -1).trim();
   }
 
-  // 3. Extract quoted strings (single or double quotes)
+  // 4. Extract quoted strings (single or double quotes)
   const quoted = [];
   const quoteRegex = /(['"])(.*?)\1/g;
   let match;
@@ -46,7 +55,7 @@ function parseTriggers(raw) {
   }
   if (quoted.length > 0) return quoted;
 
-  // 4. Split on whitespace, commas, or semicolons
+  // 5. Split on whitespace, commas, or semicolons
   const tokens = cleaned.split(/[\s,;]+/).filter(Boolean);
   if (tokens.length === 0) {
     console.error(`::error::Could not parse any triggers from input: ${raw}`);
@@ -54,6 +63,7 @@ function parseTriggers(raw) {
   }
   return tokens;
 }
+
 
 /**
  * Run a shell command synchronously. Returns trimmed stdout.

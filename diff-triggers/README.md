@@ -23,13 +23,13 @@ Check triggers against a diff of changed files. Supports PR events (including fo
 
 The action supports multiple formats for the `triggers` input:
 
-| Format | Example |
-|---|---|
-| JSON array (recommended) | `["backend/", "frontend/"]` |
-| Comma-separated | `backend/,frontend/` |
-| Semicolon-separated | `backend/;frontend/` |
-| Space-separated | `backend/ frontend/` |
-| Parenthesized (legacy) | `('backend/' 'frontend/')` |
+| Format | Example | Description |
+|---|---|---|
+| **Multiline string (recommended)** | `triggers: \|\n  backend/\n  frontend/` | True GitHub Actions standard. Supports spaces in paths without quotes. |
+| **JSON array** | `triggers: '["backend/", "frontend/"]'` | Inline list. Requires quotes to escape YAML parsing. |
+| **Comma-separated** | `triggers: backend/,frontend/` | Quick inline format for simple paths. |
+| **Semicolon-separated** | `triggers: backend/;frontend/` | Quick inline format for simple paths. |
+| **Parenthesized (legacy)** | `triggers: ('backend/' 'frontend/')` | Legacy bash-style format (deprecated). |
 
 # Usage
 
@@ -43,7 +43,9 @@ steps:
       # Paths used to check against file change (diff)
       # Supports multiple formats (see Trigger Formats above)
       # If omitted, the action always fires
-      triggers: '["backend/", "frontend/"]'
+      triggers: |
+        backend/
+        frontend/
 
       ### Optional
 
@@ -100,7 +102,9 @@ jobs:
       - uses: bcgov/actions/diff-triggers@vX.Y.Z
         id: test
         with:
-          triggers: '["backend/", "frontend/"]'
+          triggers: |
+            backend/
+            frontend/
 
   build:
     name: Build if Triggered
@@ -130,7 +134,9 @@ jobs:
       - uses: bcgov/actions/diff-triggers@vX.Y.Z
         id: test
         with:
-          triggers: '["backend/", "frontend/"]'
+          triggers: |
+            backend/
+            frontend/
           # ref defaults to HEAD^ for push events
 ```
 
@@ -150,7 +156,8 @@ jobs:
       - uses: actions/checkout@v6
       - uses: bcgov/actions/diff-triggers@vX.Y.Z
         with:
-          triggers: '["backend/"]'
+          triggers: |
+            backend/
           # ref defaults to HEAD^ for non-PR events
           # Can override: ref: main
 ```
@@ -164,7 +171,8 @@ steps:
       fetch-depth: 0
   - uses: bcgov/actions/diff-triggers@vX.Y.Z
     with:
-      triggers: '["backend/"]'
+      triggers: |
+        backend/
       ref: abc123def456  # Compare against specific commit
 ```
 
@@ -186,5 +194,6 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
       - uses: bcgov/actions/diff-triggers@vX.Y.Z
         with:
-          triggers: '["backend/"]'
+          triggers: |
+            backend/
 ```
