@@ -61,7 +61,7 @@ fi
 REDACTED_GH_ARGS=("${GH_ARGS[@]}")
 for i in "${!REDACTED_GH_ARGS[@]}"; do
   if [ "${REDACTED_GH_ARGS[i]}" == "--body" ] && [ $((i + 1)) -lt ${#REDACTED_GH_ARGS[@]} ]; then
-    REDACTED_GH_ARGS[$((i+1))]="[MASKED]"
+    REDACTED_GH_ARGS[i+1]="[MASKED]"
   fi
 done
 
