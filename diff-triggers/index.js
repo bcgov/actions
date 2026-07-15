@@ -41,8 +41,10 @@ function parseTriggers(raw) {
 
   // 3. Strip outer parentheses (bash-style)
   let cleaned = trimmed;
+  let isLegacyFormat = false;
   if (cleaned.startsWith('(') && cleaned.endsWith(')')) {
     cleaned = cleaned.slice(1, -1).trim();
+    isLegacyFormat = true;
   }
 
   // 4. Extract quoted strings (single or double quotes)
@@ -53,7 +55,12 @@ function parseTriggers(raw) {
     const val = match[2].trim();
     if (val) quoted.push(val);
   }
-  if (quoted.length > 0) return quoted;
+  if (quoted.length > 0) {
+    if (isLegacyFormat) {
+      console.log('::warning::Legacy bash-style parenthesized trigger list formatting is deprecated. Please migrate to newline-separated multiline strings.');
+    }
+    return quoted;
+  }
 
   // 5. Split on whitespace, commas, or semicolons
   const tokens = cleaned.split(/[\s,;]+/).filter(Boolean);
@@ -61,8 +68,10 @@ function parseTriggers(raw) {
     console.error(`::error::Could not parse any triggers from input: ${raw}`);
     process.exit(1);
   }
+  console.log('::warning::Delimiter-separated single line trigger formats are deprecated. Please migrate to newline-separated multiline strings.');
   return tokens;
 }
+
 
 
 /**
