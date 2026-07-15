@@ -1,12 +1,5 @@
-## ⚠️ BREAKING CHANGES in v2.0
-
-- **Rewritten in Node.js** — The action now uses `node24` instead of a composite bash script
-- **Checkout is required** — Callers must add an `actions/checkout` step before invoking this action. The action no longer performs its own checkout.
-- **`diff_branch` replaced with `ref`** (since v1.0), which supports branches, commit SHAs, tags, and relative refs
-
----
-
 # Diff File Changes with Triggers
+
 
 Check triggers against a diff of changed files. Supports PR events (including fork PRs), push events, workflow_dispatch, and other GitHub Actions events. Useful for conditional builds and deployments based on file changes.
 
@@ -34,11 +27,9 @@ The action supports multiple formats for the `triggers` input:
 # Usage
 
 ```yaml
-steps:
-  - uses: actions/checkout@v6
-  - uses: bcgov/actions/diff-triggers@vX.Y.Z
-    with:
-      ### Recommended
+- uses: bcgov/actions/diff-triggers@vX.Y.Z
+  with:
+    ### Recommended
 
       # Paths used to check against file change (diff)
       # Supports multiple formats (see Trigger Formats above)
@@ -98,7 +89,6 @@ jobs:
       triggered: ${{ steps.test.outputs.triggered }}
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
       - uses: bcgov/actions/diff-triggers@vX.Y.Z
         id: test
         with:
@@ -130,7 +120,6 @@ jobs:
   check:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
       - uses: bcgov/actions/diff-triggers@vX.Y.Z
         id: test
         with:
@@ -153,7 +142,6 @@ jobs:
     name: Check Triggers
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
       - uses: bcgov/actions/diff-triggers@vX.Y.Z
         with:
           triggers: |
@@ -165,35 +153,28 @@ jobs:
 ## Compare Against Specific Commit
 
 ```yaml
-steps:
-  - uses: actions/checkout@v6
-    with:
-      fetch-depth: 0
-  - uses: bcgov/actions/diff-triggers@vX.Y.Z
-    with:
-      triggers: |
-        backend/
-      ref: abc123def456  # Compare against specific commit
+- uses: bcgov/actions/diff-triggers@vX.Y.Z
+  with:
+    triggers: |
+      backend/
+    ref: abc123def456  # Compare against specific commit
 ```
 
-## Fork PR Support
+# Fork PR Support
 
-For fork PRs, ensure your checkout step references the correct head:
+The action automatically handles fork PRs in `pull_request_target` context - no configuration needed!
 
 ```yaml
 on:
-  pull_request_target:
+  pull_request_target:  # Works with fork PRs!
 
 jobs:
   check:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
-        with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.sha }}
       - uses: bcgov/actions/diff-triggers@vX.Y.Z
         with:
           triggers: |
             backend/
+```
 ```
