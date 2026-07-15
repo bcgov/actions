@@ -1,13 +1,13 @@
 #!/bin/bash
 set -euo pipefail
-set -x # X-Ray Vision: ON
 
 # Helper functions for consistency across all actions
 function log_debug() {
-  if [ "${INPUT_DEBUG}" == "true" ]; then
+  if [ "${INPUT_DEBUG:-}" == "true" ]; then
     echo "DEBUG: $1"
   fi
 }
+
 
 # 1. Discover CODEOWNERS (root, .github/, docs/)
 CODEOWNERS_PATH=""
@@ -58,11 +58,20 @@ if [ "${INPUT_ASSIGN}" == "true" ] && [ -n "$ASSIGNEES" ]; then
 fi
 
 # Execute or Dry Run
+REDACTED_GH_ARGS=("${GH_ARGS[@]}")
+for i in "${!REDACTED_GH_ARGS[@]}"; do
+  if [ "${REDACTED_GH_ARGS[i]}" == "--body" ] && [ $((i + 1)) -lt ${#REDACTED_GH_ARGS[@]} ]; then
+    REDACTED_GH_ARGS[i+1]="[MASKED]"
+  fi
+done
+
+log_debug "Constructed gh arguments: gh ${REDACTED_GH_ARGS[*]}"
 if [ "${INPUT_DRY_RUN}" == "true" ]; then
-  echo "::notice ::[DRY RUN] Would create issue: gh ${GH_ARGS[*]}"
+  echo "::notice ::[DRY RUN] Would create issue: gh ${REDACTED_GH_ARGS[*]}"
   ISSUE_NUM="0"
   ISSUE_URL="https://github.com/${GITHUB_REPOSITORY}/issues/dry-run"
 else
+  log_debug "Executing gh CLI to create issue"
   ISSUE_URL=$(GH_TOKEN="${INPUT_TOKEN}" gh "${GH_ARGS[@]}")
   ISSUE_NUM=$(echo "$ISSUE_URL" | grep -oE '[0-9]+$' || echo "0")
 fi

@@ -1,8 +1,6 @@
 #!/usr/bin/env node
-/* eslint-disable no-control-regex */
 
 import fs from 'node:fs';
-import path from 'node:path';
 import { XMLParser } from 'fast-xml-parser';
 import * as core from '@actions/core';
 import { glob } from 'glob';
@@ -135,7 +133,9 @@ async function run() {
         ]);
         if (fs.existsSync(knipSummaryFile)) {
           const detail = fs.readFileSync(knipSummaryFile, 'utf8');
-          summary.addHeading('📋 Knip Full Output', 3).addCodeBlock(detail.replace(/\u001b\[[0-9;]*[a-zA-Z]/g, ''));
+          const esc = String.fromCharCode(27);
+          const ansiRegex = new RegExp(esc + '\\[[0-9;]*[a-zA-Z]', 'g');
+          summary.addHeading('📋 Knip Full Output', 3).addCodeBlock(detail.replace(ansiRegex, ''));
         }
       }
 
