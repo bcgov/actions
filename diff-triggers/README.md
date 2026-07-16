@@ -1,7 +1,16 @@
 # Diff File Changes with Triggers
 
-
 Check triggers against a diff of changed files. Supports PR events (including fork PRs), push events, workflow_dispatch, and other GitHub Actions events. Useful for conditional builds and deployments based on file changes.
+
+## Permissions
+
+To run this action, the calling workflow job must have the following minimum permissions:
+
+```yaml
+permissions:
+  contents: read
+```
+
 
 ## Features
 

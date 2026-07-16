@@ -3,6 +3,19 @@
 
 This action builds Docker/Podman containers conditionally using a set of directories.  If any files were changed matching that, then build a container.  If those files were not changed, retag an existing build.
 
+## Permissions
+
+To run this action, the calling workflow job must have the following minimum permissions:
+
+```yaml
+permissions:
+  contents: read
+  packages: write
+  id-token: write      # (optional, required for build provenance attestations)
+  attestations: write  # (optional, required for build provenance attestations)
+```
+
+
 This is useful in CI/CD pipelines where not every package/app needs to be rebuilt.
 
 This tool is currently strongly opinionated and generates images with a rigid structure below.  This is intended to become more flexible in future.

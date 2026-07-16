@@ -15,6 +15,16 @@
  
  This action runs tests and analysis across the BC Gov ecosystem, optionally sending results and coverage to [SonarCloud](https://sonarcloud.io). It supports **Node.js, Java, and Python** projects with unified reporting, supply chain scanning, and dependency analysis.
 
+## Permissions
+
+To run this action, the calling workflow job must have the following minimum permissions:
+
+```yaml
+permissions:
+  contents: read
+```
+
+
 > [!IMPORTANT]
 > **Deprecation Notice**: The Java-specific action (`bcgov/actions/test-and-analyse-java`) has been removed. Please migrate to this universal action (`bcgov/actions/test-and-analyse`) with `language: java` specified.
  

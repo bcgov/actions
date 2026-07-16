@@ -3,6 +3,17 @@
 
 Lint GitHub Actions workflow files (`.github/workflows/*.yml`) using `rhysd/actionlint` with caching and rate-limit-proof execution.
 
+## Permissions
+
+To run this action, the calling workflow job must have the following minimum permissions:
+
+```yaml
+permissions:
+  contents: read
+  actions: write  # (optional, required if saving to cache)
+```
+
+
 ## Why Actionlint?
 
 GitHub Actions does not validate workflow syntax or expressions when a pull request is submitted. Instead, invalid syntax or bad expressions only fail when the workflow is triggered, which often leads to broken pipelines on `main` or failed release events.
