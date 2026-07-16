@@ -18,6 +18,10 @@ inputs:
       Local refs (HEAD^, HEAD~2) work for non-PR events;
       remote refs (branches, tags, SHAs) work for all events.
     required: false
+  diff_branch:
+    description: >-
+      Alias for 'ref'. Reference to compare against (e.g., 'main', 'HEAD^', commit SHA).
+    required: false
   github_token:
     description: Specify token (GH or PAT), instead of inheriting one from the calling workflow
     default: ${{ github.token }}
@@ -39,13 +43,13 @@ runs:
         token: ${{ inputs.github_token }}
         repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
         ref: ${{ github.event.pull_request.head.sha || github.ref }}
-        fetch-depth: ${{ (github.event.pull_request && !inputs.ref) && 1 || 0 }}
+        fetch-depth: ${{ (github.event.pull_request && !inputs.ref && !inputs.diff_branch) && 1 || 0 }}
 
     - id: diff
       shell: bash
       env:
         INPUT_TRIGGERS: ${{ inputs.triggers }}
-        INPUT_REF: ${{ inputs.ref }}
+        INPUT_REF: ${{ inputs.ref || inputs.diff_branch }}
         INPUT_ANNOTATIONS: ${{ inputs.annotations }}
         INPUT_GITHUB_TOKEN: ${{ inputs.github_token }}
         GITHUB_WORKFLOW: ${{ github.workflow }}

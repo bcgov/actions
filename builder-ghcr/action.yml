@@ -146,28 +146,13 @@ runs:
     # fork's head branch against the base repository's target branch.
     # External repos: Skip for external repo builds because diffing the current branch
     # against another repository's branch is not meaningful in this context.
-    - name: Checkout for Diff
+    - name: Check Triggers
       if: inputs.repository == github.repository
-      uses: actions/checkout@v7
+      uses: ./diff-triggers
+      id: diff
       with:
-        repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
-        ref: ${{ github.event.pull_request.head.sha || github.ref }}
-        fetch-depth: 0
-
-    - id: diff
-      if: inputs.repository == github.repository
-      shell: bash
-      env:
-        INPUT_TRIGGERS: ${{ inputs.triggers }}
-        INPUT_REF: ${{ inputs.diff_branch }}
-        INPUT_ANNOTATIONS: "true"
-        INPUT_GITHUB_TOKEN: ${{ inputs.github_token }}
-        GITHUB_WORKFLOW: ${{ github.workflow }}
-        GITHUB_JOB: ${{ github.job }}
-        EVENT_PR_BASE_DEFAULT_BRANCH: ${{ github.event.pull_request.base.repo.default_branch }}
-        EVENT_PR_BASE_CLONE_URL: ${{ github.event.pull_request.base.repo.clone_url }}
-        EVENT_REPOSITORY_CLONE_URL: ${{ github.event.repository.clone_url }}
-      run: node ${{ github.action_path }}/../diff-triggers/index.js
+        triggers: ${{ inputs.triggers }}
+        diff_branch: ${{ inputs.diff_branch }}
 
 
     # Log in to GHCR (for both retag and build operations)
