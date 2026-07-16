@@ -22,7 +22,9 @@ To run this action, the calling workflow job must have the following minimum per
 ```yaml
 permissions:
   contents: read
+  actions: write  # (optional, required if using caching; set cache: none to disable)
 ```
+
 
 
 > [!IMPORTANT]

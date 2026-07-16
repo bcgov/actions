@@ -39,7 +39,7 @@ permissions:
   uses: bcgov/actions/workflow-notifier@vX.Y.Z
   with:
     title: "Production build failed"
-    body: "Please check the logs for detail."
+    body: "Please check the logs for details."
 ```
 
 ## Local Debugging
