@@ -20,8 +20,8 @@ To run this action, the calling workflow job must have the following minimum per
 ```yaml
 permissions:
   pull-requests: write
-  contents: read
 ```
+
 
 
 #### Forks

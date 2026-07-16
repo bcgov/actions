@@ -87,8 +87,8 @@ Refer to each action's directory for its exact minimum required permissions bloc
 - **[diff-triggers](./diff-triggers/)**: `contents: read`
 - **[get-pr](./get-pr/)**: `pull-requests: read`, `contents: read` (optional, for offline/fallback commit resolution)
 - **[image-tracker](./image-tracker/)**: `contents: read`, `pull-requests: read`, `packages: read`
-- **[pr-description-add](./pr-description-add/)**: `pull-requests: write`, `contents: read`
-- **[test-and-analyse](./test-and-analyse/)**: `contents: read`
+- **[pr-description-add](./pr-description-add/)**: `pull-requests: write`
+- **[test-and-analyse](./test-and-analyse/)**: `contents: read`, `actions: write` (optional, for caching)
 - **[workflow-notifier](./workflow-notifier/)**: `contents: read`, `issues: write`
 
 ## Releases and Version Pinning
