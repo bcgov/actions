@@ -271,7 +271,7 @@ runs:
     - name: Prepare Container Metadata tags
       id: meta
       if: steps.build.outputs.triggered == 'true' && inputs.metadata_tags == 'true'
-      uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9 # v6
+      uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
       with:
         images: ${{ steps.vars.outputs.image_name }}
         flavor: ${{ inputs.metadata_flavor }}
@@ -439,7 +439,7 @@ runs:
       continue-on-error: true
       id: attest
       if: steps.build.outputs.triggered == 'true' && steps.attest_check.outputs.can_attest == 'true'
-      uses: actions/attest-build-provenance@v4.1.0
+      uses: actions/attest-build-provenance@v4.1.1
       with:
         subject-name: ghcr.io/${{ steps.vars.outputs.image_path }}
         subject-digest: ${{ steps.build_and_push.outputs.digest }}
