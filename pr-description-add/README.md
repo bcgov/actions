@@ -15,13 +15,14 @@ This action adds to Pull Request descriptions using markdown.  It checks if the 
 
 ## Permissions
 
-#### Explicit rights
-Repositories can have different permissions for their tokens.  It can't hurt to explicitly provide rights.  Read more [here](https://docs.github.com/en/actions/security-guides/automatic-token-authentication#permissions-for-the-github_token).
+To run this action, the calling workflow job must have the following minimum permissions:
 
+```yaml
+permissions:
+  pull-requests: write
+  contents: read
 ```
-    permissions:
-      pull-requests: write
-```
+
 
 #### Forks
 Forks receive purposefully limited rights, preventing this action from running successfully.  It is recommended to avoid that with a condition.

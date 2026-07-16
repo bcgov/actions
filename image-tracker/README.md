@@ -3,6 +3,18 @@
 Resolve immutable GHCR image **digests** for a given git commit by reading the
 `org.opencontainers.image.revision` OCI label embedded in each image's config.
 
+## Permissions
+
+To run this action, the calling workflow job must have the following minimum permissions:
+
+```yaml
+permissions:
+  contents: read
+  pull-requests: read
+  packages: read
+```
+
+
 ## How it works
 
 Every OCI-compliant image has a config blob. Builds that use

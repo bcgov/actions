@@ -77,6 +77,20 @@ Find `CODEOWNERS` and coordinate notifications (GitHub Issues) on job failures.
   uses: bcgov/actions/workflow-notifier@vX.Y.Z # Replace with latest release tag
 ```
 
+## Security & Token Permissions
+
+In alignment with security best practices, you should always declare minimum explicit permissions for the `GITHUB_TOKEN` in your workflows rather than granting wildcard/admin permissions. 
+
+Refer to each action's directory for its exact minimum required permissions block:
+- **[actionlint](./actionlint/)**: `contents: read`, `actions: write` (optional, for caching)
+- **[builder-ghcr](./builder-ghcr/)**: `contents: read`, `packages: write`, plus `id-token: write` and `attestations: write` (optional, for build provenance attestations)
+- **[diff-triggers](./diff-triggers/)**: `contents: read`
+- **[get-pr](./get-pr/)**: `pull-requests: read`, `contents: read` (optional, for offline/fallback commit resolution)
+- **[image-tracker](./image-tracker/)**: `contents: read`, `pull-requests: read`, `packages: read`
+- **[pr-description-add](./pr-description-add/)**: `pull-requests: write`, `contents: read`
+- **[test-and-analyse](./test-and-analyse/)**: `contents: read`
+- **[workflow-notifier](./workflow-notifier/)**: `contents: read`, `issues: write`
+
 ## Releases and Version Pinning
 
 > **Never reference these actions with `@main`.** Always pin to a release tag (e.g. `@v1.2.3`) or, better yet, a full commit SHA.

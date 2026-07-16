@@ -9,6 +9,17 @@ PR numbers are easy to come by in PRs, but passing those same numbers to release
 
 This process has been an integral part of PR-based workflows where images are promoted from development (PRs) to test/staging to production. It is also useful for release events where the most recent PR is tied to the release.
 
+## Permissions
+
+To run this action, the calling workflow job must have the following minimum permissions:
+
+```yaml
+permissions:
+  pull-requests: read
+  contents: read  # (optional, fallback for local git log and commit resolution)
+```
+
+
 # Usage
 
 The build will return a PR number as output.
