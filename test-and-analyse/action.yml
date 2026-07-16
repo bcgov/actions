@@ -121,18 +121,23 @@ runs:
         fi
 
     - name: Check Triggers
+      if: github.event_name == 'pull_request' && inputs.triggers != ''
       uses: ./diff-triggers
       id: diff
       with:
-        triggers: ${{ github.event_name == 'pull_request' && inputs.triggers || '' }}
+        triggers: ${{ inputs.triggers }}
         ref: ${{ inputs.ref || inputs.diff_branch }}
 
     # Final triggered state
     - id: final_triggered
       shell: bash
       run: |
-        echo "triggered=${{ steps.diff.outputs.triggered }}" >> $GITHUB_OUTPUT
-        echo "FINAL TRIGGERED: ${{ steps.diff.outputs.triggered }}"
+        TRIGGERED="true"
+        if [ "${{ github.event_name == 'pull_request' && inputs.triggers != '' }}" == "true" ]; then
+          TRIGGERED="${{ steps.diff.outputs.triggered }}"
+        fi
+        echo "triggered=$TRIGGERED" >> $GITHUB_OUTPUT
+        echo "FINAL TRIGGERED: $TRIGGERED"
 
 
     - name: Setup Supply Chain Scan
