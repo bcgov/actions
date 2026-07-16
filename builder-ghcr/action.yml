@@ -36,8 +36,11 @@ inputs:
   build_args:
     description: A list of build-time variables, generally not advisable
     default: "BUILDKIT_INLINE_CACHE=1"
+  ref:
+    description: Reference to compare against (e.g. branch name, tag, or commit SHA)
+    default: ${{ github.event.repository.default_branch }}
   diff_branch:
-    description: Branch to diff against
+    description: Deprecated alias for 'ref'
     default: ${{ github.event.repository.default_branch }}
   repository:
     description: Non-default repo to clone
@@ -152,7 +155,7 @@ runs:
       id: diff
       with:
         triggers: ${{ inputs.triggers }}
-        diff_branch: ${{ inputs.diff_branch }}
+        ref:  ${{ inputs.ref || inputs.diff_branch }}
 
 
     # Log in to GHCR (for both retag and build operations)
