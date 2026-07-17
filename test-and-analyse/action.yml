@@ -73,6 +73,9 @@ inputs:
   repository:
     description: Non-default repository to clone (used for testing this action)
     default: ${{ github.repository }}
+  github_token:
+    description: Specify token (GH or PAT), instead of inheriting one from the calling workflow
+    default: ${{ github.token }}
 
   branch:
     description: Non-default branch to clone (used for testing this action)
@@ -125,6 +128,7 @@ runs:
       with:
         triggers: ${{ inputs.triggers }}
         ref: ${{ inputs.ref }}
+        github_token: ${{ inputs.github_token }}
 
     # Final triggered state
     - id: final_triggered
@@ -172,6 +176,7 @@ runs:
       with:
         repository: ${{ inputs.repository }}
         ref: ${{ inputs.branch }}
+        token: ${{ inputs.github_token }}
         path: ${{ inputs.checkout_path }}
         fetch-depth: 0
 
