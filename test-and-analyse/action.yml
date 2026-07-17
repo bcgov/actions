@@ -68,9 +68,7 @@ inputs:
   ref:
     description: Reference to compare against (e.g. branch name, tag, or commit SHA)
     default: ${{ github.event.repository.default_branch }}
-  diff_branch:
-    description: Deprecated alias for 'ref'
-    default: ${{ github.event.repository.default_branch }}
+
 
   repository:
     description: Non-default repository to clone (used for testing this action)
@@ -126,7 +124,7 @@ runs:
       id: diff
       with:
         triggers: ${{ inputs.triggers }}
-        ref: ${{ inputs.ref || inputs.diff_branch }}
+        ref: ${{ inputs.ref }}
 
     # Final triggered state
     - id: final_triggered
