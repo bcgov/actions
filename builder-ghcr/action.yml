@@ -150,12 +150,13 @@ runs:
     # External repos: Skip for external repo builds because diffing the current branch
     # against another repository's branch is not meaningful in this context.
     - name: Check Triggers
-      if: inputs.repository == github.repository
+      if: inputs.repository == github.repository && inputs.triggers != ''
       uses: ./diff-triggers
       id: diff
       with:
         triggers: ${{ inputs.triggers }}
         ref:  ${{ inputs.ref || inputs.diff_branch }}
+        github_token: ${{ inputs.github_token }}
 
 
     # Log in to GHCR (for both retag and build operations)
@@ -187,6 +188,8 @@ runs:
         
         if [ "${{ inputs.repository }}" != "${{ github.repository }}" ]; then
           echo "Build triggered. External repository provided (diff skipped)."
+        elif [ -z "${{ inputs.triggers }}" ]; then
+          echo "Build triggered. Triggers are empty (always fires)."
         elif [ "${{ steps.diff.outputs.triggered }}" == "true" ]; then
           echo "Build triggered. Used diff-triggers."
         elif [ -z "${{ inputs.tag_fallback }}" ]; then
