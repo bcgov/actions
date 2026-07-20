@@ -71,9 +71,9 @@ Only GitHub Container Registry (ghcr.io) is supported so far.
     build_args: |
       ENV=build
 
-    # Overrides the default branch to diff against
+    # Overrides the default reference/branch to diff against
     # Defaults to the default branch, usually `main`
-    diff_branch: ${{ github.event.repository.default_branch }}
+    ref: ${{ github.event.repository.default_branch }}
 
     # Repository to clone and process
     # Useful for consuming other repos, like in testing

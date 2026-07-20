@@ -65,13 +65,17 @@ inputs:
     default: ""
 
   ### Usually a bad idea / not recommended
-  diff_branch:
-    description: Branch to diff against
+  ref:
+    description: Reference to compare against (e.g. branch name, tag, or commit SHA)
     default: ${{ github.event.repository.default_branch }}
+
 
   repository:
     description: Non-default repository to clone (used for testing this action)
     default: ${{ github.repository }}
+  github_token:
+    description: Specify token (GH or PAT), instead of inheriting one from the calling workflow
+    default: ${{ github.token }}
 
   branch:
     description: Non-default branch to clone (used for testing this action)
@@ -117,48 +121,22 @@ runs:
           exit 1
         fi
 
-    # Send triggers to diff action (only if triggers are provided)
-    - id: diff
-      shell: bash
-      run: |
-        if [ -z "${{ inputs.triggers }}" ]; then
-          echo "triggered=true" >> $GITHUB_OUTPUT
-        else
-          echo "Running diff-triggers with: ${{ inputs.triggers }}"
-          # We use a sub-step to call the action to handle the conditional output
-          echo "triggered=false" >> $GITHUB_OUTPUT # Default
-        fi
-
-    - name: Checkout for Diff
-      if: inputs.triggers != ''
-      uses: actions/checkout@v7
+    - name: Check Triggers
+      if: github.event_name == 'pull_request' && inputs.triggers != ''
+      uses: ./diff-triggers
+      id: diff
       with:
-        repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
-        ref: ${{ github.event.pull_request.head.sha || github.ref }}
-        fetch-depth: 0
-
-    - id: diff_actual
-      if: inputs.triggers != ''
-      shell: bash
-      env:
-        INPUT_TRIGGERS: ${{ github.event_name == 'pull_request' && inputs.triggers || '' }}
-        INPUT_REF: ${{ inputs.diff_branch }}
-        INPUT_ANNOTATIONS: "true"
-        INPUT_GITHUB_TOKEN: ${{ github.token }}
-        GITHUB_WORKFLOW: ${{ github.workflow }}
-        GITHUB_JOB: ${{ github.job }}
-        EVENT_PR_BASE_DEFAULT_BRANCH: ${{ github.event.pull_request.base.repo.default_branch }}
-        EVENT_PR_BASE_CLONE_URL: ${{ github.event.pull_request.base.repo.clone_url }}
-        EVENT_REPOSITORY_CLONE_URL: ${{ github.event.repository.clone_url }}
-      run: node ${{ github.action_path }}/../diff-triggers/index.js
+        triggers: ${{ inputs.triggers }}
+        ref: ${{ inputs.ref }}
+        github_token: ${{ inputs.github_token }}
 
     # Final triggered state
     - id: final_triggered
       shell: bash
       run: |
-        TRIGGERED="false"
-        if [ "${{ steps.diff.outputs.triggered }}" == "true" ] || [ "${{ steps.diff_actual.outputs.triggered }}" == "true" ]; then
-          TRIGGERED="true"
+        TRIGGERED="true"
+        if [ "${{ github.event_name == 'pull_request' && inputs.triggers != '' }}" == "true" ]; then
+          TRIGGERED="${{ steps.diff.outputs.triggered }}"
         fi
         echo "triggered=$TRIGGERED" >> $GITHUB_OUTPUT
         echo "FINAL TRIGGERED: $TRIGGERED"
@@ -198,12 +176,13 @@ runs:
       with:
         repository: ${{ inputs.repository }}
         ref: ${{ inputs.branch }}
+        token: ${{ inputs.github_token }}
         path: ${{ inputs.checkout_path }}
         fetch-depth: 0
 
 
     - name: Setup Node.js
-      uses: actions/setup-node@v6
+      uses: actions/setup-node@v7
       if: steps.final_triggered.outputs.triggered == 'true' && inputs.language == 'node'
       with:
         node-version: ${{ inputs.node_version }}
@@ -225,7 +204,7 @@ runs:
 
     # Condition 3: Python Project Setup
     - name: Setup Python
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v7
       if: steps.final_triggered.outputs.triggered == 'true' && inputs.language == 'python'
       with:
         python-version: ${{ inputs.python_version }}
