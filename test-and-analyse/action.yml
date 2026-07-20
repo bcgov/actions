@@ -54,9 +54,6 @@ inputs:
   debug:
     description: Enable debug logging
     default: "false"
-  github_token:
-    description: Specify token (GH or PAT), instead of inheriting one from the calling workflow
-    default: ${{ github.token }}
   supply_scan:
     description: Enable supply chain attack detection using @aikidosec/safe-chain
     default: "true"
