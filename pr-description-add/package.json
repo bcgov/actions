@@ -50,6 +50,6 @@
     "@octokit/plugin-paginate-rest@<11.4.1": "11.4.1",
     "@octokit/request@<9.2.1": "9.2.1",
     "undici": "^6.27.0",
-    "js-yaml": "^4.2.0"
+    "js-yaml": "^5.0.0"
   }
 }
