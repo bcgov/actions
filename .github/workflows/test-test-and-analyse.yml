@@ -1,10 +1,7 @@
 name: Test Test and Analyse
 
 on:
-  pull_request:
-    paths:
-      - 'test-and-analyse/**'
-      - '.github/workflows/test-test-and-analyse.yml'
+  workflow_call:
   push:
     branches: [main]
     paths:

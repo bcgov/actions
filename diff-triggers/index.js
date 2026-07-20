@@ -76,7 +76,52 @@ function parseTriggers(raw) {
   return tokens;
 }
 
+/**
+ * Parse filters mapping from a YAML-like multiline string.
+ * Maps keys to arrays of path patterns.
+ *
+ * @param {string} raw
+ * @returns {Object.<string, string[]>}
+ */
+function parseFilters(raw) {
+  const lines = raw.split(/\r?\n/);
+  const filters = {};
+  let currentKey = null;
 
+  for (let line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+
+    // Detect key line: "key:" or "key: value"
+    if (line.match(/^\s*[\w-]+:/)) {
+      const colonIndex = trimmed.indexOf(':');
+      const key = trimmed.slice(0, colonIndex).trim();
+      const val = trimmed.slice(colonIndex + 1).trim();
+
+      currentKey = key;
+      filters[currentKey] = [];
+
+      if (val) {
+        if (val.startsWith('[') && val.endsWith(']')) {
+          try {
+            filters[currentKey] = JSON.parse(val).map(String);
+          } catch (e) {
+            filters[currentKey] = val.split(',').map(s => s.trim()).filter(Boolean);
+          }
+        } else {
+          filters[currentKey].push(val);
+        }
+      }
+    } else if (currentKey && (trimmed.startsWith('-') || line.match(/^\s{2,}/))) {
+      // Indented item under key
+      const val = trimmed.startsWith('-') ? trimmed.slice(1).trim() : trimmed;
+      if (val) {
+        filters[currentKey].push(val);
+      }
+    }
+  }
+  return filters;
+}
 
 /**
  * Run a shell command synchronously. Returns trimmed stdout.
@@ -91,6 +136,7 @@ function run(cmd, opts = {}) {
 async function main() {
   // ── Phase 1: Read inputs & environment ──────────────────────────────
   const triggersStr = process.env.INPUT_TRIGGERS || '';
+  const filtersStr = process.env.INPUT_FILTERS || '';
   const inputRef = process.env.INPUT_REF || '';
   const annotationsEnabled = (process.env.INPUT_ANNOTATIONS || 'true').toLowerCase() === 'true';
   const token = process.env.INPUT_GITHUB_TOKEN || '';
@@ -112,25 +158,35 @@ async function main() {
     }
   }
 
-  // ── Phase 2 & 3: Parse triggers (or short-circuit if omitted) ──────
-  if (!triggersStr.trim()) {
-    console.log(`::group::Diff Triggers — ✅ TRIGGERED | ${repo} ${callerContext}`);
-    console.log('  Triggers: (omitted, always fires)');
-    console.log('::endgroup::');
-    if (annotationsEnabled) {
-      console.log(`::notice title=Diff Triggers [${job}]::✅ Omitted (always fires).`);
+  // ── Phase 2 & 3: Parse triggers/filters (or short-circuit if omitted) ──────
+  const isMultiFilter = !!filtersStr.trim();
+  let triggers = [];
+  let filters = {};
+
+  if (isMultiFilter) {
+    filters = parseFilters(filtersStr);
+  } else {
+    if (!triggersStr.trim()) {
+      console.log(`::group::Diff Triggers — ✅ TRIGGERED | ${repo} ${callerContext}`);
+      console.log('  Triggers: (omitted, always fires)');
+      console.log('::endgroup::');
+      if (annotationsEnabled) {
+        console.log(`::notice title=Diff Triggers [${job}]::✅ Omitted (always fires).`);
+      }
+      if (outputPath) fs.appendFileSync(outputPath, 'triggered=true\n');
+      return;
     }
-    if (outputPath) fs.appendFileSync(outputPath, 'triggered=true\n');
-    return;
+    triggers = parseTriggers(triggersStr);
   }
 
-  const triggers = parseTriggers(triggersStr);
-
   // Escape for GitHub Actions workflow command encoding
-  const escapedTriggers = triggersStr
-    .replace(/%/g, '%25')
-    .replace(/\n/g, '%0A')
-    .replace(/\r/g, '%0D');
+  let escapedTriggers = '';
+  if (!isMultiFilter) {
+    escapedTriggers = triggersStr
+      .replace(/%/g, '%25')
+      .replace(/\n/g, '%0A')
+      .replace(/\r/g, '%0D');
+  }
 
   // ── Phase 4: Determine comparison ref ──────────────────────────────
   let baseRef = inputRef;
@@ -193,55 +249,91 @@ async function main() {
     }
   }
 
-  // 5c. Run git diff per trigger
+  // 5c. Run git diff per trigger/filter
   let triggered = false;
   const matchedTriggers = [];
   let detailsLog = '';
+  const filterResults = {};
 
-  for (const t of triggers) {
-    const diffOutput = run(`git diff "${compareRef}" HEAD --name-only -- "${t}"`);
-
-    if (diffOutput) {
-      triggered = true;
-      matchedTriggers.push(t);
-      detailsLog += `  ✔ '${t}'\n`;
-      for (const f of diffOutput.split('\n')) {
-        detailsLog += `      ${f}\n`;
+  if (isMultiFilter) {
+    for (const [key, paths] of Object.entries(filters)) {
+      let keyTriggered = false;
+      detailsLog += `  Filter '${key}':\n`;
+      for (const p of paths) {
+        const diffOutput = run(`git diff "${compareRef}" HEAD --name-only -- "${p}"`);
+        if (diffOutput) {
+          triggered = true;
+          keyTriggered = true;
+          matchedTriggers.push(`${key}:${p}`);
+          detailsLog += `    ✔ '${p}'\n`;
+          for (const f of diffOutput.split('\n')) {
+            detailsLog += `        ${f}\n`;
+          }
+        } else {
+          detailsLog += `    ✘ '${p}'\n`;
+        }
       }
-    } else {
-      detailsLog += `  ✘ '${t}'\n`;
+      filterResults[key] = keyTriggered;
+    }
+  } else {
+    for (const t of triggers) {
+      const diffOutput = run(`git diff "${compareRef}" HEAD --name-only -- "${t}"`);
+      if (diffOutput) {
+        triggered = true;
+        matchedTriggers.push(t);
+        detailsLog += `  ✔ '${t}'\n`;
+        for (const f of diffOutput.split('\n')) {
+          detailsLog += `      ${f}\n`;
+        }
+      } else {
+        detailsLog += `  ✘ '${t}'\n`;
+      }
     }
   }
-
 
   // ── Phase 6: Output and logging ────────────────────────────────────
   if (triggered) {
     const matchedList = matchedTriggers.join(', ');
     console.log(`::group::Diff Triggers — ✅ TRIGGERED | ${repo} ${callerContext}`);
-    console.log(`  Triggers:     ${triggersStr}`);
-    console.log(`  Comparing to: ${compareRef}`);
-    console.log(`  Ref source:   ${refSource}`);
-    console.log(`  Matched:      ${matchedList}`);
+    console.log(`  Filters/Triggers: ${isMultiFilter ? 'filters' : 'triggers'}`);
+    console.log(`  Comparing to:     ${compareRef}`);
+    console.log(`  Ref source:       ${refSource}`);
+    console.log(`  Matched:          ${matchedList}`);
     console.log('');
     console.log(detailsLog);
     console.log('::endgroup::');
     if (annotationsEnabled) {
-      console.log(`::notice title=Diff Triggers [${job}]::✅ Fired. Triggers: ${escapedTriggers}`);
+      if (isMultiFilter) {
+        const firedKeys = Object.entries(filterResults).filter(([_, v]) => v).map(([k]) => k).join(', ');
+        console.log(`::notice title=Diff Triggers [${job}]::✅ Fired for filters: ${firedKeys}`);
+      } else {
+        console.log(`::notice title=Diff Triggers [${job}]::✅ Fired. Triggers: ${escapedTriggers}`);
+      }
     }
   } else {
     console.log(`::group::Diff Triggers — ⊘ NOT TRIGGERED | ${repo} ${callerContext}`);
-    console.log(`  Triggers:     ${triggersStr}`);
-    console.log(`  Comparing to: ${compareRef}`);
-    console.log(`  Ref source:   ${refSource}`);
+    console.log(`  Filters/Triggers: ${isMultiFilter ? 'filters' : 'triggers'}`);
+    console.log(`  Comparing to:     ${compareRef}`);
+    console.log(`  Ref source:       ${refSource}`);
     console.log('');
     console.log(detailsLog);
     console.log('::endgroup::');
     if (annotationsEnabled) {
-      console.log(`::notice title=Diff Triggers [${job}]::⊘ Not fired. Triggers: ${escapedTriggers}`);
+      console.log(`::notice title=Diff Triggers [${job}]::⊘ Not fired.`);
     }
   }
 
-  if (outputPath) fs.appendFileSync(outputPath, `triggered=${triggered}\n`);
+  if (outputPath) {
+    fs.appendFileSync(outputPath, `triggered=${triggered}\n`);
+    if (isMultiFilter) {
+      const changedKeys = [];
+      for (const [key, val] of Object.entries(filterResults)) {
+        fs.appendFileSync(outputPath, `${key}=${val}\n`);
+        if (val) changedKeys.push(key);
+      }
+      fs.appendFileSync(outputPath, `changes=${JSON.stringify(changedKeys)}\n`);
+    }
+  }
 }
 
 main().catch(err => {

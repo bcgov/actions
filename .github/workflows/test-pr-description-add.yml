@@ -1,10 +1,7 @@
 name: Test Add to PR Descriptions
 
 on:
-  pull_request:
-    paths:
-      - 'pr-description-add/**'
-      - '.github/workflows/test-pr-description-add.yml'
+  workflow_call:
   workflow_dispatch:
 
 permissions: {}

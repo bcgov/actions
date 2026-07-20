@@ -1,10 +1,7 @@
 name: Test Notifier
 
 on:
-  pull_request:
-    paths:
-      - 'workflow-notifier/**'
-      - '.github/workflows/test-notifier.yml'
+  workflow_call:
   workflow_dispatch:
 
 permissions: {}

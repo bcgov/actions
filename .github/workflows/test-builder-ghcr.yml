@@ -1,10 +1,7 @@
 name: Test Builder GHCR
 
 on:
-  pull_request:
-    paths:
-      - 'builder-ghcr/**'
-      - '.github/workflows/test-builder-ghcr.yml'
+  workflow_call:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
