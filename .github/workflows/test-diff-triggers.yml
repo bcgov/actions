@@ -22,7 +22,7 @@ jobs:
     outputs:
       triggered: ${{ steps.test.outputs.triggered }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: ./diff-triggers
         id: test
         with:
@@ -38,7 +38,7 @@ jobs:
     outputs:
       triggered: ${{ steps.test.outputs.triggered }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: ./diff-triggers
         id: test
         with:
@@ -52,7 +52,7 @@ jobs:
     outputs:
       triggered: ${{ steps.test.outputs.triggered }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: ./diff-triggers
         id: test
         with:
@@ -64,7 +64,7 @@ jobs:
     outputs:
       triggered: ${{ steps.test.outputs.triggered }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # Fetch all history so refs are available
       - uses: ./diff-triggers
@@ -83,7 +83,7 @@ jobs:
     outputs:
       triggered: ${{ steps.test.outputs.triggered }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: ./diff-triggers
         id: test
         with:
@@ -96,7 +96,7 @@ jobs:
     outputs:
       triggered: ${{ steps.test.outputs.triggered }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: ./diff-triggers
         id: test
         with:
@@ -109,7 +109,7 @@ jobs:
     outputs:
       triggered: ${{ steps.test.outputs.triggered }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: ./diff-triggers
         id: test
         with:
@@ -122,7 +122,7 @@ jobs:
     outputs:
       triggered: ${{ steps.test.outputs.triggered }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: ./diff-triggers
         id: test
         with:
