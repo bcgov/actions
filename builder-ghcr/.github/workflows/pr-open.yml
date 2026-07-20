@@ -7,16 +7,18 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
-permissions:
-  attestations: write
-  id-token: write
-  packages: write
+permissions: {}
 
 jobs:
   # QuickStart apps build from the same dirs as their Dockerfiles
   build:
     name: Build
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v7
       - id: build
@@ -47,8 +49,7 @@ jobs:
   no-attestation:
     name: No Attestation
     permissions:
-      attestations: none
-      id-token: none
+      contents: read
       packages: write
     runs-on: ubuntu-24.04
     steps:
@@ -84,6 +85,11 @@ jobs:
   advanced:
     name: Advanced
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v7
       - id: advanced
@@ -119,6 +125,11 @@ jobs:
   single-package:
     name: Single Package
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v7
       - id: single-package
@@ -153,6 +164,11 @@ jobs:
   metadata-tags:
     name: Metadata Tags
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v7
       - id: metadata-tags
