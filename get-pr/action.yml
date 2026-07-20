@@ -1,7 +1,7 @@
 name: Get PR Number
 description: Get PR number for merge queues, squash merges, and releases
 branding:
-  icon: package
+  icon: git-pull-request
   color: blue
 
 inputs:

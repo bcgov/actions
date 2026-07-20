@@ -12,13 +12,14 @@ on:
       - '.github/workflows/test-diff-triggers.yml'
   workflow_dispatch:
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   test-triggers-match:
     name: "Test Match (Expected: true)"
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     outputs:
       triggered: ${{ steps.test.outputs.triggered }}
     steps:
@@ -35,6 +36,8 @@ jobs:
   test-triggers-no-match:
     name: "Test No Match (Expected: false)"
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     outputs:
       triggered: ${{ steps.test.outputs.triggered }}
     steps:
@@ -49,6 +52,8 @@ jobs:
   test-triggers-omitted:
     name: "Test Omitted (Expected: true)"
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     outputs:
       triggered: ${{ steps.test.outputs.triggered }}
     steps:
@@ -61,6 +66,8 @@ jobs:
   test-custom-ref:
     name: "Test Custom Ref (Expected: true)"
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     outputs:
       triggered: ${{ steps.test.outputs.triggered }}
     steps:
@@ -80,6 +87,8 @@ jobs:
   test-legacy-bash-format:
     name: "Test Legacy Bash Format (Expected: true)"
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     outputs:
       triggered: ${{ steps.test.outputs.triggered }}
     steps:
@@ -93,6 +102,8 @@ jobs:
   test-comma-separated-triggers:
     name: "Test Comma-Separated Triggers (Expected: true)"
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     outputs:
       triggered: ${{ steps.test.outputs.triggered }}
     steps:
@@ -106,6 +117,8 @@ jobs:
   test-semicolon-separated-triggers:
     name: "Test Semicolon-Separated Triggers (Expected: true)"
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     outputs:
       triggered: ${{ steps.test.outputs.triggered }}
     steps:
@@ -119,6 +132,8 @@ jobs:
   test-json-array-triggers:
     name: "Test JSON Array Triggers (Expected: true)"
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     outputs:
       triggered: ${{ steps.test.outputs.triggered }}
     steps:
@@ -133,6 +148,8 @@ jobs:
     name: Verify Results
     needs: [test-triggers-match, test-triggers-no-match, test-triggers-omitted, test-custom-ref, test-legacy-bash-format, test-comma-separated-triggers, test-semicolon-separated-triggers, test-json-array-triggers]
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     steps:
       - name: Assert outputs
         run: |

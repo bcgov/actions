@@ -1,5 +1,8 @@
 name: 'Image Tracker'
 description: 'Resolve GHCR image digests for a git commit using OCI revision labels.'
+branding:
+  icon: eye
+  color: blue
 
 inputs:
   package:
