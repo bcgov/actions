@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  fork-gate:
+    name: Fork Gate
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Verify Not a Fork PR
+        if: github.event.pull_request.head.repo.full_name != github.repository
+        run: |
+          echo "::error::PRs from external forks are not allowed on this repository. Maintainers must check out a local branch to run CI validation."
+          exit 1
+
+  path-filter:
+    name: Path Filter
+    needs: fork-gate
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      actionlint: ${{ steps.filter.outputs.actionlint }}
+      builder-ghcr: ${{ steps.filter.outputs.builder-ghcr }}
+      diff-triggers: ${{ steps.filter.outputs.diff-triggers }}
+      get-pr: ${{ steps.filter.outputs.get-pr }}
+      image-tracker: ${{ steps.filter.outputs.image-tracker }}
+      pr-description-add: ${{ steps.filter.outputs.pr-description-add }}
+      test-and-analyse: ${{ steps.filter.outputs.test-and-analyse }}
+      workflow-notifier: ${{ steps.filter.outputs.workflow-notifier }}
+      workflows: ${{ steps.filter.outputs.workflows }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Filter Changed Paths
+        id: filter
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        with:
+          filters: |
+            actionlint:
+              - 'actionlint/**'
+            builder-ghcr:
+              - 'builder-ghcr/**'
+              - '.github/workflows/test-builder-ghcr.yml'
+            diff-triggers:
+              - 'diff-triggers/**'
+              - '.github/workflows/test-diff-triggers.yml'
+            get-pr:
+              - 'get-pr/**'
+              - '.github/workflows/test-get-pr.yml'
+            image-tracker:
+              - 'image-tracker/**'
+              - '.github/workflows/test-image-tracker.yml'
+            pr-description-add:
+              - 'pr-description-add/**'
+              - '.github/workflows/test-pr-description-add.yml'
+            test-and-analyse:
+              - 'test-and-analyse/**'
+              - '.github/workflows/test-test-and-analyse.yml'
+            workflow-notifier:
+              - 'workflow-notifier/**'
+              - '.github/workflows/test-notifier.yml'
+            workflows:
+              - '.github/workflows/**'
+
+  results:
+    name: results
+    needs: [fork-gate, path-filter]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check Results
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: |
+          echo "CI validation failed."
+          exit 1
+      - name: Success
+        run: echo "CI validation passed."

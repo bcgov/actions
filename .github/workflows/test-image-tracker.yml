@@ -2,6 +2,9 @@ name: Test Image Tracker
 
 on:
   pull_request:
+    paths:
+      - 'image-tracker/**'
+      - '.github/workflows/test-image-tracker.yml'
   workflow_dispatch:
 
 concurrency:

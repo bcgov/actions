@@ -1,7 +1,10 @@
-name: PR
+name: Test Builder GHCR
 
 on:
   pull_request:
+    paths:
+      - 'builder-ghcr/**'
+      - '.github/workflows/test-builder-ghcr.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
@@ -22,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - id: build
-        uses: ./
+        uses: ./builder-ghcr
         with:
           package: backend
           repository: bcgov/quickstart-openshift
@@ -55,7 +58,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - id: no-attestation
-        uses: ./
+        uses: ./builder-ghcr
         with:
           package: frontend
           build_context: frontend
@@ -93,7 +96,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - id: advanced
-        uses: ./
+        uses: ./builder-ghcr
         with:
           package: api
           build_context: .
@@ -133,7 +136,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - id: single-package
-        uses: ./
+        uses: ./builder-ghcr
         with:
           package: action-builder-ghcr
           build_context: .
@@ -172,7 +175,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - id: metadata-tags
-        uses: ./
+        uses: ./builder-ghcr
         with:
           package: frontend
           build_context: frontend
