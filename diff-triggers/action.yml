@@ -1,7 +1,7 @@
 name: Diff Triggers
 description: Check if changed files match trigger paths. Returns true if any trigger matches, false otherwise. Always returns true if triggers are omitted.
 branding:
-  icon: package
+  icon: git-compare
   color: blue
 
 inputs:
@@ -11,6 +11,9 @@ inputs:
       parenthesized bash-style lists: ('frontend/' 'backend/'), and delimited strings
       separated by spaces, commas, or semicolons. Always triggers if omitted.
     required: false
+  debug:
+    description: Enable debug logging
+    default: "false"
   ref:
     description: >-
       Reference to compare against (e.g., 'main', 'HEAD^', commit SHA).

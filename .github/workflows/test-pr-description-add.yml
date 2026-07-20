@@ -7,14 +7,15 @@ on:
       - '.github/workflows/test-pr-description-add.yml'
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pull-requests: write
+permissions: {}
 
 jobs:
   test:
     name: Test Action
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v7
 

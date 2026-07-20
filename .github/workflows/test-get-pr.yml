@@ -12,13 +12,14 @@ on:
       - '.github/workflows/test-get-pr.yml'
   workflow_dispatch:
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
   get-pr:
     name: Run Local Get PR
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     outputs:
       pr: ${{ steps.vars.outputs.pr }}
     steps:
@@ -44,6 +45,8 @@ jobs:
   test-scenarios:
     name: Test Scenarios
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
 

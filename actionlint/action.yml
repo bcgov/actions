@@ -1,7 +1,7 @@
 name: actionlint
 description: Lint GitHub Actions workflows with caching and rate-limit proof execution
 branding:
-  icon: check-square
+  icon: shield
   color: blue
 
 inputs:
@@ -11,6 +11,12 @@ inputs:
   args:
     description: Additional command line arguments to pass to actionlint
     default: ""
+  debug:
+    description: Enable debug logging
+    default: "false"
+  github_token:
+    description: GitHub token
+    default: ${{ github.token }}
 
 runs:
   using: composite

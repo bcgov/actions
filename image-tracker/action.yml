@@ -1,5 +1,8 @@
 name: 'Image Tracker'
 description: 'Resolve GHCR image digests for a git commit using OCI revision labels.'
+branding:
+  icon: eye
+  color: blue
 
 inputs:
   package:
@@ -9,6 +12,9 @@ inputs:
       package name matches the repo name, in which case it resolves to
       `ghcr.io/<owner>/<repo>`.
     required: true
+  debug:
+    description: 'Enable debug logging'
+    default: 'false'
   revision:
     description: 'Git revision (SHA, branch, or tag) to resolve against.'
     default: 'HEAD'
