@@ -12,6 +12,9 @@ inputs:
   github_token:
     description: "GitHub token or a Personal Access Token (PAT)"
     default: ${{ github.token }}
+  debug:
+    description: "Enable debug logging"
+    default: "false"
 
 runs:
   using: "node24"

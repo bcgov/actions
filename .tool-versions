@@ -1,3 +1,5 @@
+# Toolchain configurations for local development environments (asdf/mise).
+# Note: Runner environments in GitHub Actions use pre-installed platform engines.
 actionlint 1.7.12
-nodejs 24.1.0
+nodejs 24.18.0
 shellcheck 0.10.0

@@ -148,8 +148,6 @@ jobs:
     name: Verify Results
     needs: [test-triggers-match, test-triggers-no-match, test-triggers-omitted, test-custom-ref, test-legacy-bash-format, test-comma-separated-triggers, test-semicolon-separated-triggers, test-json-array-triggers]
     runs-on: ubuntu-24.04
-    permissions:
-      contents: read
     steps:
       - name: Assert outputs
         run: |

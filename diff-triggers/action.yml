@@ -11,6 +11,9 @@ inputs:
       parenthesized bash-style lists: ('frontend/' 'backend/'), and delimited strings
       separated by spaces, commas, or semicolons. Always triggers if omitted.
     required: false
+  debug:
+    description: Enable debug logging
+    default: "false"
   ref:
     description: >-
       Reference to compare against (e.g., 'main', 'HEAD^', commit SHA).

@@ -1,7 +1,7 @@
 name: Test and Analyze with Triggers and SonarCloud
 description: Run node tests based on triggers, optional SonarCloud
 branding:
-  icon: check-square
+  icon: check-circle
   color: blue
 
 inputs:
@@ -51,7 +51,12 @@ inputs:
 
   triggers:
     description: Paths (array) used to trigger a build; e.g. ('./backend/' './frontend/)
-
+  debug:
+    description: Enable debug logging
+    default: "false"
+  github_token:
+    description: Specify token (GH or PAT), instead of inheriting one from the calling workflow
+    default: ${{ github.token }}
   supply_scan:
     description: Enable supply chain attack detection using @aikidosec/safe-chain
     default: "true"

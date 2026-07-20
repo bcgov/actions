@@ -12,6 +12,9 @@ inputs:
       package name matches the repo name, in which case it resolves to
       `ghcr.io/<owner>/<repo>`.
     required: true
+  debug:
+    description: 'Enable debug logging'
+    default: 'false'
   revision:
     description: 'Git revision (SHA, branch, or tag) to resolve against.'
     default: 'HEAD'

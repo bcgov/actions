@@ -9,6 +9,9 @@ inputs:
   package:
     description: Package name; e.g. backend, frontend
     required: true
+  debug:
+    description: Enable debug logging
+    default: "false"
 
   ### Typical / recommended
   build_context:
