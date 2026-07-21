@@ -138,7 +138,7 @@ jobs:
       pull-requests: write
 
   results:
-    name: results
+    name: PR Results
     needs:
       - fork-gate
       - path-filter
