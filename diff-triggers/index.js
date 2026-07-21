@@ -1,4 +1,4 @@
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const fs = require('fs');
 
 /**
@@ -124,13 +124,13 @@ function parseFilters(raw) {
 }
 
 /**
- * Run a shell command synchronously. Returns trimmed stdout.
- * @param {string} cmd
+ * Run a git command synchronously. Returns trimmed stdout.
+ * @param {string[]} args
  * @param {object} [opts]
  * @returns {string}
  */
-function run(cmd, opts = {}) {
-  return execSync(cmd, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], ...opts }).trim();
+function run(args, opts = {}) {
+  return execFileSync('git', args, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], ...opts }).trim();
 }
 
 async function main() {
@@ -215,9 +215,9 @@ async function main() {
     }
 
     try {
-      run(`git remote set-url base "${authedUrl}"`);
+      run(['remote', 'set-url', 'base', authedUrl]);
     } catch {
-      run(`git remote add base "${authedUrl}"`);
+      run(['remote', 'add', 'base', authedUrl]);
     }
   }
 
@@ -227,12 +227,12 @@ async function main() {
     // Local ref — use directly, but ensure shallow clone has enough depth
     compareRef = baseRef;
     try {
-      run(`git rev-parse --verify "${compareRef}"`);
+      run(['rev-parse', '--verify', compareRef]);
     } catch {
       // Shallow clone doesn't have the ref — deepen
       try {
-        run('git fetch --deepen=10');
-        run(`git rev-parse --verify "${compareRef}"`);
+        run(['fetch', '--deepen=10']);
+        run(['rev-parse', '--verify', compareRef]);
       } catch {
         console.error(`::error::Cannot resolve ref '${compareRef}'. Ensure sufficient fetch-depth in your checkout step.`);
         process.exit(1);
@@ -240,9 +240,9 @@ async function main() {
     }
   } else {
     // Remote ref — fetch from base remote
-    run(`git fetch base "${baseRef}"`);
+    run(['fetch', 'base', baseRef]);
     try {
-      run(`git rev-parse --verify "refs/remotes/base/${baseRef}"`);
+      run(['rev-parse', '--verify', `refs/remotes/base/${baseRef}`]);
       compareRef = `base/${baseRef}`;
     } catch {
       compareRef = baseRef;
@@ -267,8 +267,7 @@ async function main() {
         return p;
       });
 
-      const escapedPathspecs = pathspecs.map(p => `"${p.replace(/"/g, '\\"')}"`).join(' ');
-      const diffOutput = run(`git diff "${compareRef}" HEAD --name-only -- ${escapedPathspecs}`);
+      const diffOutput = run(['diff', compareRef, 'HEAD', '--name-only', '--', ...pathspecs]);
 
       if (diffOutput) {
         triggered = true;
@@ -291,8 +290,7 @@ async function main() {
       return p;
     });
 
-    const escapedPathspecs = pathspecs.map(p => `"${p.replace(/"/g, '\\"')}"`).join(' ');
-    const diffOutput = run(`git diff "${compareRef}" HEAD --name-only -- ${escapedPathspecs}`);
+    const diffOutput = run(['diff', compareRef, 'HEAD', '--name-only', '--', ...pathspecs]);
 
     if (diffOutput) {
       triggered = true;
