@@ -259,35 +259,50 @@ async function main() {
     for (const [key, paths] of Object.entries(filters)) {
       let keyTriggered = false;
       detailsLog += `  Filter '${key}':\n`;
-      for (const p of paths) {
-        const diffOutput = run(`git diff "${compareRef}" HEAD --name-only -- "${p}"`);
-        if (diffOutput) {
-          triggered = true;
-          keyTriggered = true;
-          matchedTriggers.push(`${key}:${p}`);
-          detailsLog += `    ✔ '${p}'\n`;
-          for (const f of diffOutput.split('\n')) {
-            detailsLog += `        ${f}\n`;
-          }
-        } else {
-          detailsLog += `    ✘ '${p}'\n`;
+
+      const pathspecs = paths.map(p => {
+        if (p.startsWith('!')) {
+          return `:(exclude)${p.slice(1)}`;
         }
+        return p;
+      });
+
+      const escapedPathspecs = pathspecs.map(p => `"${p.replace(/"/g, '\\"')}"`).join(' ');
+      const diffOutput = run(`git diff "${compareRef}" HEAD --name-only -- ${escapedPathspecs}`);
+
+      if (diffOutput) {
+        triggered = true;
+        keyTriggered = true;
+        detailsLog += `    ✔ Triggered by changes in:\n`;
+        for (const f of diffOutput.split('\n').filter(Boolean)) {
+          matchedTriggers.push(`${key}:${f}`);
+          detailsLog += `        ${f}\n`;
+        }
+      } else {
+        detailsLog += `    ✘ No matching changes (patterns: ${paths.join(', ')})\n`;
       }
       filterResults[key] = keyTriggered;
     }
   } else {
-    for (const t of triggers) {
-      const diffOutput = run(`git diff "${compareRef}" HEAD --name-only -- "${t}"`);
-      if (diffOutput) {
-        triggered = true;
-        matchedTriggers.push(t);
-        detailsLog += `  ✔ '${t}'\n`;
-        for (const f of diffOutput.split('\n')) {
-          detailsLog += `      ${f}\n`;
-        }
-      } else {
-        detailsLog += `  ✘ '${t}'\n`;
+    const pathspecs = triggers.map(p => {
+      if (p.startsWith('!')) {
+        return `:(exclude)${p.slice(1)}`;
       }
+      return p;
+    });
+
+    const escapedPathspecs = pathspecs.map(p => `"${p.replace(/"/g, '\\"')}"`).join(' ');
+    const diffOutput = run(`git diff "${compareRef}" HEAD --name-only -- ${escapedPathspecs}`);
+
+    if (diffOutput) {
+      triggered = true;
+      detailsLog += `  ✔ Triggered by changes in:\n`;
+      for (const f of diffOutput.split('\n').filter(Boolean)) {
+        matchedTriggers.push(f);
+        detailsLog += `      ${f}\n`;
+      }
+    } else {
+      detailsLog += `  ✘ No matching changes (patterns: ${triggers.join(', ')})\n`;
     }
   }
 
