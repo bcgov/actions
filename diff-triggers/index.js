@@ -123,7 +123,9 @@ function parseFilters(raw) {
           try {
             filters[currentKey] = JSON.parse(val).map(s => stripQuotes(String(s).trim())).filter(Boolean);
           } catch (e) {
-            filters[currentKey] = val.split(',').map(s => stripQuotes(s.trim())).filter(Boolean);
+            // Non-JSON list like [a, b] — strip brackets before splitting
+            const inner = val.slice(1, -1);
+            filters[currentKey] = inner.split(',').map(s => stripQuotes(s.trim())).filter(Boolean);
           }
         } else {
           filters[currentKey].push(stripQuotes(val));

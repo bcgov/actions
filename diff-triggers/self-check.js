@@ -31,4 +31,11 @@ for (const paths of Object.values(filters)) {
   }
 }
 
+// Inline non-JSON [a, b] must not leak brackets into pathspecs.
+const inline = parseFilters('frontend: [frontend/, backend/]\n');
+assert.deepStrictEqual(inline.frontend, ['frontend/', 'backend/']);
+for (const p of inline.frontend) {
+  assert.ok(!p.includes('[') && !p.includes(']'), `bracket leaked into pathspec: ${p}`);
+}
+
 console.log('diff-triggers self-check: ok');

@@ -33,7 +33,7 @@ inputs:
       Skip checkout step.
       - 'true': Always skip checkout.
       - 'false': Always run checkout.
-      - 'auto' (default): Check if .git directory exists and skip if it does.
+      - 'auto' (default): Skip if .git exists (directory or worktree gitdir file).
     default: 'auto'
     required: false
   filters:
@@ -50,25 +50,25 @@ outputs:
     value: ${{ steps.diff.outputs.actionlint }}
   builder-ghcr:
     description: Dynamic filter output for builder-ghcr
-    value: ${{ steps.diff.outputs.builder-ghcr }}
+    value: ${{ steps.diff.outputs['builder-ghcr'] }}
   diff-triggers:
     description: Dynamic filter output for diff-triggers
-    value: ${{ steps.diff.outputs.diff-triggers }}
+    value: ${{ steps.diff.outputs['diff-triggers'] }}
   get-pr:
     description: Dynamic filter output for get-pr
-    value: ${{ steps.diff.outputs.get-pr }}
+    value: ${{ steps.diff.outputs['get-pr'] }}
   image-tracker:
     description: Dynamic filter output for image-tracker
-    value: ${{ steps.diff.outputs.image-tracker }}
+    value: ${{ steps.diff.outputs['image-tracker'] }}
   pr-description-add:
     description: Dynamic filter output for pr-description-add
-    value: ${{ steps.diff.outputs.pr-description-add }}
+    value: ${{ steps.diff.outputs['pr-description-add'] }}
   test-and-analyse:
     description: Dynamic filter output for test-and-analyse
-    value: ${{ steps.diff.outputs.test-and-analyse }}
+    value: ${{ steps.diff.outputs['test-and-analyse'] }}
   workflow-notifier:
     description: Dynamic filter output for workflow-notifier
-    value: ${{ steps.diff.outputs.workflow-notifier }}
+    value: ${{ steps.diff.outputs['workflow-notifier'] }}
   workflows:
     description: Dynamic filter output for workflows
     value: ${{ steps.diff.outputs.workflows }}
@@ -85,7 +85,7 @@ runs:
         elif [ "${{ inputs.skip_checkout }}" = "false" ]; then
           echo "skip=false" >> $GITHUB_OUTPUT
         else
-          if [ -d .git ]; then
+          if [ -e .git ]; then
             echo "skip=true" >> $GITHUB_OUTPUT
           else
             echo "skip=false" >> $GITHUB_OUTPUT
