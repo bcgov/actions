@@ -12,6 +12,16 @@ on:
 permissions: {}
 
 jobs:
+  self-check:
+    name: Self-Check (quoted filter paths)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run parser self-check
+        run: node diff-triggers/self-check.js
+
   test-triggers-match:
     name: "Test Match (Expected: true)"
     runs-on: ubuntu-24.04
@@ -143,7 +153,7 @@ jobs:
 
   verify-results:
     name: Verify Results
-    needs: [test-triggers-match, test-triggers-no-match, test-triggers-omitted, test-custom-ref, test-legacy-bash-format, test-comma-separated-triggers, test-semicolon-separated-triggers, test-json-array-triggers]
+    needs: [self-check, test-triggers-match, test-triggers-no-match, test-triggers-omitted, test-custom-ref, test-legacy-bash-format, test-comma-separated-triggers, test-semicolon-separated-triggers, test-json-array-triggers]
     runs-on: ubuntu-24.04
     steps:
       - name: Assert outputs

@@ -74,10 +74,12 @@ jobs:
             workflows:
               - '.github/workflows/**'
 
+  # Fail-closed: any .github/workflows/** change runs all tests so CI graph
+  # edits cannot green-merge with every suite skipped.
   test-builder-ghcr:
     name: Test Builder GHCR
     needs: [fork-gate, path-filter]
-    if: needs.path-filter.outputs.builder-ghcr == 'true'
+    if: needs.path-filter.outputs.builder-ghcr == 'true' || needs.path-filter.outputs.workflows == 'true'
     uses: ./.github/workflows/test-builder-ghcr.yml
     permissions:
       contents: read
@@ -88,7 +90,7 @@ jobs:
   test-diff-triggers:
     name: Test Diff Triggers
     needs: [fork-gate, path-filter]
-    if: needs.path-filter.outputs.diff-triggers == 'true'
+    if: needs.path-filter.outputs.diff-triggers == 'true' || needs.path-filter.outputs.workflows == 'true'
     uses: ./.github/workflows/test-diff-triggers.yml
     permissions:
       contents: read
@@ -96,7 +98,7 @@ jobs:
   test-get-pr:
     name: Test Get PR
     needs: [fork-gate, path-filter]
-    if: needs.path-filter.outputs.get-pr == 'true'
+    if: needs.path-filter.outputs.get-pr == 'true' || needs.path-filter.outputs.workflows == 'true'
     uses: ./.github/workflows/test-get-pr.yml
     permissions:
       contents: read
@@ -104,7 +106,7 @@ jobs:
   test-image-tracker:
     name: Test Image Tracker
     needs: [fork-gate, path-filter]
-    if: needs.path-filter.outputs.image-tracker == 'true'
+    if: needs.path-filter.outputs.image-tracker == 'true' || needs.path-filter.outputs.workflows == 'true'
     uses: ./.github/workflows/test-image-tracker.yml
     permissions:
       contents: read
@@ -113,7 +115,7 @@ jobs:
   test-notifier:
     name: Test Notifier
     needs: [fork-gate, path-filter]
-    if: needs.path-filter.outputs.workflow-notifier == 'true'
+    if: needs.path-filter.outputs.workflow-notifier == 'true' || needs.path-filter.outputs.workflows == 'true'
     uses: ./.github/workflows/test-notifier.yml
     permissions:
       contents: read
@@ -122,7 +124,7 @@ jobs:
   test-pr-description-add:
     name: Test PR Description Add
     needs: [fork-gate, path-filter]
-    if: needs.path-filter.outputs.pr-description-add == 'true'
+    if: needs.path-filter.outputs.pr-description-add == 'true' || needs.path-filter.outputs.workflows == 'true'
     uses: ./.github/workflows/test-pr-description-add.yml
     permissions:
       contents: read
@@ -131,7 +133,7 @@ jobs:
   test-test-and-analyse:
     name: Test Test and Analyse
     needs: [fork-gate, path-filter]
-    if: needs.path-filter.outputs.test-and-analyse == 'true'
+    if: needs.path-filter.outputs.test-and-analyse == 'true' || needs.path-filter.outputs.workflows == 'true'
     uses: ./.github/workflows/test-test-and-analyse.yml
     permissions:
       contents: read

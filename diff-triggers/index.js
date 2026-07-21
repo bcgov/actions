@@ -2,6 +2,23 @@ const { execFileSync } = require('child_process');
 const fs = require('fs');
 
 /**
+ * Strip one layer of matching single or double quotes.
+ * YAML-like filter lists often use dorny-style `- 'path/**'`; those quotes
+ * must not reach git pathspecs or matching silently fails.
+ * @param {string} s
+ * @returns {string}
+ */
+function stripQuotes(s) {
+  if (
+    (s.startsWith("'") && s.endsWith("'") && s.length >= 2) ||
+    (s.startsWith('"') && s.endsWith('"') && s.length >= 2)
+  ) {
+    return s.slice(1, -1);
+  }
+  return s;
+}
+
+/**
  * Parse trigger paths from various input formats.
  *
  * Supported formats:
@@ -39,7 +56,7 @@ function parseTriggers(raw) {
   if (trimmed.includes('\n')) {
     return trimmed
       .split(/\r?\n/)
-      .map(line => line.trim())
+      .map(line => stripQuotes(line.trim()))
       .filter(Boolean);
   }
 
@@ -104,19 +121,19 @@ function parseFilters(raw) {
       if (val) {
         if (val.startsWith('[') && val.endsWith(']')) {
           try {
-            filters[currentKey] = JSON.parse(val).map(String);
+            filters[currentKey] = JSON.parse(val).map(s => stripQuotes(String(s).trim())).filter(Boolean);
           } catch (e) {
-            filters[currentKey] = val.split(',').map(s => s.trim()).filter(Boolean);
+            filters[currentKey] = val.split(',').map(s => stripQuotes(s.trim())).filter(Boolean);
           }
         } else {
-          filters[currentKey].push(val);
+          filters[currentKey].push(stripQuotes(val));
         }
       }
     } else if (currentKey && (trimmed.startsWith('-') || line.match(/^\s{2,}/))) {
       // Indented item under key
       const val = trimmed.startsWith('-') ? trimmed.slice(1).trim() : trimmed;
       if (val) {
-        filters[currentKey].push(val);
+        filters[currentKey].push(stripQuotes(val));
       }
     }
   }
@@ -349,7 +366,11 @@ async function main() {
   }
 }
 
-main().catch(err => {
-  console.error(`::error::${err.message || err}`);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch(err => {
+    console.error(`::error::${err.message || err}`);
+    process.exit(1);
+  });
+}
+
+module.exports = { parseFilters, parseTriggers, stripQuotes };
