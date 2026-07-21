@@ -1,7 +1,7 @@
 name: Diff Triggers
 description: Check if changed files match trigger paths. Returns true if any trigger matches, false otherwise. Always returns true if triggers are omitted.
 branding:
-  icon: git-compare
+  icon: git-branch
   color: blue
 
 inputs:
@@ -28,16 +28,72 @@ inputs:
     description: Emit workflow summary annotations (::notice::) for fired/not fired results. Set to false to suppress annotations
     required: false
     default: 'true'
+  skip_checkout:
+    description: >-
+      Skip checkout step.
+      - 'true': Always skip checkout.
+      - 'false': Always run checkout.
+      - 'auto' (default): Skip if .git exists (directory or worktree gitdir file).
+    default: 'auto'
+    required: false
+  filters:
+    description: >-
+      A YAML-like multiline string mapping keys to paths.
+    required: false
 
 outputs:
   triggered:
     description: Boolean result of triggers
     value: ${{ steps.diff.outputs.triggered }}
+  actionlint:
+    description: Dynamic filter output for actionlint
+    value: ${{ steps.diff.outputs.actionlint }}
+  builder-ghcr:
+    description: Dynamic filter output for builder-ghcr
+    value: ${{ steps.diff.outputs['builder-ghcr'] }}
+  diff-triggers:
+    description: Dynamic filter output for diff-triggers
+    value: ${{ steps.diff.outputs['diff-triggers'] }}
+  get-pr:
+    description: Dynamic filter output for get-pr
+    value: ${{ steps.diff.outputs['get-pr'] }}
+  image-tracker:
+    description: Dynamic filter output for image-tracker
+    value: ${{ steps.diff.outputs['image-tracker'] }}
+  pr-description-add:
+    description: Dynamic filter output for pr-description-add
+    value: ${{ steps.diff.outputs['pr-description-add'] }}
+  test-and-analyse:
+    description: Dynamic filter output for test-and-analyse
+    value: ${{ steps.diff.outputs['test-and-analyse'] }}
+  workflow-notifier:
+    description: Dynamic filter output for workflow-notifier
+    value: ${{ steps.diff.outputs['workflow-notifier'] }}
+  workflows:
+    description: Dynamic filter output for workflows
+    value: ${{ steps.diff.outputs.workflows }}
 
 runs:
   using: composite
   steps:
+    - name: Determine if checkout is needed
+      id: check-checkout
+      shell: bash
+      run: |
+        if [ "${{ inputs.skip_checkout }}" = "true" ]; then
+          echo "skip=true" >> $GITHUB_OUTPUT
+        elif [ "${{ inputs.skip_checkout }}" = "false" ]; then
+          echo "skip=false" >> $GITHUB_OUTPUT
+        else
+          if [ -e .git ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+        fi
+
     - uses: actions/checkout@v7
+      if: steps.check-checkout.outputs.skip != 'true'
       with:
         token: ${{ inputs.github_token }}
         repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
@@ -48,6 +104,7 @@ runs:
       shell: bash
       env:
         INPUT_TRIGGERS: ${{ inputs.triggers }}
+        INPUT_FILTERS: ${{ inputs.filters }}
         INPUT_REF: ${{ inputs.ref }}
         INPUT_ANNOTATIONS: ${{ inputs.annotations }}
         INPUT_GITHUB_TOKEN: ${{ inputs.github_token }}

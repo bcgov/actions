@@ -1,10 +1,12 @@
-name: PR
+name: Test Builder GHCR
 
 on:
-  pull_request:
+  workflow_call:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  # Unique per suite: github.workflow is the *caller* name (CI), so sharing
+  # that key across reusable workflows cancels sibling suites mid-run.
+  group: test-builder-ghcr-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions: {}
@@ -22,7 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - id: build
-        uses: ./
+        uses: ./builder-ghcr
         with:
           package: backend
           repository: bcgov/quickstart-openshift
@@ -55,7 +57,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - id: no-attestation
-        uses: ./
+        uses: ./builder-ghcr
         with:
           package: frontend
           build_context: frontend
@@ -93,7 +95,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - id: advanced
-        uses: ./
+        uses: ./builder-ghcr
         with:
           package: api
           build_context: .
@@ -133,7 +135,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - id: single-package
-        uses: ./
+        uses: ./builder-ghcr
         with:
           package: action-builder-ghcr
           build_context: .
@@ -172,7 +174,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - id: metadata-tags
-        uses: ./
+        uses: ./builder-ghcr
         with:
           package: frontend
           build_context: frontend

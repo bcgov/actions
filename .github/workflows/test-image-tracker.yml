@@ -1,11 +1,13 @@
 name: Test Image Tracker
 
 on:
-  pull_request:
+  workflow_call:
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # Unique per suite: github.workflow is the *caller* name (CI), so sharing
+  # that key across reusable workflows cancels sibling suites mid-run.
+  group: test-image-tracker-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions: {}

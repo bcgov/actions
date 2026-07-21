@@ -1,5 +1,22 @@
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const fs = require('fs');
+
+/**
+ * Strip one layer of matching single or double quotes.
+ * YAML-like filter lists often use dorny-style `- 'path/**'`; those quotes
+ * must not reach git pathspecs or matching silently fails.
+ * @param {string} s
+ * @returns {string}
+ */
+function stripQuotes(s) {
+  if (
+    (s.startsWith("'") && s.endsWith("'") && s.length >= 2) ||
+    (s.startsWith('"') && s.endsWith('"') && s.length >= 2)
+  ) {
+    return s.slice(1, -1);
+  }
+  return s;
+}
 
 /**
  * Parse trigger paths from various input formats.
@@ -39,7 +56,7 @@ function parseTriggers(raw) {
   if (trimmed.includes('\n')) {
     return trimmed
       .split(/\r?\n/)
-      .map(line => line.trim())
+      .map(line => stripQuotes(line.trim()))
       .filter(Boolean);
   }
 
@@ -76,21 +93,69 @@ function parseTriggers(raw) {
   return tokens;
 }
 
+/**
+ * Parse filters mapping from a YAML-like multiline string.
+ * Maps keys to arrays of path patterns.
+ *
+ * @param {string} raw
+ * @returns {Object.<string, string[]>}
+ */
+function parseFilters(raw) {
+  const lines = raw.split(/\r?\n/);
+  const filters = {};
+  let currentKey = null;
 
+  for (let line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+
+    // Detect key line: "key:" or "key: value"
+    if (line.match(/^\s*[\w-]+:/)) {
+      const colonIndex = trimmed.indexOf(':');
+      const key = trimmed.slice(0, colonIndex).trim();
+      const val = trimmed.slice(colonIndex + 1).trim();
+
+      currentKey = key;
+      filters[currentKey] = [];
+
+      if (val) {
+        if (val.startsWith('[') && val.endsWith(']')) {
+          try {
+            filters[currentKey] = JSON.parse(val).map(s => stripQuotes(String(s).trim())).filter(Boolean);
+          } catch (e) {
+            // Non-JSON list like [a, b] — strip brackets before splitting
+            const inner = val.slice(1, -1);
+            filters[currentKey] = inner.split(',').map(s => stripQuotes(s.trim())).filter(Boolean);
+          }
+        } else {
+          filters[currentKey].push(stripQuotes(val));
+        }
+      }
+    } else if (currentKey && (trimmed.startsWith('-') || line.match(/^\s{2,}/))) {
+      // Indented item under key
+      const val = trimmed.startsWith('-') ? trimmed.slice(1).trim() : trimmed;
+      if (val) {
+        filters[currentKey].push(stripQuotes(val));
+      }
+    }
+  }
+  return filters;
+}
 
 /**
- * Run a shell command synchronously. Returns trimmed stdout.
- * @param {string} cmd
+ * Run a git command synchronously. Returns trimmed stdout.
+ * @param {string[]} args
  * @param {object} [opts]
  * @returns {string}
  */
-function run(cmd, opts = {}) {
-  return execSync(cmd, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], ...opts }).trim();
+function run(args, opts = {}) {
+  return execFileSync('git', args, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], ...opts }).trim();
 }
 
 async function main() {
   // ── Phase 1: Read inputs & environment ──────────────────────────────
   const triggersStr = process.env.INPUT_TRIGGERS || '';
+  const filtersStr = process.env.INPUT_FILTERS || '';
   const inputRef = process.env.INPUT_REF || '';
   const annotationsEnabled = (process.env.INPUT_ANNOTATIONS || 'true').toLowerCase() === 'true';
   const token = process.env.INPUT_GITHUB_TOKEN || '';
@@ -112,25 +177,35 @@ async function main() {
     }
   }
 
-  // ── Phase 2 & 3: Parse triggers (or short-circuit if omitted) ──────
-  if (!triggersStr.trim()) {
-    console.log(`::group::Diff Triggers — ✅ TRIGGERED | ${repo} ${callerContext}`);
-    console.log('  Triggers: (omitted, always fires)');
-    console.log('::endgroup::');
-    if (annotationsEnabled) {
-      console.log(`::notice title=Diff Triggers [${job}]::✅ Omitted (always fires).`);
+  // ── Phase 2 & 3: Parse triggers/filters (or short-circuit if omitted) ──────
+  const isMultiFilter = !!filtersStr.trim();
+  let triggers = [];
+  let filters = {};
+
+  if (isMultiFilter) {
+    filters = parseFilters(filtersStr);
+  } else {
+    if (!triggersStr.trim()) {
+      console.log(`::group::Diff Triggers — ✅ TRIGGERED | ${repo} ${callerContext}`);
+      console.log('  Triggers: (omitted, always fires)');
+      console.log('::endgroup::');
+      if (annotationsEnabled) {
+        console.log(`::notice title=Diff Triggers [${job}]::✅ Omitted (always fires).`);
+      }
+      if (outputPath) fs.appendFileSync(outputPath, 'triggered=true\n');
+      return;
     }
-    if (outputPath) fs.appendFileSync(outputPath, 'triggered=true\n');
-    return;
+    triggers = parseTriggers(triggersStr);
   }
 
-  const triggers = parseTriggers(triggersStr);
-
   // Escape for GitHub Actions workflow command encoding
-  const escapedTriggers = triggersStr
-    .replace(/%/g, '%25')
-    .replace(/\n/g, '%0A')
-    .replace(/\r/g, '%0D');
+  let escapedTriggers = '';
+  if (!isMultiFilter) {
+    escapedTriggers = triggersStr
+      .replace(/%/g, '%25')
+      .replace(/\n/g, '%0A')
+      .replace(/\r/g, '%0D');
+  }
 
   // ── Phase 4: Determine comparison ref ──────────────────────────────
   let baseRef = inputRef;
@@ -159,9 +234,9 @@ async function main() {
     }
 
     try {
-      run(`git remote set-url base "${authedUrl}"`);
+      run(['remote', 'set-url', 'base', authedUrl]);
     } catch {
-      run(`git remote add base "${authedUrl}"`);
+      run(['remote', 'add', 'base', authedUrl]);
     }
   }
 
@@ -171,12 +246,12 @@ async function main() {
     // Local ref — use directly, but ensure shallow clone has enough depth
     compareRef = baseRef;
     try {
-      run(`git rev-parse --verify "${compareRef}"`);
+      run(['rev-parse', '--verify', compareRef]);
     } catch {
       // Shallow clone doesn't have the ref — deepen
       try {
-        run('git fetch --deepen=10');
-        run(`git rev-parse --verify "${compareRef}"`);
+        run(['fetch', '--deepen=10']);
+        run(['rev-parse', '--verify', compareRef]);
       } catch {
         console.error(`::error::Cannot resolve ref '${compareRef}'. Ensure sufficient fetch-depth in your checkout step.`);
         process.exit(1);
@@ -184,67 +259,120 @@ async function main() {
     }
   } else {
     // Remote ref — fetch from base remote
-    run(`git fetch base "${baseRef}"`);
+    run(['fetch', 'base', baseRef]);
     try {
-      run(`git rev-parse --verify "refs/remotes/base/${baseRef}"`);
+      run(['rev-parse', '--verify', `refs/remotes/base/${baseRef}`]);
       compareRef = `base/${baseRef}`;
     } catch {
       compareRef = baseRef;
     }
   }
 
-  // 5c. Run git diff per trigger
+  // 5c. Run git diff per trigger/filter
   let triggered = false;
   const matchedTriggers = [];
   let detailsLog = '';
+  const filterResults = {};
 
-  for (const t of triggers) {
-    const diffOutput = run(`git diff "${compareRef}" HEAD --name-only -- "${t}"`);
+  if (isMultiFilter) {
+    for (const [key, paths] of Object.entries(filters)) {
+      let keyTriggered = false;
+      detailsLog += `  Filter '${key}':\n`;
+
+      const pathspecs = paths.map(p => {
+        if (p.startsWith('!')) {
+          return `:(exclude)${p.slice(1)}`;
+        }
+        return p;
+      });
+
+      const diffOutput = run(['diff', compareRef, 'HEAD', '--name-only', '--', ...pathspecs]);
+
+      if (diffOutput) {
+        triggered = true;
+        keyTriggered = true;
+        detailsLog += `    ✔ Triggered by changes in:\n`;
+        for (const f of diffOutput.split('\n').filter(Boolean)) {
+          matchedTriggers.push(`${key}:${f}`);
+          detailsLog += `        ${f}\n`;
+        }
+      } else {
+        detailsLog += `    ✘ No matching changes (patterns: ${paths.join(', ')})\n`;
+      }
+      filterResults[key] = keyTriggered;
+    }
+  } else {
+    const pathspecs = triggers.map(p => {
+      if (p.startsWith('!')) {
+        return `:(exclude)${p.slice(1)}`;
+      }
+      return p;
+    });
+
+    const diffOutput = run(['diff', compareRef, 'HEAD', '--name-only', '--', ...pathspecs]);
 
     if (diffOutput) {
       triggered = true;
-      matchedTriggers.push(t);
-      detailsLog += `  ✔ '${t}'\n`;
-      for (const f of diffOutput.split('\n')) {
+      detailsLog += `  ✔ Triggered by changes in:\n`;
+      for (const f of diffOutput.split('\n').filter(Boolean)) {
+        matchedTriggers.push(f);
         detailsLog += `      ${f}\n`;
       }
     } else {
-      detailsLog += `  ✘ '${t}'\n`;
+      detailsLog += `  ✘ No matching changes (patterns: ${triggers.join(', ')})\n`;
     }
   }
-
 
   // ── Phase 6: Output and logging ────────────────────────────────────
   if (triggered) {
     const matchedList = matchedTriggers.join(', ');
     console.log(`::group::Diff Triggers — ✅ TRIGGERED | ${repo} ${callerContext}`);
-    console.log(`  Triggers:     ${triggersStr}`);
-    console.log(`  Comparing to: ${compareRef}`);
-    console.log(`  Ref source:   ${refSource}`);
-    console.log(`  Matched:      ${matchedList}`);
+    console.log(`  Filters/Triggers: ${isMultiFilter ? 'filters' : 'triggers'}`);
+    console.log(`  Comparing to:     ${compareRef}`);
+    console.log(`  Ref source:       ${refSource}`);
+    console.log(`  Matched:          ${matchedList}`);
     console.log('');
     console.log(detailsLog);
     console.log('::endgroup::');
     if (annotationsEnabled) {
-      console.log(`::notice title=Diff Triggers [${job}]::✅ Fired. Triggers: ${escapedTriggers}`);
+      if (isMultiFilter) {
+        const firedKeys = Object.entries(filterResults).filter(([_, v]) => v).map(([k]) => k).join(', ');
+        console.log(`::notice title=Diff Triggers [${job}]::✅ Fired for filters: ${firedKeys}`);
+      } else {
+        console.log(`::notice title=Diff Triggers [${job}]::✅ Fired. Triggers: ${escapedTriggers}`);
+      }
     }
   } else {
     console.log(`::group::Diff Triggers — ⊘ NOT TRIGGERED | ${repo} ${callerContext}`);
-    console.log(`  Triggers:     ${triggersStr}`);
-    console.log(`  Comparing to: ${compareRef}`);
-    console.log(`  Ref source:   ${refSource}`);
+    console.log(`  Filters/Triggers: ${isMultiFilter ? 'filters' : 'triggers'}`);
+    console.log(`  Comparing to:     ${compareRef}`);
+    console.log(`  Ref source:       ${refSource}`);
     console.log('');
     console.log(detailsLog);
     console.log('::endgroup::');
     if (annotationsEnabled) {
-      console.log(`::notice title=Diff Triggers [${job}]::⊘ Not fired. Triggers: ${escapedTriggers}`);
+      console.log(`::notice title=Diff Triggers [${job}]::⊘ Not fired.`);
     }
   }
 
-  if (outputPath) fs.appendFileSync(outputPath, `triggered=${triggered}\n`);
+  if (outputPath) {
+    fs.appendFileSync(outputPath, `triggered=${triggered}\n`);
+    if (isMultiFilter) {
+      const changedKeys = [];
+      for (const [key, val] of Object.entries(filterResults)) {
+        fs.appendFileSync(outputPath, `${key}=${val}\n`);
+        if (val) changedKeys.push(key);
+      }
+      fs.appendFileSync(outputPath, `changes=${JSON.stringify(changedKeys)}\n`);
+    }
+  }
 }
 
-main().catch(err => {
-  console.error(`::error::${err.message || err}`);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch(err => {
+    console.error(`::error::${err.message || err}`);
+    process.exit(1);
+  });
+}
+
+module.exports = { parseFilters, parseTriggers, stripQuotes };
