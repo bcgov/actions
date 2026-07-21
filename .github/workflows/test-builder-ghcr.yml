@@ -4,7 +4,9 @@ on:
   workflow_call:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  # Unique per suite: github.workflow is the *caller* name (CI), so sharing
+  # that key across reusable workflows cancels sibling suites mid-run.
+  group: test-builder-ghcr-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions: {}
