@@ -122,7 +122,7 @@ jobs:
         run: |
           echo "🔍 Verifying trigger behavior for ${{ matrix.name }}"
           expected="${{ matrix.expected_triggered }}"
-          # ponytail: diff-triggers runs only on pull_request; push/dispatch always trigger
+          # diff-triggers runs only on pull_request; on push/workflow_dispatch the action always reports triggered=true
           if [ "${{ matrix.name }}" = "backend-not-triggered" ] && [ "${{ github.event_name }}" != "pull_request" ]; then
             expected="true"
           fi
