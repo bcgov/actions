@@ -192,10 +192,10 @@ jobs:
         dir: [backend, frontend]
         include:
           - dir: backend
-            sonar_secret: SONAR_TOKEN
+            sonar_token: SONAR_TOKEN
             triggers: ('frontend/' 'charts/frontend')
           - dir: frontend
-            sonar_secret: SONAR_TOKEN
+            sonar_token: SONAR_TOKEN
             triggers: ('backend/' 'charts/backend')
     steps:
       - uses: actions/checkout@v7
@@ -210,7 +210,7 @@ jobs:
             -Dsonar.exclusions=**/coverage/**,**/node_modules/**
             -Dsonar.organization=bcgov-sonarcloud
             -Dsonar.projectKey=bcgov_${{ github.repository }}_${{ matrix.dir }}
-          sonar_token: ${{ secrets[matrix.sonar_secret] }}
+          sonar_token: ${{ secrets[matrix.sonar_token] }}
           triggers: ${{ matrix.triggers }}
           repository: bcgov/quickstart-openshift
           branch: main
