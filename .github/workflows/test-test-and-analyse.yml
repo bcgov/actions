@@ -17,6 +17,9 @@ concurrency:
 
 permissions: {}
 
+# Sonar: set repo secret SONAR_TOKEN (bcgov-sonarcloud). SONAR_TOKEN_FRONTEND is a
+# transitional fallback only; it is org-bound to bcgov-nr and cannot cover all matrix cells.
+
 jobs:
   tests:
     name: Test Action
@@ -35,12 +38,14 @@ jobs:
             expected_triggered: true
             repository: bcgov/quickstart-openshift
             test_command: npm install --no-package-lock && npm run test:cov
+            require_sonar: true
           - name: backend-not-triggered
             dir: backend
             triggers: "('not-existent-path/')"
             expected_triggered: false
             repository: bcgov/quickstart-openshift
             test_command: npm install --no-package-lock && npm run test:cov
+            require_sonar: false
           - name: frontend-basic
             dir: frontend
             triggers: ""
@@ -54,12 +59,14 @@ jobs:
             dep_scan: off
             test_command: npm install --no-package-lock && npm run test:cov
             repository: bcgov/quickstart-openshift
+            require_sonar: false
           - name: waste-frontend
             dir: frontend
             expected_triggered: true
             dep_scan: warn
             test_command: echo "Good enough for testing knip!"
             repository: bcgov/nr-waste-plus
+            require_sonar: false
           - name: java-basic
             dir: backend
             language: java
@@ -67,8 +74,10 @@ jobs:
             triggers: ""
             expected_triggered: true
             repository: bcgov/nr-forest-client
-            test_command: timeout 10m mvn -B verify sonar:sonar -P all-tests -DskipTests -Dsonar.host.url=https://sonarcloud.io -Dsonar.organization=bcgov-sonarcloud -Dsonar.projectKey=bcgov_bcgov/action-test-and-analyse_java-native
+            # No Sonar in this cell: repo token scope covers bcgov/actions Node CI only until a Java project token exists.
+            test_command: timeout 10m mvn -B verify -P all-tests -DskipTests
             cache: "none" # Explicitly disable cache
+            require_sonar: false
           - name: fom-autodiscover
             dir: ""
             triggers: ""
@@ -77,6 +86,7 @@ jobs:
             test_command: echo "Testing autodiscover on nr-fom"
             expected_config: ".github/knip.json"
             cache: "none"
+            require_sonar: false
     steps:
       # 1. Checkout the Action (this repo) at the root
       - name: Checkout Action
@@ -104,18 +114,24 @@ jobs:
           java_version: ${{ matrix.java_version || '21' }}
           repository: ${{ matrix.repository }}
           triggers: ${{ matrix.triggers }}
-          sonar_token: ${{ secrets.SONAR_TOKEN }}
-          require_sonar: ${{ matrix.require_sonar == true && github.event.pull_request.head.repo.full_name == github.repository && 'true' || 'false' }}
+          sonar_token: ${{ secrets.SONAR_TOKEN || secrets.SONAR_TOKEN_FRONTEND }}
+          require_sonar: ${{ matrix.require_sonar == true && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && 'true' || 'false' }}
           cache: ${{ matrix.cache || 'npm' }}
 
       - name: Verify trigger behavior
         run: |
           echo "🔍 Verifying trigger behavior for ${{ matrix.name }}"
-          if [ "${{ steps.action.outputs.triggered }}" != "${{ matrix.expected_triggered }}" ]; then
-            echo "❌ ${{ matrix.name }}: expected triggered=${{ matrix.expected_triggered }}, got ${{ steps.action.outputs.triggered }}"
+          expected="${{ matrix.expected_triggered }}"
+          # ponytail: diff-triggers runs only on pull_request; push/dispatch always trigger
+          if [ "${{ matrix.name }}" = "backend-not-triggered" ] && [ "${{ github.event_name }}" != "pull_request" ]; then
+            expected="true"
+          fi
+          actual="${{ steps.action.outputs.triggered }}"
+          if [ "$actual" != "$expected" ]; then
+            echo "❌ ${{ matrix.name }}: expected triggered=$expected, got $actual"
             exit 1
           fi
-          echo "✅ ${{ matrix.name }}: expected triggered=${{ matrix.expected_triggered }}, got ${{ steps.action.outputs.triggered }}"
+          echo "✅ ${{ matrix.name }}: expected triggered=$expected, got $actual"
 
       - name: Verify discovered knip config
         if: matrix.expected_config != ''

@@ -246,6 +246,14 @@ Has the action been triggered by path changes? \[true|false\]
 
 SonarCloud project tokens are free, available from [SonarCloud] or your organization's administrators.
 
+## In-repo CI (`bcgov/actions` maintainers)
+
+The [`test-test-and-analyse` workflow](../.github/workflows/test-test-and-analyse.yml) exercises this action against external sample repos. Set a repository Actions secret named **`SONAR_TOKEN`**: a SonarCloud token for the **`bcgov-sonarcloud`** organization that can analyze project **`bcgov_bcgov/actions`**.
+
+`SONAR_TOKEN_FRONTEND` (legacy, bound to **`bcgov-nr`**) is accepted as a transitional fallback in that workflow only. It does not cover the Java matrix cell or consumers expecting **`bcgov-sonarcloud`**. Prefer renaming or replacing it with **`SONAR_TOKEN`**.
+
+Only the **`backend-triggered`** matrix cell sets `require_sonar: true` (internal pull requests). Other cells skip Sonar when no token is present. Fork pull requests never require Sonar.
+
 For BC Government projects, please create an [issue for our platform team](https://github.com/BCDevOps/devops-requests/issues/new/choose).
 
 After sign up, a token should be available from your project on the [SonarCloud] site.  Multirepo projects (e.g. backend, frontend) will have multiple projects.  Click `Administration > Analysis Method > GitHub Actions (tutorial)` to find yours.
