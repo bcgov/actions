@@ -248,11 +248,13 @@ SonarCloud project tokens are free, available from [SonarCloud] or your organiza
 
 ## In-repo CI (`bcgov/actions` maintainers)
 
-The [`test-test-and-analyse` workflow](../.github/workflows/test-test-and-analyse.yml) exercises this action against external sample repos. Set a repository Actions secret named **`SONAR_TOKEN`**: a SonarCloud token for the **`bcgov-sonarcloud`** organization that can analyze project **`bcgov_bcgov/actions`**.
+The [`test-test-and-analyse` workflow](../.github/workflows/test-test-and-analyse.yml) exercises this action against external sample repos. **`sonar_token` is optional** in every matrix cell (`require_sonar: false`). Only **`backend-triggered`** receives a token when configured, to optionally exercise the Sonar scan path.
 
-`SONAR_TOKEN_FRONTEND` (legacy, bound to **`bcgov-nr`**) is accepted as a transitional fallback in that workflow only. It does not cover the Java matrix cell or consumers expecting **`bcgov-sonarcloud`**. Prefer renaming or replacing it with **`SONAR_TOKEN`**.
+Set repository Actions secret **`SONAR_TOKEN`**: a SonarCloud token for the **`bcgov-sonarcloud`** organization that can analyze project **`bcgov_bcgov/actions`**. Without it, CI still validates triggers, tests, and Knip.
 
-Only the **`backend-triggered`** matrix cell sets `require_sonar: true` (internal pull requests). Other cells skip Sonar when no token is present. Fork pull requests never require Sonar.
+`SONAR_TOKEN_FRONTEND` (legacy, bound to **`bcgov-nr`**) is accepted as a transitional fallback on **`backend-triggered`** only. Prefer renaming or replacing it with **`SONAR_TOKEN`** scoped to **`bcgov-sonarcloud`**.
+
+Consumers who need Sonar to be mandatory should set `require_sonar: true` in their own workflows; the action fails loudly when the token is absent.
 
 For BC Government projects, please create an [issue for our platform team](https://github.com/BCDevOps/devops-requests/issues/new/choose).
 

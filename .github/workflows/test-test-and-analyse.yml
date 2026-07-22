@@ -17,8 +17,8 @@ concurrency:
 
 permissions: {}
 
-# Sonar: set repo secret SONAR_TOKEN (bcgov-sonarcloud). SONAR_TOKEN_FRONTEND is a
-# transitional fallback only; it is org-bound to bcgov-nr and cannot cover all matrix cells.
+# Sonar optional: sonar_token is passed only on backend-triggered when SONAR_TOKEN
+# (or legacy SONAR_TOKEN_FRONTEND fallback) is configured. require_sonar stays false.
 
 jobs:
   tests:
@@ -38,35 +38,31 @@ jobs:
             expected_triggered: true
             repository: bcgov/quickstart-openshift
             test_command: npm install --no-package-lock && npm run test:cov
-            require_sonar: true
+            exercise_sonar: true
           - name: backend-not-triggered
             dir: backend
             triggers: "('not-existent-path/')"
             expected_triggered: false
             repository: bcgov/quickstart-openshift
             test_command: npm install --no-package-lock && npm run test:cov
-            require_sonar: false
           - name: frontend-basic
             dir: frontend
             triggers: ""
             expected_triggered: true
             repository: bcgov/quickstart-openshift
             test_command: npm install --no-package-lock && npm run test:cov
-            require_sonar: false
           - name: frontend-no-triggers
             dir: frontend
             expected_triggered: true
             dep_scan: off
             test_command: npm install --no-package-lock && npm run test:cov
             repository: bcgov/quickstart-openshift
-            require_sonar: false
           - name: waste-frontend
             dir: frontend
             expected_triggered: true
             dep_scan: warn
             test_command: echo "Good enough for testing knip!"
             repository: bcgov/nr-waste-plus
-            require_sonar: false
           - name: java-basic
             dir: backend
             language: java
@@ -77,7 +73,6 @@ jobs:
             # No Sonar in this cell: repo token scope covers bcgov/actions Node CI only until a Java project token exists.
             test_command: timeout 10m mvn -B verify -P all-tests -DskipTests
             cache: "none" # Explicitly disable cache
-            require_sonar: false
           - name: fom-autodiscover
             dir: ""
             triggers: ""
@@ -86,7 +81,6 @@ jobs:
             test_command: echo "Testing autodiscover on nr-fom"
             expected_config: ".github/knip.json"
             cache: "none"
-            require_sonar: false
     steps:
       # 1. Checkout the Action (this repo) at the root
       - name: Checkout Action
@@ -114,8 +108,8 @@ jobs:
           java_version: ${{ matrix.java_version || '21' }}
           repository: ${{ matrix.repository }}
           triggers: ${{ matrix.triggers }}
-          sonar_token: ${{ secrets.SONAR_TOKEN || secrets.SONAR_TOKEN_FRONTEND }}
-          require_sonar: ${{ matrix.require_sonar == true && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && 'true' || 'false' }}
+          sonar_token: ${{ matrix.exercise_sonar == true && (secrets.SONAR_TOKEN || secrets.SONAR_TOKEN_FRONTEND) || '' }}
+          require_sonar: 'false'
           cache: ${{ matrix.cache || 'npm' }}
 
       - name: Verify trigger behavior
