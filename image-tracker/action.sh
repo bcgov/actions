@@ -453,32 +453,23 @@ if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
     # Restore legacy outputs for backward compatibility
     # If multiple packages, these will represent the FIRST one (legacy behavior)
     first_pkg="${PKG_ORDER[0]:-}"
+    r_pr=""
     if [[ -n "$first_pkg" ]]; then
         first_payload="${IMAGES["$first_pkg"]:-}"
         if [[ -n "$first_payload" ]]; then
-            { IFS='|' read -r _ r_digest _ _ _; } <<< "$first_payload"
+            { IFS='|' read -r _ r_digest _ p_pr _; } <<< "$first_payload"
             f_path="${IMAGE_PATHS["$first_pkg"]:-}"
             printf "image=ghcr.io/%s@%s\n" "$f_path" "$r_digest" >> "$GITHUB_OUTPUT"
             printf "digest=%s\n" "$r_digest" >> "$GITHUB_OUTPUT"
+            if [[ -n "$p_pr" && "$p_pr" != "null" ]]; then
+                r_pr="$p_pr"
+            fi
             
             # JSON map of digests only
             DIGESTS_JSON=$(printf '%s' "$IMAGES_JSON" | jq -c 'map_values(split("@")[1])')
             printf "digests=%s\n" "$DIGESTS_JSON" >> "$GITHUB_OUTPUT"
         fi
     fi
-
-    # Convenience output — resolved PR number from first resolved candidate/package
-    r_pr=""
-    for pkg_check in "${PKG_ORDER[@]}"; do
-        payload="${IMAGES["$pkg_check"]:-}"
-        if [[ -n "$payload" ]]; then
-            { IFS='|' read -r _ _ _ p_pr _; } <<< "$payload"
-            if [[ -n "$p_pr" && "$p_pr" != "null" ]]; then
-                r_pr="$p_pr"
-                break
-            fi
-        fi
-    done
     printf "pr=%s\n" "$r_pr" >> "$GITHUB_OUTPUT"
 else
     printf "\n--- Results ---\n%s\n" "$IMAGES_JSON"

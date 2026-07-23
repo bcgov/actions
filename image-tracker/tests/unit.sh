@@ -120,6 +120,7 @@ test_git_head_resolution() {
 test_pr_extraction() {
     local payload="abc1234|sha256:1234567890|2026-01-01T00:00:00Z|42|Fix something"
     local r_pr=""
+    local p_pr=""
     { IFS='|' read -r _ _ _ p_pr _; } <<< "$payload"
     if [[ -n "$p_pr" && "$p_pr" != "null" ]]; then
         r_pr="$p_pr"
@@ -128,6 +129,7 @@ test_pr_extraction() {
 
     local empty_payload="abc1234|sha256:1234567890|2026-01-01T00:00:00Z||Fix something"
     r_pr=""
+    p_pr=""
     { IFS='|' read -r _ _ _ p_pr _; } <<< "$empty_payload"
     if [[ -n "$p_pr" && "$p_pr" != "null" ]]; then
         r_pr="$p_pr"
