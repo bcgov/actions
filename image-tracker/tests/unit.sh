@@ -117,6 +117,24 @@ test_git_head_resolution() {
     assert_eq "$ok" "true" "HEAD resolves to a 40-char commit SHA"
 }
 
+test_pr_extraction() {
+    local payload="abc1234|sha256:1234567890|2026-01-01T00:00:00Z|42|Fix something"
+    local r_pr=""
+    { IFS='|' read -r _ _ _ p_pr _; } <<< "$payload"
+    if [[ -n "$p_pr" && "$p_pr" != "null" ]]; then
+        r_pr="$p_pr"
+    fi
+    assert_eq "$r_pr" "42" "PR number extracted from payload"
+
+    local empty_payload="abc1234|sha256:1234567890|2026-01-01T00:00:00Z||Fix something"
+    r_pr=""
+    { IFS='|' read -r _ _ _ p_pr _; } <<< "$empty_payload"
+    if [[ -n "$p_pr" && "$p_pr" != "null" ]]; then
+        r_pr="$p_pr"
+    fi
+    assert_eq "$r_pr" "" "Empty PR number handled cleanly"
+}
+
 echo "Running image-tracker unit tests..."
 echo "Bash: $BASH_VERSION"
 echo ""
@@ -129,6 +147,7 @@ test_empty_input_rejected_in_action
 test_whitespace_only_entries_ignored
 test_space_separated_packages
 test_git_head_resolution
+test_pr_extraction
 echo ""
 echo "Results: $passed passed, $failed failed"
 [[ $failed -gt 0 ]] && exit 1

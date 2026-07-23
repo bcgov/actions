@@ -466,6 +466,20 @@ if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
             printf "digests=%s\n" "$DIGESTS_JSON" >> "$GITHUB_OUTPUT"
         fi
     fi
+
+    # Convenience output — resolved PR number from first resolved candidate/package
+    r_pr=""
+    for pkg_check in "${PKG_ORDER[@]}"; do
+        payload="${IMAGES["$pkg_check"]:-}"
+        if [[ -n "$payload" ]]; then
+            { IFS='|' read -r _ _ _ p_pr _; } <<< "$payload"
+            if [[ -n "$p_pr" && "$p_pr" != "null" ]]; then
+                r_pr="$p_pr"
+                break
+            fi
+        fi
+    done
+    printf "pr=%s\n" "$r_pr" >> "$GITHUB_OUTPUT"
 else
     printf "\n--- Results ---\n%s\n" "$IMAGES_JSON"
 fi

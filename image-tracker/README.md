@@ -116,6 +116,7 @@ Package-to-image-path convention:
 | `digests` | JSON object: `{"<pkg>": "sha256:..."}`. Bare digests only.                                        |
 | `image`   | Convenience — the fully-qualified digest reference for the first package. Empty on failure.       |
 | `digest`  | Convenience — the bare digest for the first package. Empty on failure.                            |
+| `pr`      | Convenience — resolved PR number (e.g. `123`) for the first resolved package/commit. Empty if unassociated. |
 
 Using a digest in a Dockerfile:
 

@@ -182,10 +182,12 @@ jobs:
             got_digest=$(grep '^digest=' "$GITHUB_OUTPUT" | cut -d= -f2-)
             got_image=$(grep '^image='  "$GITHUB_OUTPUT" | cut -d= -f2-)
             got_images=$(grep '^images=' "$GITHUB_OUTPUT" | cut -d= -f2-)
+            got_pr=$(grep '^pr='     "$GITHUB_OUTPUT" | cut -d= -f2-)
 
             echo "Got digest:  ${got_digest}"
             echo "Got image:   ${got_image}"
             echo "Got images:  ${got_images}"
+            echo "Got pr:      ${got_pr}"
             echo "Expected:    ${found_digest}"
 
             if [[ "$got_digest" != "$found_digest" ]]; then
@@ -200,6 +202,11 @@ jobs:
             fi
             if ! echo "$got_images" | jq -e --arg k "$pkg" '.[$k]' >/dev/null 2>&1; then
               echo "::error::${pkg}: images JSON missing key ${pkg}"
+              overall_pass=false
+              continue
+            fi
+            if [[ -n "${pr_num:-}" && "$got_pr" != "$pr_num" ]]; then
+              echo "::error::${pkg}: pr mismatch: got '${got_pr}' expected '${pr_num}'"
               overall_pass=false
               continue
             fi
