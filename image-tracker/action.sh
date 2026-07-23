@@ -149,7 +149,20 @@ for sha in "${CANDIDATES[@]}"; do
     if command -v gh &>/dev/null; then
         pr_data=""
         if [[ -n "$TOKEN" ]]; then
-            pr_data=$(GITHUB_TOKEN="$TOKEN" GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/commits/${sha}/pulls" --jq '.[] | [.head.sha, .number, .title] | @tsv' 2>/dev/null | head -1 || true)
+            api_shas=("$sha")
+            # For merge commits, check the second parent (usually the PR head)
+            parents=$(git log -1 --format=%P "$sha" 2>/dev/null || true)
+            read -ra parent_arr <<< "$parents"
+            if [[ ${#parent_arr[@]} -ge 2 ]]; then
+                api_shas+=("${parent_arr[1]}")
+            fi
+            
+            for check_sha in "${api_shas[@]}"; do
+                pr_data=$(GITHUB_TOKEN="$TOKEN" GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/commits/${check_sha}/pulls" --jq '.[] | [.head.sha, .number, .title] | @tsv' 2>/dev/null | head -1 || true)
+                if [[ -n "$pr_data" ]]; then
+                    break
+                fi
+            done
         fi
         
         if [[ -n "$pr_data" ]]; then
