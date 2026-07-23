@@ -103,6 +103,7 @@ declare -A PR_TITLE_MAP
 declare -A CANDIDATE_MAP
 declare -A IMAGE_PATHS
 declare -A IMAGES
+declare -A DIGEST_PR_MAP
 declare -a MISSING
 declare -a PKG_ORDER
 
@@ -286,10 +287,16 @@ probe_tag() {
     fi
     
     rm -f "$hfile"
+    if [[ "$tag" =~ ^pr-([0-9]+)$ ]]; then
+        DIGEST_PR_MAP["$mdigest"]="${BASH_REMATCH[1]}"
+    elif [[ "$tag" =~ ^[0-9]+$ ]]; then
+        DIGEST_PR_MAP["$mdigest"]="$tag"
+    fi
+
     if matches_candidate "$revision" "$tag"; then
         for cand in "${!CANDIDATE_MAP[@]}"; do
              local ph="${PR_MAP[$cand]:-}"
-             local pn="${PR_NUM_MAP[$cand]:-}"
+             local pn="${PR_NUM_MAP[$cand]:-${DIGEST_PR_MAP[$mdigest]:-}}"
              if [[ -z "$pn" ]]; then
                  if [[ "$tag" =~ ^pr-([0-9]+)$ ]]; then
                      pn="${BASH_REMATCH[1]}"
@@ -300,7 +307,7 @@ probe_tag() {
              
              # Decoupled decision: does the revision label match OR does the tag follow a known pattern?
              local pattern_match=false
-             if [[ "$tag" == "sha-${cand:0:7}" || "$tag" == "pr-$pn" || ( -n "$ph" && "$tag" == "sha-${ph:0:7}" ) ]]; then
+             if [[ "$tag" == "sha-${cand:0:7}" || "$tag" == "pr-$pn" || "$tag" == "$pn" || ( -n "$ph" && "$tag" == "sha-${ph:0:7}" ) ]]; then
                  pattern_match=true
              fi
 
@@ -309,7 +316,7 @@ probe_tag() {
                  [[ -z "$title" || "$title" == "null" ]] && title=$(git log -1 --format=%s "$cand" 2>/dev/null || echo "Unknown commit message")
                  
                  local display_ref="$tag"
-                 if [[ "$tag" == "sha-${cand:0:7}" || "$tag" == "pr-$pn" || ( -n "$ph" && "$tag" == "sha-${ph:0:7}" ) ]]; then
+                 if [[ "$tag" == "sha-${cand:0:7}" || "$tag" == "pr-$pn" || "$tag" == "$pn" || ( -n "$ph" && "$tag" == "sha-${ph:0:7}" ) ]]; then
                      display_ref="$tag"
                  fi
 
@@ -338,9 +345,9 @@ resolve_digest() {
     local raw_data=""
     if command -v gh &>/dev/null && [[ -n "$TOKEN" ]]; then
         # Fetch both digest (name) and tags for each version
-        raw_data=$(GH_TOKEN="$TOKEN" gh api "/orgs/${owner_orig}/packages/container/${pkg_enc}/versions?per_page=100" --jq 'if length > 0 then .[] | [.name, (.metadata.container.tags | join(","))] | @tsv else empty end' 2>/dev/null || true)
+        raw_data=$(GITHUB_TOKEN="$TOKEN" GH_TOKEN="$TOKEN" gh api "/orgs/${owner_orig}/packages/container/${pkg_enc}/versions?per_page=100" --jq 'if length > 0 then .[] | [.name, (.metadata.container.tags | join(","))] | @tsv else empty end' 2>/dev/null || true)
         if [[ -z "$raw_data" ]]; then
-            raw_data=$(GH_TOKEN="$TOKEN" gh api "/users/${owner_orig}/packages/container/${pkg_enc}/versions?per_page=100" --jq 'if length > 0 then .[] | [.name, (.metadata.container.tags | join(","))] | @tsv else empty end' 2>/dev/null || true)
+            raw_data=$(GITHUB_TOKEN="$TOKEN" GH_TOKEN="$TOKEN" gh api "/users/${owner_orig}/packages/container/${pkg_enc}/versions?per_page=100" --jq 'if length > 0 then .[] | [.name, (.metadata.container.tags | join(","))] | @tsv else empty end' 2>/dev/null || true)
         fi
     fi
     
@@ -357,7 +364,12 @@ resolve_digest() {
             local probe_ref="$digest"
             IFS=',' read -ra tag_arr <<< "$tags"
             for t in "${tag_arr[@]}"; do
-                if [[ "$t" =~ ^(pr-)?[0-9]+$ ]]; then
+                if [[ "$t" =~ ^pr-([0-9]+)$ ]]; then
+                    DIGEST_PR_MAP["$digest"]="${BASH_REMATCH[1]}"
+                    probe_ref="$t"
+                    break
+                elif [[ "$t" =~ ^[0-9]+$ ]]; then
+                    DIGEST_PR_MAP["$digest"]="$t"
                     probe_ref="$t"
                     break
                 fi
