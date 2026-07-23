@@ -103,6 +103,7 @@ declare -A PR_TITLE_MAP
 declare -A CANDIDATE_MAP
 declare -A IMAGE_PATHS
 declare -A IMAGES
+declare -A DIGEST_PR_MAP
 declare -a MISSING
 declare -a PKG_ORDER
 
@@ -111,7 +112,7 @@ PIVOT_SHA=$(git rev-parse --verify --quiet "${REVISION}^{commit}" 2>/dev/null ||
 
 if [[ -z "$PIVOT_SHA" && "$REVISION" =~ ^[0-9a-f]{7,40}$ ]]; then
     log_info "Revision $REVISION not found locally. Checking for PR metadata..."
-    pr_data=$(GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/commits/${REVISION}/pulls" --jq 'if length > 0 then .[0] | [.head.sha, .number, .title] | @tsv else empty end' 2>/dev/null || true)
+    pr_data=$(GITHUB_TOKEN="$TOKEN" GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/commits/${REVISION}/pulls" --jq 'if length > 0 then .[0] | [.head.sha, .number, .title] | @tsv else empty end' 2>/dev/null || true)
     
     if [[ -n "$pr_data" ]]; then
         { IFS=$'\t' read -r head_sha pr_num pr_title; } <<< "$pr_data"
@@ -148,18 +149,33 @@ for sha in "${CANDIDATES[@]}"; do
     if command -v gh &>/dev/null; then
         pr_data=""
         if [[ -n "$TOKEN" ]]; then
-            pr_data=$(GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/commits/${sha}/pulls" --jq '.[] | [.head.sha, .number, .title] | @tsv' 2>/dev/null | head -1 || true)
+            api_shas=("$sha")
+            # For merge commits, check the second parent (usually the PR head)
+            parents=$(git log -1 --format=%P "$sha" 2>/dev/null || true)
+            read -ra parent_arr <<< "$parents"
+            if [[ ${#parent_arr[@]} -ge 2 ]]; then
+                api_shas+=("${parent_arr[1]}")
+            fi
+            
+            for check_sha in "${api_shas[@]}"; do
+                pr_data=$(GITHUB_TOKEN="$TOKEN" GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/commits/${check_sha}/pulls" --jq '.[] | [.head.sha, .number, .title] | @tsv' 2>/dev/null | head -1 || true)
+                if [[ -n "$pr_data" ]]; then
+                    break
+                fi
+            done
         fi
         
         if [[ -n "$pr_data" ]]; then
              { IFS=$'\t' read -r head_sha pr_num_api pr_title; } <<< "$pr_data"
-             if [[ -n "$head_sha" && "$head_sha" != "null" ]]; then
-                 [[ "${DEBUG:-}" == "true" ]] && printf "      [d]   Mapped %s to PR #%s (Head: %s) (from API)\n" "${sha:0:7}" "$pr_num_api" "${head_sha:0:7}" >&2
-                 PR_MAP["$sha"]="$head_sha"
+             if [[ -n "$pr_num_api" && "$pr_num_api" != "null" ]]; then
+                 [[ "${DEBUG:-}" == "true" ]] && printf "      [d]   Mapped %s to PR #%s (from API)\n" "${sha:0:7}" "$pr_num_api" >&2
                  PR_NUM_MAP["$sha"]="$pr_num_api"
-                 PR_NUM_MAP["$head_sha"]="$pr_num_api"
                  PR_TITLE_MAP["$sha"]="$pr_title"
-                 PR_TITLE_MAP["$head_sha"]="$pr_title"
+                 if [[ -n "$head_sha" && "$head_sha" != "null" ]]; then
+                     PR_MAP["$sha"]="$head_sha"
+                     PR_NUM_MAP["$head_sha"]="$pr_num_api"
+                     PR_TITLE_MAP["$head_sha"]="$pr_title"
+                 fi
              fi
         fi
     fi
@@ -284,14 +300,27 @@ probe_tag() {
     fi
     
     rm -f "$hfile"
+    if [[ "$tag" =~ ^pr-([0-9]+)$ ]]; then
+        DIGEST_PR_MAP["$mdigest"]="${BASH_REMATCH[1]}"
+    elif [[ "$tag" =~ ^[0-9]+$ ]]; then
+        DIGEST_PR_MAP["$mdigest"]="$tag"
+    fi
+
     if matches_candidate "$revision" "$tag"; then
         for cand in "${!CANDIDATE_MAP[@]}"; do
              local ph="${PR_MAP[$cand]:-}"
-             local pn="${PR_NUM_MAP[$cand]:-}"
+             local pn="${PR_NUM_MAP[$cand]:-${DIGEST_PR_MAP[$mdigest]:-}}"
+             if [[ -z "$pn" ]]; then
+                 if [[ "$tag" =~ ^pr-([0-9]+)$ ]]; then
+                     pn="${BASH_REMATCH[1]}"
+                 elif [[ "$tag" =~ ^[0-9]+$ ]]; then
+                     pn="$tag"
+                 fi
+             fi
              
              # Decoupled decision: does the revision label match OR does the tag follow a known pattern?
              local pattern_match=false
-             if [[ "$tag" == "sha-${cand:0:7}" || "$tag" == "pr-$pn" || ( -n "$ph" && "$tag" == "sha-${ph:0:7}" ) ]]; then
+             if [[ "$tag" == "sha-${cand:0:7}" || "$tag" == "pr-$pn" || "$tag" == "$pn" || ( -n "$ph" && "$tag" == "sha-${ph:0:7}" ) ]]; then
                  pattern_match=true
              fi
 
@@ -300,7 +329,7 @@ probe_tag() {
                  [[ -z "$title" || "$title" == "null" ]] && title=$(git log -1 --format=%s "$cand" 2>/dev/null || echo "Unknown commit message")
                  
                  local display_ref="$tag"
-                 if [[ "$tag" == "sha-${cand:0:7}" || "$tag" == "pr-$pn" || ( -n "$ph" && "$tag" == "sha-${ph:0:7}" ) ]]; then
+                 if [[ "$tag" == "sha-${cand:0:7}" || "$tag" == "pr-$pn" || "$tag" == "$pn" || ( -n "$ph" && "$tag" == "sha-${ph:0:7}" ) ]]; then
                      display_ref="$tag"
                  fi
 
@@ -329,9 +358,9 @@ resolve_digest() {
     local raw_data=""
     if command -v gh &>/dev/null && [[ -n "$TOKEN" ]]; then
         # Fetch both digest (name) and tags for each version
-        raw_data=$(GH_TOKEN="$TOKEN" gh api "/orgs/${owner_orig}/packages/container/${pkg_enc}/versions?per_page=100" --jq 'if length > 0 then .[] | [.name, (.metadata.container.tags | join(","))] | @tsv else empty end' 2>/dev/null || true)
+        raw_data=$(GITHUB_TOKEN="$TOKEN" GH_TOKEN="$TOKEN" gh api "/orgs/${owner_orig}/packages/container/${pkg_enc}/versions?per_page=100" --jq 'if length > 0 then .[] | [.name, (.metadata.container.tags | join(","))] | @tsv else empty end' 2>/dev/null || true)
         if [[ -z "$raw_data" ]]; then
-            raw_data=$(GH_TOKEN="$TOKEN" gh api "/users/${owner_orig}/packages/container/${pkg_enc}/versions?per_page=100" --jq 'if length > 0 then .[] | [.name, (.metadata.container.tags | join(","))] | @tsv else empty end' 2>/dev/null || true)
+            raw_data=$(GITHUB_TOKEN="$TOKEN" GH_TOKEN="$TOKEN" gh api "/users/${owner_orig}/packages/container/${pkg_enc}/versions?per_page=100" --jq 'if length > 0 then .[] | [.name, (.metadata.container.tags | join(","))] | @tsv else empty end' 2>/dev/null || true)
         fi
     fi
     
@@ -344,11 +373,16 @@ resolve_digest() {
             
             printf "\r      -> [%d/%d] Inspecting digest: %s... \033[K" "$tags_seen" "$MAX_TAGS" "${digest:0:15}" >&2
             
-            # Use the most relevant tag from the list for probing (e.g. pr-N if it exists)
+            # Use the most relevant tag from the list for probing (e.g. pr-N or N if it exists)
             local probe_ref="$digest"
             IFS=',' read -ra tag_arr <<< "$tags"
             for t in "${tag_arr[@]}"; do
-                if [[ "$t" == pr-* ]]; then
+                if [[ "$t" =~ ^pr-([0-9]+)$ ]]; then
+                    DIGEST_PR_MAP["$digest"]="${BASH_REMATCH[1]}"
+                    probe_ref="$t"
+                    break
+                elif [[ "$t" =~ ^[0-9]+$ ]]; then
+                    DIGEST_PR_MAP["$digest"]="$t"
                     probe_ref="$t"
                     break
                 fi
@@ -388,6 +422,7 @@ for pkg in "${PKG_ORDER[@]}"; do
         # 1. Explicit PR Tag Probe (from commit message/API)
         if [[ -n "$pr_num" ]]; then
             res=$(probe_tag "$path" "pr-${pr_num}" "$bearer" || true)
+            [[ -z "$res" ]] && res=$(probe_tag "$path" "${pr_num}" "$bearer" || true)
         fi
         
         # 2. PR Head SHA Probe (API-dependent)
@@ -453,19 +488,24 @@ if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
     # Restore legacy outputs for backward compatibility
     # If multiple packages, these will represent the FIRST one (legacy behavior)
     first_pkg="${PKG_ORDER[0]:-}"
+    r_pr=""
     if [[ -n "$first_pkg" ]]; then
         first_payload="${IMAGES["$first_pkg"]:-}"
         if [[ -n "$first_payload" ]]; then
-            { IFS='|' read -r _ r_digest _ _ _; } <<< "$first_payload"
+            { IFS='|' read -r _ r_digest _ p_pr _; } <<< "$first_payload"
             f_path="${IMAGE_PATHS["$first_pkg"]:-}"
             printf "image=ghcr.io/%s@%s\n" "$f_path" "$r_digest" >> "$GITHUB_OUTPUT"
             printf "digest=%s\n" "$r_digest" >> "$GITHUB_OUTPUT"
+            if [[ -n "$p_pr" && "$p_pr" != "null" ]]; then
+                r_pr="$p_pr"
+            fi
             
             # JSON map of digests only
             DIGESTS_JSON=$(printf '%s' "$IMAGES_JSON" | jq -c 'map_values(split("@")[1])')
             printf "digests=%s\n" "$DIGESTS_JSON" >> "$GITHUB_OUTPUT"
         fi
     fi
+    printf "pr=%s\n" "$r_pr" >> "$GITHUB_OUTPUT"
 else
     printf "\n--- Results ---\n%s\n" "$IMAGES_JSON"
 fi

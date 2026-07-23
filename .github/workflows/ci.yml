@@ -111,6 +111,7 @@ jobs:
     permissions:
       contents: read
       packages: read
+      pull-requests: read
 
   test-notifier:
     name: Test Notifier

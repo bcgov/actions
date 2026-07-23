@@ -55,6 +55,11 @@ outputs:
       Convenience — manifest digest for the first (or only) package.
       Empty if nothing was resolved.
     value: ${{ steps.resolve.outputs.digest }}
+  pr:
+    description: |
+      Convenience — resolved PR number (e.g. 123) for the first resolved package/commit.
+      Empty if no PR number could be resolved.
+    value: ${{ steps.resolve.outputs.pr }}
 
 runs:
   using: 'composite'
