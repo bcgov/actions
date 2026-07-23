@@ -192,10 +192,10 @@ jobs:
         dir: [backend, frontend]
         include:
           - dir: backend
-            token: SONAR_TOKEN_BACKEND
+            sonar_token: SONAR_TOKEN
             triggers: ('frontend/' 'charts/frontend')
           - dir: frontend
-            token: SONAR_TOKEN_FRONTEND
+            sonar_token: SONAR_TOKEN
             triggers: ('backend/' 'charts/backend')
     steps:
       - uses: actions/checkout@v7
@@ -210,7 +210,7 @@ jobs:
             -Dsonar.exclusions=**/coverage/**,**/node_modules/**
             -Dsonar.organization=bcgov-sonarcloud
             -Dsonar.projectKey=bcgov_${{ github.repository }}_${{ matrix.dir }}
-          sonar_token: ${{ secrets[matrix.token] }}
+          sonar_token: ${{ secrets[matrix.sonar_token] }}
           triggers: ${{ matrix.triggers }}
           repository: bcgov/quickstart-openshift
           branch: main
@@ -245,6 +245,14 @@ Has the action been triggered by path changes? \[true|false\]
 # Sonar Project Token
 
 SonarCloud project tokens are free, available from [SonarCloud] or your organization's administrators.
+
+## In-repo CI (`bcgov/actions` maintainers)
+
+The [`test-test-and-analyse` workflow](../.github/workflows/test-test-and-analyse.yml) exercises this action against external sample repos. **`sonar_token` is optional** in every matrix cell (`require_sonar: false`). Only **`backend-triggered`** receives a token when configured, to optionally exercise the Sonar scan path.
+
+Set repository Actions secret **`SONAR_TOKEN`**: a SonarCloud token for the **`bcgov-sonarcloud`** organization that can analyze project **`bcgov_bcgov/actions`**. Without it, CI still validates triggers, tests, and Knip.
+
+Consumers who need Sonar to be mandatory should set `require_sonar: true` in their own workflows; the action fails loudly when the token is absent.
 
 For BC Government projects, please create an [issue for our platform team](https://github.com/BCDevOps/devops-requests/issues/new/choose).
 
