@@ -59,6 +59,7 @@ jobs:
     permissions:
       contents: read
       packages: read
+      pull-requests: read
     strategy:
       fail-fast: false
       matrix:

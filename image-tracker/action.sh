@@ -111,7 +111,7 @@ PIVOT_SHA=$(git rev-parse --verify --quiet "${REVISION}^{commit}" 2>/dev/null ||
 
 if [[ -z "$PIVOT_SHA" && "$REVISION" =~ ^[0-9a-f]{7,40}$ ]]; then
     log_info "Revision $REVISION not found locally. Checking for PR metadata..."
-    pr_data=$(GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/commits/${REVISION}/pulls" --jq 'if length > 0 then .[0] | [.head.sha, .number, .title] | @tsv else empty end' 2>/dev/null || true)
+    pr_data=$(GITHUB_TOKEN="$TOKEN" GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/commits/${REVISION}/pulls" --jq 'if length > 0 then .[0] | [.head.sha, .number, .title] | @tsv else empty end' 2>/dev/null || true)
     
     if [[ -n "$pr_data" ]]; then
         { IFS=$'\t' read -r head_sha pr_num pr_title; } <<< "$pr_data"
@@ -148,18 +148,20 @@ for sha in "${CANDIDATES[@]}"; do
     if command -v gh &>/dev/null; then
         pr_data=""
         if [[ -n "$TOKEN" ]]; then
-            pr_data=$(GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/commits/${sha}/pulls" --jq '.[] | [.head.sha, .number, .title] | @tsv' 2>/dev/null | head -1 || true)
+            pr_data=$(GITHUB_TOKEN="$TOKEN" GH_TOKEN="$TOKEN" gh api "/repos/${REPOSITORY}/commits/${sha}/pulls" --jq '.[] | [.head.sha, .number, .title] | @tsv' 2>/dev/null | head -1 || true)
         fi
         
         if [[ -n "$pr_data" ]]; then
              { IFS=$'\t' read -r head_sha pr_num_api pr_title; } <<< "$pr_data"
-             if [[ -n "$head_sha" && "$head_sha" != "null" ]]; then
-                 [[ "${DEBUG:-}" == "true" ]] && printf "      [d]   Mapped %s to PR #%s (Head: %s) (from API)\n" "${sha:0:7}" "$pr_num_api" "${head_sha:0:7}" >&2
-                 PR_MAP["$sha"]="$head_sha"
+             if [[ -n "$pr_num_api" && "$pr_num_api" != "null" ]]; then
+                 [[ "${DEBUG:-}" == "true" ]] && printf "      [d]   Mapped %s to PR #%s (from API)\n" "${sha:0:7}" "$pr_num_api" >&2
                  PR_NUM_MAP["$sha"]="$pr_num_api"
-                 PR_NUM_MAP["$head_sha"]="$pr_num_api"
                  PR_TITLE_MAP["$sha"]="$pr_title"
-                 PR_TITLE_MAP["$head_sha"]="$pr_title"
+                 if [[ -n "$head_sha" && "$head_sha" != "null" ]]; then
+                     PR_MAP["$sha"]="$head_sha"
+                     PR_NUM_MAP["$head_sha"]="$pr_num_api"
+                     PR_TITLE_MAP["$head_sha"]="$pr_title"
+                 fi
              fi
         fi
     fi
@@ -288,6 +290,7 @@ probe_tag() {
         for cand in "${!CANDIDATE_MAP[@]}"; do
              local ph="${PR_MAP[$cand]:-}"
              local pn="${PR_NUM_MAP[$cand]:-}"
+             [[ -z "$pn" && "$tag" =~ ^pr-[0-9]+$ ]] && pn="${tag#pr-}"
              
              # Decoupled decision: does the revision label match OR does the tag follow a known pattern?
              local pattern_match=false
