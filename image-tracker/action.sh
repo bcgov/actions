@@ -290,7 +290,13 @@ probe_tag() {
         for cand in "${!CANDIDATE_MAP[@]}"; do
              local ph="${PR_MAP[$cand]:-}"
              local pn="${PR_NUM_MAP[$cand]:-}"
-             [[ -z "$pn" && "$tag" =~ ^pr-[0-9]+$ ]] && pn="${tag#pr-}"
+             if [[ -z "$pn" ]]; then
+                 if [[ "$tag" =~ ^pr-([0-9]+)$ ]]; then
+                     pn="${BASH_REMATCH[1]}"
+                 elif [[ "$tag" =~ ^[0-9]+$ ]]; then
+                     pn="$tag"
+                 fi
+             fi
              
              # Decoupled decision: does the revision label match OR does the tag follow a known pattern?
              local pattern_match=false
@@ -347,11 +353,11 @@ resolve_digest() {
             
             printf "\r      -> [%d/%d] Inspecting digest: %s... \033[K" "$tags_seen" "$MAX_TAGS" "${digest:0:15}" >&2
             
-            # Use the most relevant tag from the list for probing (e.g. pr-N if it exists)
+            # Use the most relevant tag from the list for probing (e.g. pr-N or N if it exists)
             local probe_ref="$digest"
             IFS=',' read -ra tag_arr <<< "$tags"
             for t in "${tag_arr[@]}"; do
-                if [[ "$t" == pr-* ]]; then
+                if [[ "$t" =~ ^(pr-)?[0-9]+$ ]]; then
                     probe_ref="$t"
                     break
                 fi
@@ -391,6 +397,7 @@ for pkg in "${PKG_ORDER[@]}"; do
         # 1. Explicit PR Tag Probe (from commit message/API)
         if [[ -n "$pr_num" ]]; then
             res=$(probe_tag "$path" "pr-${pr_num}" "$bearer" || true)
+            [[ -z "$res" ]] && res=$(probe_tag "$path" "${pr_num}" "$bearer" || true)
         fi
         
         # 2. PR Head SHA Probe (API-dependent)
