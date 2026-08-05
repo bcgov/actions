@@ -27,6 +27,7 @@ actions/
 ├── get-pr/
 ├── image-tracker/
 ├── pr-description-add/
+├── sysdig-monitor/
 ├── test-and-analyse/
 ├── workflow-notifier/  # (Formerly report-failures)
 ├── README.md

@@ -63,6 +63,9 @@ outputs:
   pr-description-add:
     description: Dynamic filter output for pr-description-add
     value: ${{ steps.diff.outputs['pr-description-add'] }}
+  sysdig-monitor:
+    description: Dynamic filter output for sysdig-monitor
+    value: ${{ steps.diff.outputs['sysdig-monitor'] }}
   test-and-analyse:
     description: Dynamic filter output for test-and-analyse
     value: ${{ steps.diff.outputs['test-and-analyse'] }}
