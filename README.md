@@ -55,6 +55,14 @@ Add markdown content to Pull Request descriptions dynamically.
   uses: bcgov/actions/pr-description-add@vX.Y.Z # Replace with latest release tag
 ```
 
+### [sysdig-monitor](./sysdig-monitor/)
+Create or update Sysdig email alerts for an app on PROD deploy. Idempotent, additive and non-blocking.
+
+```yaml
+- name: Sysdig Monitoring
+  uses: bcgov/actions/sysdig-monitor@vX.Y.Z # Replace with latest release tag
+```
+
 ### [test-and-analyse](./test-and-analyse/)
 Universal Test and Analyze with Triggers, SonarCloud, and Multi-Language Support. Supports the following runtimes:
 - **Node.js**: Testing, dependency analysis with Knip, and safe-chain supply scanning (default).
@@ -88,6 +96,7 @@ Refer to each action's directory for its exact minimum required permissions bloc
 - **[get-pr](./get-pr/)**: `pull-requests: read`, `contents: read` (optional, for offline/fallback commit resolution)
 - **[image-tracker](./image-tracker/)**: `contents: read`, `pull-requests: read`, `packages: read`
 - **[pr-description-add](./pr-description-add/)**: `pull-requests: write`
+- **[sysdig-monitor](./sysdig-monitor/)**: `contents: read` (alert templates are read from the consuming repo's checkout)
 - **[test-and-analyse](./test-and-analyse/)**: `contents: read`, `actions: write` (optional, for caching)
 - **[workflow-notifier](./workflow-notifier/)**: `contents: read`, `issues: write`
 

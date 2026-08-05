@@ -33,6 +33,7 @@ jobs:
       get-pr: ${{ steps.filter.outputs['get-pr'] }}
       image-tracker: ${{ steps.filter.outputs['image-tracker'] }}
       pr-description-add: ${{ steps.filter.outputs['pr-description-add'] }}
+      sysdig-monitor: ${{ steps.filter.outputs['sysdig-monitor'] }}
       test-and-analyse: ${{ steps.filter.outputs['test-and-analyse'] }}
       workflow-notifier: ${{ steps.filter.outputs['workflow-notifier'] }}
       workflows: ${{ steps.filter.outputs['workflows'] }}
@@ -65,6 +66,9 @@ jobs:
             pr-description-add:
               - 'pr-description-add/**'
               - '.github/workflows/test-pr-description-add.yml'
+            sysdig-monitor:
+              - 'sysdig-monitor/**'
+              - '.github/workflows/test-sysdig-monitor.yml'
             test-and-analyse:
               - 'test-and-analyse/**'
               - '.github/workflows/test-test-and-analyse.yml'
@@ -131,6 +135,14 @@ jobs:
       contents: read
       pull-requests: write
 
+  test-sysdig-monitor:
+    name: Test Sysdig Monitor
+    needs: [fork-gate, path-filter]
+    if: needs.path-filter.outputs.sysdig-monitor == 'true' || needs.path-filter.outputs.workflows == 'true'
+    uses: ./.github/workflows/test-sysdig-monitor.yml
+    permissions:
+      contents: read
+
   test-test-and-analyse:
     name: Test Test and Analyse
     needs: [fork-gate, path-filter]
@@ -151,6 +163,7 @@ jobs:
       - test-image-tracker
       - test-notifier
       - test-pr-description-add
+      - test-sysdig-monitor
       - test-test-and-analyse
     if: always()
     runs-on: ubuntu-24.04

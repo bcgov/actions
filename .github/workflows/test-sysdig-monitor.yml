@@ -1,0 +1,73 @@
+name: Test Sysdig Monitor
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+concurrency:
+  # Unique per suite: github.workflow is the *caller* name (CI), so sharing
+  # that key across reusable workflows cancels sibling suites mid-run.
+  group: test-sysdig-monitor-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  lint:
+    name: Lint (ShellCheck)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Run ShellCheck
+        run: |
+          find . -name "*.sh" -print0 | xargs -0 shellcheck -s bash
+
+  unit:
+    name: Unit Tests
+    needs: lint
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Run Unit Tests
+        run: bash sysdig-monitor/tests/unit.sh
+
+  validate:
+    name: Validate Action Definition
+    needs: unit
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Validate action.yml
+        run: |
+          test -f sysdig-monitor/action.yml
+          pip install pyyaml -q
+          python3 -c "import yaml; yaml.safe_load(open('sysdig-monitor/action.yml'))"
+
+      - name: Validate channel template
+        run: |
+          python3 -c "import json; json.load(open('sysdig-monitor/templates/channel.json'))"
+
+  dry-run:
+    name: Functional Test (Dry Run)
+    needs: unit
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Action no-ops when token is empty
+        uses: ./sysdig-monitor
+        with:
+          sysdig_api_token: ''
+          oc_namespace: abc123-prod
+          app: dry-run-app
