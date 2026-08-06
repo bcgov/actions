@@ -29,6 +29,7 @@ GitHub Actions does not validate workflow syntax or expressions when a pull requ
 - ✅ **Rate-Limit Resilient**: Downloads the executable directly from GitHub Releases rather than raw CDN endpoints, avoiding rate-limit issues on runners.
 - ✅ **Configurable version**: Pin a specific version of `actionlint` to run.
 - ✅ **Custom Arguments**: Pass any standard `actionlint` command-line arguments.
+- ✅ **`$/` syntax aware**: Ignores false positives for GitHub's self-repository `$/` references until [actionlint](https://github.com/rhysd/actionlint) adds native support (requires actionlint ≥ TBD).
 
 ## Usage
 
