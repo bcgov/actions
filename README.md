@@ -107,3 +107,20 @@ Refer to each action's directory for its exact minimum required permissions bloc
 > Usage examples in this repo intentionally use a placeholder that **will not resolve** (`@vX.Y.Z`).  Copy-paste should fail until you look up the [latest release](../../releases) and pick a real version.
 >
 > All actions in this repository are versioned and released together as a single suite.
+
+## Developing in this repository
+
+Workflows and composite actions in **this** repo reference sibling actions with GitHub's self-repository syntax (`$/`), not `./`:
+
+```yaml
+uses: $/diff-triggers          # action at the running commit — no checkout required
+uses: $/.github/workflows/ci.yml  # reusable workflow at the running commit
+```
+
+**Consumers** outside this repo still pin published actions normally:
+
+```yaml
+uses: bcgov/actions/diff-triggers@vX.Y.Z
+```
+
+Internal integration tests live under `.github/workflows/test-*.yml`. When a composite action calls a sibling (e.g. `test-and-analyse` → `$/diff-triggers`), the sibling resolves at the same SHA as the parent — even when downstream callers pin a full commit SHA.

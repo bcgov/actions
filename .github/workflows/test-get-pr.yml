@@ -20,9 +20,8 @@ jobs:
     outputs:
       pr: ${{ steps.vars.outputs.pr }}
     steps:
-      - uses: actions/checkout@v7
       - id: vars
-        uses: ./get-pr
+        uses: $/get-pr
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 

@@ -61,3 +61,5 @@ actions-openshift/
 1. Update internal workflows to use new locations.
 2. Set deprecation timeline for old repos (e.g., 6 months).
 3. Archive old repos after migration.
+
+Internal workflows in `bcgov/actions` use GitHub's self-repository syntax (`uses: $/action-name`) for sibling actions and reusable workflows at the running commit. Downstream consumers continue to pin `bcgov/actions/<name>@vX.Y.Z`.

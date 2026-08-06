@@ -152,7 +152,7 @@ runs:
     # against another repository's branch is not meaningful in this context.
     - name: Check Triggers
       if: inputs.repository == github.repository && inputs.triggers != ''
-      uses: ./diff-triggers
+      uses: $/diff-triggers
       id: diff
       with:
         triggers: ${{ inputs.triggers }}

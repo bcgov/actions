@@ -30,10 +30,13 @@ jobs:
       issues: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/CODEOWNERS
+          sparse-checkout-cone-mode: false
       
       - name: Dry Run - Simulate Failure Notification
         id: dry_run
-        uses: ./workflow-notifier
+        uses: $/workflow-notifier
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           title: "[DRY RUN] Simulating a failure for testing"

@@ -63,10 +63,8 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
-
       - name: Action no-ops when token is empty
-        uses: ./sysdig-monitor
+        uses: $/sysdig-monitor
         with:
           sysdig_api_token: ''
           oc_namespace: abc123-prod
