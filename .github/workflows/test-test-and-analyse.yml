@@ -81,11 +81,7 @@ jobs:
             expected_config: ".github/knip.json"
             cache: "none"
     steps:
-      # 1. Checkout the Action (this repo) at the root
-      - name: Checkout Action
-        uses: actions/checkout@v7
-
-      # 2. Checkout the Test Project manually to avoid collisions
+      # Checkout the test project; action loads via $/ (no actions-repo checkout needed)
       - name: Checkout Test Project
         uses: actions/checkout@v7
         with:
@@ -93,9 +89,9 @@ jobs:
           path: test-project
           fetch-depth: 0
 
-      # 3. Use the local action (./test-and-analyse) to analyze the project
+      # 3. Use the local action to analyze the project
       - id: action
-        uses: ./test-and-analyse
+        uses: $/test-and-analyse
         with:
           skip_checkout: "true"
           commands: |

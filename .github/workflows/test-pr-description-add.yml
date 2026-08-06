@@ -14,10 +14,8 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@v7
-
       # Test action using the local action definition
-      - uses: ./pr-description-add
+      - uses: $/pr-description-add
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           add_markdown: |
@@ -29,7 +27,7 @@ jobs:
             `Code!`
 
       # Test with different inputs
-      - uses: ./pr-description-add
+      - uses: $/pr-description-add
         with:
           add_markdown: |
             ---
@@ -40,7 +38,7 @@ jobs:
             `Code!`
 
       # Test checkbox handling - should not duplicate when checkbox state changes
-      - uses: ./pr-description-add
+      - uses: $/pr-description-add
         with:
           add_markdown: |
             ## Checkbox Test
@@ -48,7 +46,7 @@ jobs:
             - [x] Checked item
 
       # Verify checkbox content is not duplicated when run again
-      - uses: ./pr-description-add
+      - uses: $/pr-description-add
         with:
           add_markdown: |
             ## Checkbox Test

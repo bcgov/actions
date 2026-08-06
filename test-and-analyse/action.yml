@@ -125,7 +125,7 @@ runs:
 
     - name: Check Triggers
       if: github.event_name == 'pull_request' && inputs.triggers != ''
-      uses: ./diff-triggers
+      uses: $/diff-triggers
       id: diff
       with:
         triggers: ${{ inputs.triggers }}

@@ -22,9 +22,8 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@v7
       - id: build
-        uses: ./builder-ghcr
+        uses: $/builder-ghcr
         with:
           package: backend
           repository: bcgov/quickstart-openshift
@@ -55,9 +54,8 @@ jobs:
       packages: write
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7
       - id: no-attestation
-        uses: ./builder-ghcr
+        uses: $/builder-ghcr
         with:
           package: frontend
           build_context: frontend
@@ -93,9 +91,8 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@v7
       - id: advanced
-        uses: ./builder-ghcr
+        uses: $/builder-ghcr
         with:
           package: api
           build_context: .
@@ -133,9 +130,8 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@v7
       - id: single-package
-        uses: ./builder-ghcr
+        uses: $/builder-ghcr
         with:
           package: action-builder-ghcr
           build_context: .
@@ -172,9 +168,8 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@v7
       - id: metadata-tags
-        uses: ./builder-ghcr
+        uses: $/builder-ghcr
         with:
           package: frontend
           build_context: frontend

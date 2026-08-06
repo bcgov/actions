@@ -33,7 +33,7 @@ jobs:
       
       - name: Dry Run - Simulate Failure Notification
         id: dry_run
-        uses: ./workflow-notifier
+        uses: $/workflow-notifier
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           title: "[DRY RUN] Simulating a failure for testing"

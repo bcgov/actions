@@ -45,7 +45,7 @@ jobs:
 
       - name: Filter Changed Paths
         id: filter
-        uses: ./diff-triggers
+        uses: $/diff-triggers
         with:
           skip_checkout: 'true'
           filters: |
@@ -84,7 +84,7 @@ jobs:
     name: Test Builder GHCR
     needs: [fork-gate, path-filter]
     if: needs.path-filter.outputs.builder-ghcr == 'true' || needs.path-filter.outputs.workflows == 'true'
-    uses: ./.github/workflows/test-builder-ghcr.yml
+    uses: $/.github/workflows/test-builder-ghcr.yml
     permissions:
       contents: read
       packages: write
@@ -95,7 +95,7 @@ jobs:
     name: Test Diff Triggers
     needs: [fork-gate, path-filter]
     if: needs.path-filter.outputs.diff-triggers == 'true' || needs.path-filter.outputs.workflows == 'true'
-    uses: ./.github/workflows/test-diff-triggers.yml
+    uses: $/.github/workflows/test-diff-triggers.yml
     permissions:
       contents: read
 
@@ -103,7 +103,7 @@ jobs:
     name: Test Get PR
     needs: [fork-gate, path-filter]
     if: needs.path-filter.outputs.get-pr == 'true' || needs.path-filter.outputs.workflows == 'true'
-    uses: ./.github/workflows/test-get-pr.yml
+    uses: $/.github/workflows/test-get-pr.yml
     permissions:
       contents: read
 
@@ -111,7 +111,7 @@ jobs:
     name: Test Image Tracker
     needs: [fork-gate, path-filter]
     if: needs.path-filter.outputs.image-tracker == 'true' || needs.path-filter.outputs.workflows == 'true'
-    uses: ./.github/workflows/test-image-tracker.yml
+    uses: $/.github/workflows/test-image-tracker.yml
     permissions:
       contents: read
       packages: read
@@ -121,7 +121,7 @@ jobs:
     name: Test Notifier
     needs: [fork-gate, path-filter]
     if: needs.path-filter.outputs.workflow-notifier == 'true' || needs.path-filter.outputs.workflows == 'true'
-    uses: ./.github/workflows/test-notifier.yml
+    uses: $/.github/workflows/test-notifier.yml
     permissions:
       contents: read
       issues: write
@@ -130,7 +130,7 @@ jobs:
     name: Test PR Description Add
     needs: [fork-gate, path-filter]
     if: needs.path-filter.outputs.pr-description-add == 'true' || needs.path-filter.outputs.workflows == 'true'
-    uses: ./.github/workflows/test-pr-description-add.yml
+    uses: $/.github/workflows/test-pr-description-add.yml
     permissions:
       contents: read
       pull-requests: write
@@ -139,7 +139,7 @@ jobs:
     name: Test Sysdig Monitor
     needs: [fork-gate, path-filter]
     if: needs.path-filter.outputs.sysdig-monitor == 'true' || needs.path-filter.outputs.workflows == 'true'
-    uses: ./.github/workflows/test-sysdig-monitor.yml
+    uses: $/.github/workflows/test-sysdig-monitor.yml
     permissions:
       contents: read
 
@@ -147,7 +147,7 @@ jobs:
     name: Test Test and Analyse
     needs: [fork-gate, path-filter]
     if: needs.path-filter.outputs.test-and-analyse == 'true' || needs.path-filter.outputs.workflows == 'true'
-    uses: ./.github/workflows/test-test-and-analyse.yml
+    uses: $/.github/workflows/test-test-and-analyse.yml
     permissions:
       contents: read
       pull-requests: write

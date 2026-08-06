@@ -37,19 +37,9 @@ jobs:
           sparse-checkout-cone-mode: false
           path: calling-repo
 
-      # Checkout actions repository dynamically to access local actions
-      - name: Checkout Actions Repo
-        uses: actions/checkout@v7
-        with:
-          # actionlint: ignore
-          repository: ${{ job.workflow_repository }}
-          # actionlint: ignore
-          ref: ${{ job.workflow_sha }}
-          path: .github/bcgov-actions
-
       # Run actionlint
       - name: Actionlint
-        uses: ./.github/bcgov-actions/actionlint
+        uses: $/actionlint
         with:
           args: "calling-repo/.github/workflows/*"
 
@@ -68,7 +58,7 @@ jobs:
       # Add PR Description, doesn't work with forks
       - name: PR Description
         if: inputs.markdown_links != '' && !github.event.pull_request.head.repo.fork
-        uses: ./.github/bcgov-actions/pr-description-add
+        uses: $/pr-description-add
         env:
           DOMAIN: apps.silver.devops.gov.bc.ca
           PREFIX: ${{ github.event.repository.name }}
