@@ -72,9 +72,11 @@ runs:
         ACTIONLINT_BIN="${{ github.workspace }}/.actionlint-bin/actionlint"
         if [ -x "$ACTIONLINT_BIN" ]; then
           # ponytail: actionlint 1.7.x lacks GitHub's $/ self-repo syntax; drop ignores when upstream adds it
+          # RE2 treats $ as EOL — escape as \$ in -ignore patterns
           "$ACTIONLINT_BIN" \
-            -ignore 'specifying action "$/' \
-            -ignore 'reusable workflow call "$/' \
+            -config-file "${{ github.action_path }}/actionlint.yaml" \
+            -ignore 'specifying action "\$/' \
+            -ignore 'reusable workflow call "\$/' \
             $ACTIONLINT_ARGS
         else
           echo "::warning title=actionlint missing::actionlint binary not found. Skipping linter checks."

@@ -1,5 +1,5 @@
 # ponytail: actionlint 1.7.x does not yet recognize GitHub's $/ self-repository syntax.
-# Remove these ignores when rhysd/actionlint adds support.
+# Remove when rhysd/actionlint adds support. Bundled here so pr-validate sparse checkouts still load it.
 paths:
   '**/*.{yml,yaml}':
     ignore:
