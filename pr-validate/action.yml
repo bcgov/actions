@@ -10,8 +10,8 @@ inputs:
     default: "true"
     required: false
   reject_forks:
-    description: "Are forks allowed? [true|false]"
-    default: "false"
+    description: "Reject forks? [true|false]"
+    default: "true"
     required: false
   github_token:
     description: "GitHub token for reading PR metadata"
@@ -27,7 +27,7 @@ runs:
         GITHUB_TOKEN: ${{ inputs.github_token }}
 
     - name: Fork Check
-      if: inputs.reject_forks != 'true' && github.event.pull_request.head.repo.fork
+      if: inputs.reject_forks == 'true' && github.event.pull_request.head.repo.fork
       shell: bash
       run: |
         echo "::error::Forks are not supported for this workflow."
