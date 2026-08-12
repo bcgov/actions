@@ -19,6 +19,5 @@ jobs:
       - name: Run pr-validate
         uses: $/pr-validate
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
           conventional_commits: false
           reject_forks: false

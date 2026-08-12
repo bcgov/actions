@@ -35,8 +35,4 @@ permissions:
     # Optional: Reject PRs originating from forks
     # Default: "true"
     reject_forks: "true"
-    
-    # Optional: Override the native runner token (only needed for cross-repo access edge cases)
-    # Default: ${{ github.token }}
-    github_token: ${{ secrets.CUSTOM_PAT }}
 ```

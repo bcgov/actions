@@ -11,9 +11,6 @@ inputs:
   reject_forks:
     description: "Reject forks? [true|false]"
     default: "true"
-  github_token:
-    description: "GitHub token for reading PR metadata"
-    default: ${{ github.token }}
 
 runs:
   using: "composite"
@@ -30,7 +27,7 @@ runs:
       id: semantic
       uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
       env:
-        GITHUB_TOKEN: ${{ inputs.github_token }}
+        GITHUB_TOKEN: ${{ github.token }}
 
     - name: Conventional Commits Instructions
       if: failure() && steps.semantic.outcome == 'failure'
