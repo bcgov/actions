@@ -9,10 +9,7 @@ inputs:
     description: "Enforce conventional commits?"
     default: "true"
     required: false
-  reject_forks:
-    description: "Reject forks? [true|false]"
-    default: "true"
-    required: false
+
   github_token:
     description: "GitHub token for reading PR metadata"
     required: true
@@ -22,13 +19,13 @@ runs:
   steps:
     - name: Conventional Commits
       if: inputs.conventional_commits != 'false'
+      id: semantic
       uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
       env:
         GITHUB_TOKEN: ${{ inputs.github_token }}
 
-    - name: Fork Check
-      if: inputs.reject_forks == 'true' && github.event.pull_request.head.repo.fork
+    - name: Conventional Commits Instructions
+      if: failure() && steps.semantic.outcome == 'failure'
       shell: bash
       run: |
-        echo "::error::Forks are not supported for this workflow."
-        exit 1
+        echo "::error::Title validation failed. Please edit the PR title at the top of the page to match Conventional Commits (e.g. 'feat: ...', 'fix: ...'). This job will automatically re-run as soon as you save the new title—no manual retry needed!"
