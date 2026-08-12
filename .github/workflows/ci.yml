@@ -33,6 +33,7 @@ jobs:
       get-pr: ${{ steps.filter.outputs['get-pr'] }}
       image-tracker: ${{ steps.filter.outputs['image-tracker'] }}
       pr-description-add: ${{ steps.filter.outputs['pr-description-add'] }}
+      pr-validate: ${{ steps.filter.outputs['pr-validate'] }}
       sysdig-monitor: ${{ steps.filter.outputs['sysdig-monitor'] }}
       test-and-analyse: ${{ steps.filter.outputs['test-and-analyse'] }}
       workflow-notifier: ${{ steps.filter.outputs['workflow-notifier'] }}
@@ -66,6 +67,9 @@ jobs:
             pr-description-add:
               - 'pr-description-add/**'
               - '.github/workflows/test-pr-description-add.yml'
+            pr-validate:
+              - 'pr-validate/**'
+              - '.github/workflows/test-pr-validate.yml'
             sysdig-monitor:
               - 'sysdig-monitor/**'
               - '.github/workflows/test-sysdig-monitor.yml'
@@ -142,6 +146,15 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+
+  test-pr-validate:
+    name: Test PR Validate
+    needs: [fork-gate, path-filter]
+    if: needs.path-filter.outputs.pr-validate == 'true' || needs.path-filter.outputs.workflows == 'true'
+    uses: $/.github/workflows/test-pr-validate.yml
+    permissions:
+      contents: read
+      pull-requests: read
 
   test-sysdig-monitor:
     name: Test Sysdig Monitor

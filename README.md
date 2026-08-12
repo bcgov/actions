@@ -55,6 +55,14 @@ Add markdown content to Pull Request descriptions dynamically.
   uses: bcgov/actions/pr-description-add@vX.Y.Z # Replace with latest release tag
 ```
 
+### [pr-validate](./pr-validate/)
+Validate Pull Request metadata and apply organizational guardrails.
+
+```yaml
+- name: Validate PR
+  uses: bcgov/actions/pr-validate@vX.Y.Z # Replace with latest release tag
+```
+
 ### [sysdig-monitor](./sysdig-monitor/)
 Create or update Sysdig email alerts for an app on PROD deploy. Idempotent, additive and non-blocking.
 
