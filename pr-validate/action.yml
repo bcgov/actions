@@ -9,6 +9,10 @@ inputs:
     description: "Enforce conventional commits?"
     default: "true"
     required: false
+  reject_forks:
+    description: "Reject forks? [true|false]"
+    default: "true"
+    required: false
 
   github_token:
     description: "GitHub token for reading PR metadata"
@@ -17,6 +21,13 @@ inputs:
 runs:
   using: "composite"
   steps:
+    - name: Fork Check
+      if: inputs.reject_forks == 'true' && github.event.pull_request.head.repo.fork
+      shell: bash
+      run: |
+        echo "::error::We do not accept pull requests directly from forks. Please push your changes to a new branch directly on the target repository, and open a new PR from there."
+        exit 1
+
     - name: Conventional Commits
       if: inputs.conventional_commits != 'false'
       id: semantic
