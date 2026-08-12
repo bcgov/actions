@@ -8,11 +8,9 @@ inputs:
   conventional_commits:
     description: "Enforce conventional commits?"
     default: "true"
-    required: false
   reject_forks:
     description: "Reject forks? [true|false]"
     default: "true"
-    required: false
 
   github_token:
     description: "GitHub token for reading PR metadata"
