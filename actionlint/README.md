@@ -33,8 +33,6 @@ GitHub Actions does not validate workflow syntax or expressions when a pull requ
 
 ## Usage
 
-> **Note:** This action automatically checks out the repository. You no longer need to include an `actions/checkout` step before calling this action.
-
 ```yaml
 - name: Lint Workflows
   uses: bcgov/actions/actionlint@vX.Y.Z
