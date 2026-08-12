@@ -11,10 +11,9 @@ inputs:
   reject_forks:
     description: "Reject forks? [true|false]"
     default: "true"
-
   github_token:
     description: "GitHub token for reading PR metadata"
-    required: true
+    default: ${{ github.token }}
 
 runs:
   using: "composite"

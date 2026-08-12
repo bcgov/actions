@@ -22,10 +22,12 @@ permissions:
 ```yaml
 - name: Validate PR
   uses: bcgov/actions/pr-validate@vX.Y.Z # Replace with latest release tag
-  with:
-    # Required: GitHub token to read PR metadata
-    github_token: ${{ secrets.GITHUB_TOKEN }}
+  # No inputs required! 
+  # By default, it will check the PR title, reject forks, and use the native runner token.
 
+- name: Validate PR (With Custom Inputs)
+  uses: bcgov/actions/pr-validate@vX.Y.Z
+  with:
     # Optional: Enforce Conventional Commits format on the PR title
     # Default: "true"
     conventional_commits: "true"
@@ -33,4 +35,8 @@ permissions:
     # Optional: Reject PRs originating from forks
     # Default: "true"
     reject_forks: "true"
+    
+    # Optional: Override the native runner token (only needed for cross-repo access edge cases)
+    # Default: ${{ github.token }}
+    github_token: ${{ secrets.CUSTOM_PAT }}
 ```
