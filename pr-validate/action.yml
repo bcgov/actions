@@ -39,4 +39,4 @@ runs:
       if: failure() && steps.semantic.outcome == 'failure'
       shell: bash
       run: |
-        echo "::error::Title validation failed. Please edit the PR title at the top of the page to match Conventional Commits (e.g. 'feat: ...', 'fix: ...'). This job will automatically re-run as soon as you save the new title—no manual retry needed!"
+        echo "::error::Title validation failed. Please edit the PR title at the top of the page to match Conventional Commits (e.g. 'feat: ...', 'fix: ...'). This job will automatically re-run as soon as you save the new title—no manual retry needed! See https://www.conventionalcommits.org/"

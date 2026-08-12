@@ -4,7 +4,7 @@ Validate Pull Request metadata and apply organizational guardrails to contributo
 
 ## Features
 
-- ✅ **Conventional Commits**: Enforces semantic pull request titles (e.g. `feat: ...`, `fix: ...`) using `amannn/action-semantic-pull-request`.
+- ✅ **Conventional Commits**: Enforces semantic pull request titles (e.g. `feat: ...`, `fix: ...`) per [conventionalcommits.org](https://www.conventionalcommits.org/) using `amannn/action-semantic-pull-request`.
 - ✅ **Educational UX**: Provides explicit, custom GitHub annotations when title validation fails, instructing contributors exactly how to fix the issue without manually retrying CI.
 - ✅ **Fork Blocking**: (Configurable) Immediately rejects pull requests opened from forks with educational instructions on how to use internal branches instead, securing CI environments against token exfiltration vulnerabilities.
 
