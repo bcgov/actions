@@ -30,10 +30,17 @@ jobs:
       - uses: actions/checkout@v7
       - name: Reject ./ sibling refs in composite actions
         run: |
-          set -euo pipefail
-          if rg -n '^\s+uses: \./' --glob '**/action.yml' .; then
+          set -uo pipefail
+          pattern='^\s+(?:-\s+)?uses\s*:\s*['\''"]?\./'
+          if output=$(rg -n "$pattern" --glob '**/action.yml' . 2>&1); then
+            echo "$output"
             echo "::error::Composite actions must use \$/ for sibling refs (./ resolves to the consumer workspace)."
             exit 1
+          fi
+          status=$?
+          if [ "$status" -ne 1 ]; then
+            echo "::error::Failed to scan action.yml files for sibling refs."
+            exit "$status"
           fi
 
   path-filter:
