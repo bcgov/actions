@@ -24,12 +24,7 @@ runs:
     - name: Check for .git directory
       id: check-git
       shell: bash
-      run: |
-        if [ -d .git ]; then
-          echo "skip=true" >> $GITHUB_OUTPUT
-        else
-          echo "skip=false" >> $GITHUB_OUTPUT
-        fi
+      run: echo "skip=$([ -d .git ] && echo true || echo false)" >> $GITHUB_OUTPUT
 
     - name: Checkout repository
       if: steps.check-git.outputs.skip != 'true'
