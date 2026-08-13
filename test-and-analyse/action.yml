@@ -174,7 +174,7 @@ runs:
     # Checkout the target repository - SonarCloud requires a full clone
     - name: Internal Project Checkout
       uses: actions/checkout@v7
-      if: steps.final_triggered.outputs.triggered == 'true' && inputs.skip_checkout != 'true' && inputs.skip_checkout != true
+      if: steps.final_triggered.outputs.triggered == 'true' && inputs.skip_checkout != 'true' && inputs.skip_checkout != true && hashFiles('.git/HEAD') == ''
       with:
         repository: ${{ inputs.repository }}
         ref: ${{ inputs.branch }}

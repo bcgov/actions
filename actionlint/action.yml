@@ -21,13 +21,8 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Check for .git directory
-      id: check-git
-      shell: bash
-      run: echo "skip=$([ -d .git ] && echo true || echo false)" >> $GITHUB_OUTPUT
-
     - name: Checkout repository
-      if: steps.check-git.outputs.skip != 'true'
+      if: hashFiles('.git/HEAD') == ''
       uses: actions/checkout@v4
 
     - name: Resolve actionlint version

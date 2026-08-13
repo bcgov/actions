@@ -79,24 +79,9 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: Determine if checkout is needed
-      id: check-checkout
-      shell: bash
-      run: |
-        if [ "${{ inputs.skip_checkout }}" = "true" ]; then
-          echo "skip=true" >> $GITHUB_OUTPUT
-        elif [ "${{ inputs.skip_checkout }}" = "false" ]; then
-          echo "skip=false" >> $GITHUB_OUTPUT
-        else
-          if [ -e .git ]; then
-            echo "skip=true" >> $GITHUB_OUTPUT
-          else
-            echo "skip=false" >> $GITHUB_OUTPUT
-          fi
-        fi
-
-    - uses: actions/checkout@v7
-      if: steps.check-checkout.outputs.skip != 'true'
+    - name: Checkout repository
+      uses: actions/checkout@v7
+      if: inputs.skip_checkout == 'false' || (inputs.skip_checkout != 'true' && hashFiles('.git/HEAD') == '')
       with:
         token: ${{ inputs.github_token }}
         repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
