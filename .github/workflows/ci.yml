@@ -20,6 +20,22 @@ jobs:
           echo "::error::PRs from external forks are not allowed on this repository. Maintainers must check out a local branch to run CI validation."
           exit 1
 
+  action-ref-guard:
+    name: Action Sibling Ref Guard
+    needs: fork-gate
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Reject ./ sibling refs in composite actions
+        run: |
+          set -euo pipefail
+          if rg -n '^\s+uses: \./' --glob '**/action.yml' .; then
+            echo "::error::Composite actions must use \$/ for sibling refs (./ resolves to the consumer workspace)."
+            exit 1
+          fi
+
   path-filter:
     name: Path Filter
     needs: fork-gate
@@ -156,6 +172,7 @@ jobs:
     name: PR Results
     needs:
       - fork-gate
+      - action-ref-guard
       - path-filter
       - test-builder-ghcr
       - test-diff-triggers
