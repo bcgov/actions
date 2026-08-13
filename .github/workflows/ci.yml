@@ -31,16 +31,16 @@ jobs:
       - name: Reject ./ sibling refs in composite actions
         run: |
           set -uo pipefail
-          pattern='^\s+(?:-\s+)?uses\s*:\s*['\''"]?\./'
-          if output=$(rg -n "$pattern" --glob '**/action.yml' . 2>&1); then
-            echo "$output"
+          pattern='^[[:space:]]+(-[[:space:]]+)?uses[[:space:]]*:[[:space:]]*['\''"]?\./'
+          scan_status=0
+          matches=$(grep -REn "$pattern" --include='action.yml' . 2>/dev/null) || scan_status=$?
+          if [ "$scan_status" -eq 0 ]; then
+            echo "$matches"
             echo "::error::Composite actions must use \$/ for sibling refs (./ resolves to the consumer workspace)."
             exit 1
-          fi
-          status=$?
-          if [ "$status" -ne 1 ]; then
+          elif [ "$scan_status" -ne 1 ]; then
             echo "::error::Failed to scan action.yml files for sibling refs."
-            exit "$status"
+            exit "$scan_status"
           fi
 
   path-filter:
