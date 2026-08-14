@@ -47,7 +47,6 @@ jobs:
         id: filter
         uses: $/diff-triggers
         with:
-          skip_checkout: 'true'
           filters: |
             actionlint:
               - 'actionlint/**'

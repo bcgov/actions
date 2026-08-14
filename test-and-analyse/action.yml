@@ -73,7 +73,10 @@ inputs:
 
 
   repository:
-    description: Non-default repository to clone (used for testing this action)
+    description: >-
+      Non-default repository to clone (used for testing this action).
+      Setting this to anything but the current repository forces a clone,
+      since the workspace cannot be assumed to hold it already.
     default: ${{ github.repository }}
   github_token:
     description: Specify token (GH or PAT), instead of inheriting one from the calling workflow
@@ -83,12 +86,10 @@ inputs:
     description: Non-default branch to clone (used for testing this action)
     default: ""
 
-  skip_checkout:
-    description: "Skip the internal checkout step. Useful for self-testing or when the project is already checked out."
-    default: "false"
-
   checkout_path:
-    description: "Path where the repository should be checked out. Default is current directory."
+    description: >-
+      Path where the repository should be checked out, and the path probed to
+      decide whether a clone is needed at all. Default is current directory.
     default: "."
 
   require_sonar:
@@ -171,19 +172,34 @@ runs:
         echo "cache=$RESULT" >> $GITHUB_OUTPUT
         echo "Determined cache type: '$RESULT' for language: $LANG (original input: '$CACHE_VAL')"
 
-    # Checkout the target repository - SonarCloud requires a full clone.
-    # Deliberately not skipped when a checkout already exists: callers typically
-    # check out at the default depth 1, which robs Sonar of blame and new-code
-    # detection. Callers that have already fetched depth 0 pass skip_checkout.
+    # Clone when the caller asked for a repository other than this one, or when
+    # checkout_path holds none. A bare .git probe cannot decide: Check Triggers
+    # above may already have left a clone of *this* repo in the workspace, and
+    # skipping on that would analyse the wrong project.
     - name: Internal Project Checkout
       uses: actions/checkout@v7
-      if: steps.final_triggered.outputs.triggered == 'true' && inputs.skip_checkout != 'true' && inputs.skip_checkout != true
+      if: >-
+        steps.final_triggered.outputs.triggered == 'true' &&
+        (inputs.repository != github.repository ||
+        hashFiles(format('{0}/.git/HEAD', inputs.checkout_path), format('{0}/.git', inputs.checkout_path)) == '')
       with:
+        clean: false
         repository: ${{ inputs.repository }}
         ref: ${{ inputs.branch }}
         token: ${{ inputs.github_token }}
         path: ${{ inputs.checkout_path }}
         fetch-depth: 0
+
+    # Sonar reads the repo enclosing projectBaseDir (inputs.dir) for blame and
+    # new-code detection, and a caller's own checkout is usually depth 1.
+    # Deepen in place rather than re-cloning over them.
+    - name: Deepen shallow history
+      if: >-
+        steps.final_triggered.outputs.triggered == 'true' &&
+        hashFiles(format('{0}/.git/shallow', inputs.checkout_path)) != ''
+      shell: bash
+      working-directory: ${{ inputs.checkout_path }}
+      run: git fetch --unshallow
 
 
     - name: Setup Node.js
