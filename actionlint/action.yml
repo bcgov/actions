@@ -21,6 +21,17 @@ inputs:
 runs:
   using: composite
   steps:
+    # Convenience for callers that lint their own workspace without checking it
+    # out first. Passing args means the caller arranged the paths themselves, and
+    # clean would delete an arrangement it does not own (e.g. a subdirectory
+    # checkout). Second hashFiles pattern catches worktrees and submodules,
+    # where .git is a gitdir file rather than a directory.
+    - name: Checkout repository
+      if: inputs.args == '' && hashFiles('.git/HEAD', '.git') == ''
+      uses: actions/checkout@v7
+      with:
+        clean: false
+
     - name: Resolve actionlint version
       id: version-resolver
       shell: bash

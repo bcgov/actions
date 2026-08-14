@@ -47,10 +47,10 @@ jobs:
         id: filter
         uses: $/diff-triggers
         with:
-          skip_checkout: 'true'
           filters: |
             actionlint:
               - 'actionlint/**'
+              - '.github/workflows/test-actionlint.yml'
             builder-ghcr:
               - 'builder-ghcr/**'
               - '.github/workflows/test-builder-ghcr.yml'
@@ -90,6 +90,14 @@ jobs:
       packages: write
       id-token: write
       attestations: write
+
+  test-actionlint:
+    name: Test Actionlint
+    needs: [fork-gate, path-filter]
+    if: needs.path-filter.outputs.actionlint == 'true' || needs.path-filter.outputs.workflows == 'true'
+    uses: $/.github/workflows/test-actionlint.yml
+    permissions:
+      contents: read
 
   test-diff-triggers:
     name: Test Diff Triggers
@@ -157,6 +165,7 @@ jobs:
     needs:
       - fork-gate
       - path-filter
+      - test-actionlint
       - test-builder-ghcr
       - test-diff-triggers
       - test-get-pr

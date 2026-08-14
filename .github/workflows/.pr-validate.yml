@@ -81,9 +81,11 @@ jobs:
       - name: Errors
         if: failure()
         run: |
-          echo "### ⚠️ PR Validation Failed" >> $GITHUB_STEP_SUMMARY
-          echo "Please inspect the workflow log outputs above to find the exact step that failed." >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "#### Common Validation Requirements:" >> $GITHUB_STEP_SUMMARY
-          echo "- **Conventional Commits**: PR titles must follow the [Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/)." >> $GITHUB_STEP_SUMMARY
-          echo "- **Forks**: Direct pull requests from external forks are not supported by the runner validation pipelines." >> $GITHUB_STEP_SUMMARY
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ### ⚠️ PR Validation Failed
+          Please inspect the workflow log outputs above to find the exact step that failed.
+
+          #### Common Validation Requirements:
+          - **Conventional Commits**: PR titles must follow the [Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/).
+          - **Forks**: Direct pull requests from external forks are not supported by the runner validation pipelines.
+          EOF
