@@ -211,9 +211,46 @@ jobs:
           fi
           echo "Metadata tags test passed!"
 
+  # Only case where `repository` defaults to this repo, so it is the only one that
+  # reaches builder-ghcr's `Check Triggers` step (gated on repository == github.repository).
+  # No checkout runs at the workspace root, so this also mirrors a consumer repo: a
+  # sibling action referenced as ./name resolves against the workspace and fails here,
+  # while $/name resolves against this repo at the running commit and succeeds.
+  self-repo:
+    name: Self Repo
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - id: self-repo
+        uses: $/builder-ghcr
+        with:
+          package: builder-ghcr-selftest
+          build_context: builder-ghcr/tests
+          build_file: builder-ghcr/tests/Dockerfile
+          tags: ${{ github.event.number }}-selftest
+          sbom: "false"
+          # Both paths gate this suite in ci.yml, so the diff always has a match to find.
+          triggers: |
+            builder-ghcr/
+            .github/workflows/
+
+      - run: |
+          # Verify outputs
+          echo "Outputs: ${{ toJSON(steps.self-repo.outputs) }}"
+          if [ -z "${{ steps.self-repo.outputs.digest }}" ]; then
+            echo "Error! digest is empty."
+            exit 1
+          fi
+          if [ -z "${{ steps.self-repo.outputs.image_path }}" ]; then
+            echo "Error! image_path is empty."
+            exit 1
+          fi
+
   results:
     name: PR Results
-    needs: [advanced, build, no-attestation, single-package, metadata-tags]
+    needs: [advanced, build, no-attestation, single-package, metadata-tags, self-repo]
     if: always()
     runs-on: ubuntu-24.04
     steps:

@@ -124,3 +124,5 @@ uses: bcgov/actions/diff-triggers@vX.Y.Z
 ```
 
 Internal integration tests live under `.github/workflows/test-*.yml`. When a composite action calls a sibling (e.g. `test-and-analyse` → `$/diff-triggers`), the sibling resolves at the same SHA as the parent — even when downstream callers pin a full commit SHA.
+
+`./` is the trap: it resolves against `GITHUB_WORKSPACE`, not the action's own repo. A test job that checks this repo out at the workspace root makes `./sibling` resolve anyway, so the mistake passes CI and only breaks for consumers. Test jobs that exercise a sibling call must therefore leave the workspace root free of this repo — load the action under test with `$/`, and check any fixture repo out to a subdirectory (`path:`). Jobs whose action needs workspace content of its own (`diff-triggers`, `image-tracker`, `sysdig-monitor`, `workflow-notifier`) still check out at the root; that is fine only while those actions call no siblings.
