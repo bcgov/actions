@@ -185,6 +185,7 @@ jobs:
       - test-image-tracker
       - test-notifier
       - test-pr-description-add
+      - test-pr-validate
       - test-sysdig-monitor
       - test-test-and-analyse
     if: always()
