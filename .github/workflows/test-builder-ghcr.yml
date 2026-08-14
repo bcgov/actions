@@ -12,9 +12,32 @@ concurrency:
 permissions: {}
 
 jobs:
+  validate:
+    name: Validate Action Definition
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Reject ./ sibling refs in builder-ghcr
+        run: |
+          set -uo pipefail
+          pattern='^[[:space:]]+(-[[:space:]]+)?uses[[:space:]]*:[[:space:]]*['\''"]?\./'
+          scan_status=0
+          matches=$(grep -REn "$pattern" builder-ghcr/action.yml 2>/dev/null) || scan_status=$?
+          if [ "$scan_status" -eq 0 ]; then
+            echo "$matches"
+            echo "::error::builder-ghcr must use \$/ for sibling refs (./ resolves to the consumer workspace)."
+            exit 1
+          elif [ "$scan_status" -ne 1 ]; then
+            echo "::error::Failed to scan builder-ghcr/action.yml for sibling refs."
+            exit "$scan_status"
+          fi
+
   # QuickStart apps build from the same dirs as their Dockerfiles
   build:
     name: Build
+    needs: validate
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -49,6 +72,7 @@ jobs:
   # No attestation, no id-token, no build
   no-attestation:
     name: No Attestation
+    needs: validate
     permissions:
       contents: read
       packages: write
@@ -84,6 +108,7 @@ jobs:
   # FOM apps build from repo root, above their Dockerfiles (extra params)
   advanced:
     name: Advanced
+    needs: validate
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -123,6 +148,7 @@ jobs:
   # Test single-package repo format (no package in path)
   single-package:
     name: Single Package
+    needs: validate
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -161,6 +187,7 @@ jobs:
   # Test metadata tags feature
   metadata-tags:
     name: Metadata Tags
+    needs: validate
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -213,7 +240,7 @@ jobs:
 
   results:
     name: PR Results
-    needs: [advanced, build, no-attestation, single-package, metadata-tags]
+    needs: [validate, advanced, build, no-attestation, single-package, metadata-tags]
     if: always()
     runs-on: ubuntu-24.04
     steps:
