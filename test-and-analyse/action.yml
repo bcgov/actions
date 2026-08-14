@@ -200,6 +200,8 @@ runs:
       shell: bash
       working-directory: ${{ inputs.checkout_path }}
       run: |
+        # A worktree keeps its shallow marker in the main repo's gitdir, so probe
+        # git rather than looking for .git/shallow here.
         if [ "$(git rev-parse --is-shallow-repository 2>/dev/null || echo false)" = "true" ]; then
           git fetch --unshallow
         fi
