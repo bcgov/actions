@@ -141,9 +141,40 @@ jobs:
           triggers: '["diff-triggers/", "action.yml", ".github/"]'
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
+  # Every other job here runs with an empty workspace, so they only cover the
+  # auto-checkout half of skip_checkout. This covers the auto-skip half.
+  test-auto-skip-checkout:
+    name: "Test Auto Skip (Expected: workspace preserved)"
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - run: echo sentinel > .auto-skip-sentinel
+
+      - uses: $/diff-triggers
+        with:
+          triggers: |
+            diff-triggers/
+            .github/
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Assert the existing checkout survived
+        run: |
+          # actions/checkout cleans untracked files, so a surviving sentinel is
+          # proof that auto detection found .git and skipped the re-clone.
+          if [ ! -f .auto-skip-sentinel ]; then
+            echo "Error! diff-triggers re-cloned over the caller's workspace; auto detection missed .git."
+            exit 1
+          fi
+          echo "Auto-skip verified: caller's checkout left intact."
+
   verify-results:
     name: Verify Results
-    needs: [self-check, test-triggers-match, test-triggers-no-match, test-triggers-omitted, test-custom-ref, test-legacy-bash-format, test-comma-separated-triggers, test-semicolon-separated-triggers, test-json-array-triggers]
+    needs: [self-check, test-triggers-match, test-triggers-no-match, test-triggers-omitted, test-custom-ref, test-legacy-bash-format, test-comma-separated-triggers, test-semicolon-separated-triggers, test-json-array-triggers, test-auto-skip-checkout]
     runs-on: ubuntu-24.04
     steps:
       - name: Assert outputs

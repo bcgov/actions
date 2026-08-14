@@ -22,8 +22,9 @@ runs:
   using: composite
   steps:
     - name: Checkout repository
-      if: hashFiles('.git/HEAD') == ''
-      uses: actions/checkout@v4
+      # Second pattern catches worktrees and submodules, where .git is a gitdir file
+      if: hashFiles('.git/HEAD', '.git') == ''
+      uses: actions/checkout@v7
 
     - name: Resolve actionlint version
       id: version-resolver

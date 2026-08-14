@@ -171,10 +171,13 @@ runs:
         echo "cache=$RESULT" >> $GITHUB_OUTPUT
         echo "Determined cache type: '$RESULT' for language: $LANG (original input: '$CACHE_VAL')"
 
-    # Checkout the target repository - SonarCloud requires a full clone
+    # Checkout the target repository - SonarCloud requires a full clone.
+    # Deliberately not skipped when a checkout already exists: callers typically
+    # check out at the default depth 1, which robs Sonar of blame and new-code
+    # detection. Callers that have already fetched depth 0 pass skip_checkout.
     - name: Internal Project Checkout
       uses: actions/checkout@v7
-      if: steps.final_triggered.outputs.triggered == 'true' && inputs.skip_checkout != 'true' && inputs.skip_checkout != true && hashFiles('.git/HEAD') == ''
+      if: steps.final_triggered.outputs.triggered == 'true' && inputs.skip_checkout != 'true' && inputs.skip_checkout != true
       with:
         repository: ${{ inputs.repository }}
         ref: ${{ inputs.branch }}
