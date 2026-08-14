@@ -1,0 +1,73 @@
+name: Test Actionlint
+
+on:
+  workflow_call:
+  push:
+    branches: [main]
+    paths:
+      - 'actionlint/**'
+      - '.github/workflows/test-actionlint.yml'
+  workflow_dispatch:
+
+concurrency:
+  # Unique per suite: github.workflow is the *caller* name (CI), so sharing
+  # that key across reusable workflows cancels sibling suites mid-run.
+  group: test-actionlint-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  # No checkout, no args: the action should fetch the workspace itself and lint it.
+  auto-checkout:
+    name: Auto Checkout
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: $/actionlint
+
+      - name: Assert the workspace was fetched
+        run: |
+          if [ ! -f .github/workflows/test-actionlint.yml ]; then
+            echo "Error! Auto checkout did not populate the workspace."
+            exit 1
+          fi
+          echo "Auto checkout verified."
+
+  # Mirrors .pr-validate.yml: caller checks out to a subdirectory and points the
+  # action at it. Auto checkout must not fire, and must never clean away a
+  # workspace it did not create.
+  caller-arranged:
+    name: Caller Arranged
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/workflows
+          sparse-checkout-cone-mode: false
+          path: calling-repo
+
+      - uses: $/actionlint
+        with:
+          args: calling-repo/.github/workflows/*
+
+      - name: Assert the caller's checkout survived
+        run: |
+          if [ ! -f calling-repo/.github/workflows/test-actionlint.yml ]; then
+            echo "Error! The action cleaned away the caller's subdirectory checkout."
+            exit 1
+          fi
+          echo "Caller-arranged workspace verified intact."
+
+  results:
+    name: PR Results
+    needs: [auto-checkout, caller-arranged]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: echo "At least one job has failed or was cancelled." && exit 1
+      - run: echo "Success!"

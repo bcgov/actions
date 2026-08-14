@@ -141,9 +141,42 @@ jobs:
           triggers: '["diff-triggers/", "action.yml", ".github/"]'
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
+  # Every other job here runs with an empty workspace, so they only cover the
+  # half where the action fetches. This covers the half where it must not.
+  test-existing-checkout:
+    name: "Test Existing Checkout (Expected: left intact)"
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - run: echo sentinel >> README.md
+
+      - uses: $/diff-triggers
+        with:
+          triggers: |
+            diff-triggers/
+            .github/
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Assert the existing checkout survived
+        run: |
+          # A tracked-file edit is the discriminator: actions/checkout runs
+          # `checkout --force`, which discards it, and does so even with
+          # clean: false. The diff itself is commit-to-commit, so this edit
+          # cannot influence the result either way.
+          if ! grep -q sentinel README.md; then
+            echo "Error! diff-triggers re-cloned over the caller's workspace; detection missed .git."
+            exit 1
+          fi
+          echo "Verified: caller's checkout left intact."
+
   verify-results:
     name: Verify Results
-    needs: [self-check, test-triggers-match, test-triggers-no-match, test-triggers-omitted, test-custom-ref, test-legacy-bash-format, test-comma-separated-triggers, test-semicolon-separated-triggers, test-json-array-triggers]
+    needs: [self-check, test-triggers-match, test-triggers-no-match, test-triggers-omitted, test-custom-ref, test-legacy-bash-format, test-comma-separated-triggers, test-semicolon-separated-triggers, test-json-array-triggers, test-existing-checkout]
     runs-on: ubuntu-24.04
     steps:
       - name: Assert outputs
