@@ -1,0 +1,74 @@
+name: Test PR Validate
+
+on:
+  workflow_call:
+  push:
+    branches: [main]
+    paths:
+      - 'pr-validate/**'
+      - '.github/workflows/test-pr-validate.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: test-pr-validate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  test-defaults:
+    name: Test Default Inputs
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run pr-validate with defaults
+        uses: $/pr-validate
+
+  test-disabled:
+    name: Test Disabled Inputs
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run pr-validate with checks disabled
+        uses: $/pr-validate
+        with:
+          conventional_commits: "false"
+          reject_forks: "false"
+
+  test-deprecation:
+    name: Test Deprecation Guard
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run pr-validate with deprecated add_markdown input
+        id: deprecate
+        continue-on-error: true
+        uses: $/pr-validate
+        with:
+          add_markdown: "legacy markdown content"
+      - name: Assert deprecation failed
+        run: |
+          if [ "${{ steps.deprecate.outcome }}" != "failure" ]; then
+            echo "Error: pr-validate should have failed when add_markdown input is provided."
+            exit 1
+          fi
+          echo "Deprecation check verified."
+
+  results:
+    name: PR Results
+    needs: [test-defaults, test-disabled, test-deprecation]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: echo "At least one job has failed or was cancelled." && exit 1
+      - run: echo "Success!"
+

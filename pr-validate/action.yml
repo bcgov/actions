@@ -1,0 +1,46 @@
+name: "PR Validate"
+description: "Validate Pull Request metadata like Conventional Commits and fork rules"
+branding:
+  icon: "check-circle"
+  color: "blue"
+
+inputs:
+  conventional_commits:
+    description: "Enforce conventional commits?"
+    default: "true"
+  reject_forks:
+    description: "Reject forks? [true|false]"
+    default: "true"
+  add_markdown:
+    description: "DEPRECATED: Markdown injection is no longer supported"
+    required: false
+
+runs:
+  using: "composite"
+  steps:
+    - name: Deprecation Check
+      if: inputs.add_markdown != ''
+      shell: bash
+      run: |
+        echo "::error::The markdown functionality has been deprecated and removed from pr-validate. Please use the standalone 'bcgov/actions/pr-description-add' action instead."
+        exit 1
+
+    - name: Fork Check
+      if: inputs.reject_forks == 'true' && github.event.pull_request.head.repo.fork
+      shell: bash
+      run: |
+        echo "::error::Pull requests directly from forks are not permitted by this repository's automated CI security policy. If you are an external contributor, a repository maintainer will need to review and re-host your branch internally to run CI."
+        exit 1
+
+    - name: Conventional Commits
+      if: inputs.conventional_commits == 'true' && github.event_name == 'pull_request'
+      id: semantic
+      uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+
+    - name: Conventional Commits Instructions
+      if: failure() && steps.semantic.outcome == 'failure'
+      shell: bash
+      run: |
+        echo "::error::Title validation failed. Please edit the PR title at the top of the page to match Conventional Commits (e.g. 'feat: ...', 'fix: ...'). This job will automatically re-run as soon as you save the new title—no manual retry needed! See https://www.conventionalcommits.org/"
