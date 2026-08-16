@@ -93,6 +93,8 @@ function parseTriggers(raw) {
   return tokens;
 }
 
+const RESERVED_OUTPUT_KEYS = new Set(['triggered', 'changes']);
+
 /**
  * Parse filters mapping from a YAML-like multiline string.
  * Maps keys to arrays of path patterns.
@@ -114,6 +116,10 @@ function parseFilters(raw) {
       const colonIndex = trimmed.indexOf(':');
       const key = trimmed.slice(0, colonIndex).trim();
       const val = trimmed.slice(colonIndex + 1).trim();
+
+      if (RESERVED_OUTPUT_KEYS.has(key)) {
+        throw new Error(`Filter name '${key}' is reserved by diff-triggers outputs ('triggered', 'changes'). Please choose a different key.`);
+      }
 
       currentKey = key;
       filters[currentKey] = [];
@@ -158,7 +164,7 @@ async function main() {
   const filtersStr = process.env.INPUT_FILTERS || '';
   const inputRef = process.env.INPUT_REF || '';
   const annotationsEnabled = (process.env.INPUT_ANNOTATIONS || 'true').toLowerCase() === 'true';
-  const token = process.env.INPUT_GITHUB_TOKEN || '';
+  const token = process.env.INPUT_GITHUB_TOKEN || process.env.GITHUB_TOKEN || '';
   const workflow = process.env.GITHUB_WORKFLOW || '';
   const job = process.env.GITHUB_JOB || '';
   const repo = process.env.GITHUB_REPOSITORY || '';
@@ -219,10 +225,46 @@ async function main() {
 
   // ── Phase 5: Git operations ────────────────────────────────────────
 
-  // 5a. Set up base remote
+  // 5a. Ensure repository exists in workspace if caller did not run actions/checkout
+  const hasGit = fs.existsSync('.git/HEAD') || fs.existsSync('.git');
+  if (!hasGit) {
+    const headRemoteUrl = payload.pull_request?.head?.repo?.clone_url
+      || payload.repository?.clone_url
+      || (repo ? `https://github.com/${repo}.git` : '');
+
+    if (!headRemoteUrl) {
+      console.error('::error::No git repository found in workspace and could not determine remote clone URL.');
+      process.exit(1);
+    }
+
+    let authedHeadUrl = headRemoteUrl;
+    if (token && authedHeadUrl.startsWith('https://github.com/')) {
+      authedHeadUrl = authedHeadUrl.replace(
+        'https://github.com/',
+        `https://x-access-token:${token}@github.com/`
+      );
+    }
+
+    const headRef = payload.pull_request?.head?.sha
+      || process.env.GITHUB_SHA
+      || process.env.GITHUB_REF
+      || 'HEAD';
+
+    run(['init']);
+    run(['remote', 'add', 'origin', authedHeadUrl]);
+    const isShallow = Boolean(payload.pull_request && !inputRef);
+    if (isShallow) {
+      run(['fetch', '--depth=1', 'origin', headRef]);
+    } else {
+      run(['fetch', 'origin', headRef]);
+    }
+    run(['checkout', '--force', 'FETCH_HEAD']);
+  }
+
+  // 5b. Set up base remote
   const baseRemoteUrl = payload.pull_request?.base?.repo?.clone_url
     || payload.repository?.clone_url
-    || '';
+    || (repo ? `https://github.com/${repo}.git` : '');
 
   if (baseRemoteUrl) {
     let authedUrl = baseRemoteUrl;
@@ -240,7 +282,7 @@ async function main() {
     }
   }
 
-  // 5b. Resolve comparison ref
+  // 5c. Resolve comparison ref
   let compareRef;
   if (baseRef.startsWith('HEAD')) {
     // Local ref — use directly, but ensure shallow clone has enough depth
@@ -250,7 +292,15 @@ async function main() {
     } catch {
       // Shallow clone doesn't have the ref — deepen
       try {
-        run(['fetch', '--deepen=10']);
+        run(['fetch', 'origin', '--deepen=10']);
+      } catch {
+        try {
+          run(['fetch', '--deepen=10']);
+        } catch {
+          // ignore
+        }
+      }
+      try {
         run(['rev-parse', '--verify', compareRef]);
       } catch {
         console.error(`::error::Cannot resolve ref '${compareRef}'. Ensure sufficient fetch-depth in your checkout step.`);
@@ -268,7 +318,7 @@ async function main() {
     }
   }
 
-  // 5c. Run git diff per trigger/filter
+  // 5d. Run git diff per trigger/filter
   let triggered = false;
   const matchedTriggers = [];
   let detailsLog = '';
