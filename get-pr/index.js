@@ -15,7 +15,7 @@ async function main() {
 
   // Load and parse event payload JSON natively if present
   let payload = {};
-  const eventPath = process.env.TEST_EVENT_PATH || process.env.GITHUB_EVENT_PATH;
+  const eventPath = process.env.TEST_EVENT_PATH !== undefined ? process.env.TEST_EVENT_PATH : process.env.GITHUB_EVENT_PATH;
   if (eventPath && fs.existsSync(eventPath)) {
     try {
       payload = JSON.parse(fs.readFileSync(eventPath, 'utf8'));

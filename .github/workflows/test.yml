@@ -361,6 +361,8 @@ jobs:
               env: {
                 ...process.env,
                 TEST_EVENT_NAME: 'pull_request',
+                TEST_EVENT_PATH: '',
+                GITHUB_EVENT_PATH: '',
                 GITHUB_EVENT_NUMBER: '42'
               }
             }).toString();
@@ -372,6 +374,8 @@ jobs:
               env: {
                 ...process.env,
                 TEST_EVENT_NAME: 'merge_group',
+                TEST_EVENT_PATH: '',
+                GITHUB_EVENT_PATH: '',
                 MERGE_GROUP_HEAD_REF: 'refs/heads/gh-readonly-queue/main/pr-99-abcdef'
               }
             }).toString();
