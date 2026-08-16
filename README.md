@@ -7,14 +7,6 @@
 
 A centralized repository for custom GitHub Actions and workflows provided to the `bcgov` organization. These are often consumed as part of the [QuickStart for OpenShift](https://github.com/bcgov/quickstart-openshift).
 
-### [actionlint](./actionlint/)
-Lint GitHub Actions workflow files with caching and rate-limit proof execution.
-
-```yaml
-- name: Lint Workflows
-  uses: bcgov/actions/actionlint@vX.Y.Z # Replace with latest release tag
-```
-
 ### [builder-ghcr](./builder-ghcr/)
 Generic GHCR container builder with automatic tag management.
 
@@ -98,7 +90,6 @@ Find `CODEOWNERS` and coordinate notifications (GitHub Issues) on job failures.
 In alignment with security best practices, you should always declare minimum explicit permissions for the `GITHUB_TOKEN` in your workflows rather than granting wildcard/admin permissions. 
 
 Refer to each action's directory for its exact minimum required permissions block:
-- **[actionlint](./actionlint/)**: `contents: read`, `actions: write` (optional, for caching)
 - **[builder-ghcr](./builder-ghcr/)**: `contents: read`, `packages: write`, plus `id-token: write` and `attestations: write` (optional, for build provenance attestations)
 - **[diff-triggers](./diff-triggers/)**: `contents: read`
 - **[get-pr](./get-pr/)**: `pull-requests: read`, `contents: read` (optional, for offline/fallback commit resolution)

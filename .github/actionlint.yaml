@@ -1,7 +1,0 @@
-# ponytail: actionlint 1.7.x does not yet recognize GitHub's $/ self-repository syntax.
-# Remove these ignores when rhysd/actionlint adds support.
-paths:
-  '**/*.{yml,yaml}':
-    ignore:
-      - 'specifying action "\$/'
-      - 'reusable workflow call "\$/'

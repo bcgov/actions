@@ -21,7 +21,6 @@ All actions in each repository are versioned and released together as a **single
 
 ```
 actions/
-├── actionlint/
 ├── builder-ghcr/
 ├── diff-triggers/
 ├── get-pr/

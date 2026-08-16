@@ -29,8 +29,6 @@ jobs:
         uses: $/diff-triggers
         with:
           filters: |
-            actionlint:
-              - 'actionlint/**'
             builder-ghcr:
               - 'builder-ghcr/**'
             diff-triggers:
@@ -54,46 +52,6 @@ jobs:
             workflows:
               - '.github/workflows/**'
               - '.tool-versions'
-
-  # ─── ACTIONLINT ─────────────────────────────────────────────────────────────
-  test-actionlint:
-    name: Test Actionlint
-    needs: [filter]
-    if: contains(fromJSON(needs.filter.outputs.changes), 'actionlint') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-    steps:
-      - name: Test Auto Checkout
-        uses: $/actionlint
-
-      - name: Assert Workspace Fetched
-        run: |
-          if [ ! -f .github/workflows/test.yml ]; then
-            echo "Error! Auto checkout did not populate the workspace."
-            exit 1
-          fi
-          echo "Auto checkout verified."
-
-      - name: Setup Subdirectory Checkout
-        uses: actions/checkout@v7
-        with:
-          sparse-checkout: .github/workflows
-          sparse-checkout-cone-mode: false
-          path: calling-repo
-
-      - name: Test Caller Arranged Checkout
-        uses: $/actionlint
-        with:
-          args: calling-repo/.github/workflows/*
-
-      - name: Assert Caller Checkout Survived
-        run: |
-          if [ ! -f calling-repo/.github/workflows/test.yml ]; then
-            echo "Error! The action cleaned away the caller's subdirectory checkout."
-            exit 1
-          fi
-          echo "Caller-arranged workspace verified intact."
 
   # ─── BUILDER GHCR ───────────────────────────────────────────────────────────
   test-builder-ghcr-build:
@@ -803,7 +761,6 @@ jobs:
     name: PR Results
     needs:
       - filter
-      - test-actionlint
       - test-builder-ghcr-build
       - test-builder-ghcr-matrix
       - test-diff-triggers
