@@ -8,12 +8,6 @@ on:
       - '.github/workflows/test-builder-ghcr.yml'
       - '.tool-versions'
       - '.github/workflows/**'
-  push:
-    branches: [main]
-    paths:
-      - 'builder-ghcr/**'
-      - '.github/workflows/test-builder-ghcr.yml'
-      - '.tool-versions'
   workflow_dispatch:
 
 concurrency:

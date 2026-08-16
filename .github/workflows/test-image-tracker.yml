@@ -8,12 +8,6 @@ on:
       - '.github/workflows/test-image-tracker.yml'
       - '.tool-versions'
       - '.github/workflows/**'
-  push:
-    branches: [main]
-    paths:
-      - 'image-tracker/**'
-      - '.github/workflows/test-image-tracker.yml'
-      - '.tool-versions'
   workflow_dispatch:
 
 concurrency:

@@ -8,12 +8,6 @@ on:
       - '.github/workflows/test-sysdig-monitor.yml'
       - '.tool-versions'
       - '.github/workflows/**'
-  push:
-    branches: [main]
-    paths:
-      - 'sysdig-monitor/**'
-      - '.github/workflows/test-sysdig-monitor.yml'
-      - '.tool-versions'
   workflow_dispatch:
 
 concurrency:

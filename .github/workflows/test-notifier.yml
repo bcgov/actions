@@ -8,12 +8,6 @@ on:
       - '.github/workflows/test-notifier.yml'
       - '.tool-versions'
       - '.github/workflows/**'
-  push:
-    branches: [main]
-    paths:
-      - 'workflow-notifier/**'
-      - '.github/workflows/test-notifier.yml'
-      - '.tool-versions'
   workflow_dispatch:
 
 permissions: {}
