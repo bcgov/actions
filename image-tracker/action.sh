@@ -464,22 +464,60 @@ for pkg in "${PKG_ORDER[@]}"; do
     ref="ghcr.io/${path}@${digest}"
     printf "  [✓] HIT: %s -> %s\n" "$pkg" "$ref" >&2
     
-    # GitHub Action specific reporting
-    if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
-        {
-            echo "### 📦 Image Tracker: \`${pkg}\`"
-            echo "- **Message:** \`${msg}\` $( [[ -n "$pr_num" && "$pr_num" != "null" ]] && echo "(PR #$pr_num)" )"
-            echo "- **Digest:** \`${digest}\`"
-            echo "- **Image Commit:** \`${sha}\`"
-            echo ""
-        } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
-    fi
-    
     IMAGES["$pkg"]="$res"
     IMAGES_JSON=$(printf '%s' "$IMAGES_JSON" | jq -c --arg k "$pkg" --arg v "$ref" '.[$k] = $v')
 done
 
 log_endgroup
+
+# ---- Markdown Summary ------------------------------------------------------
+render_step_summary() {
+    local target_str
+    if [[ "$REVISION" == "$PIVOT_SHA"* || "$PIVOT_SHA" == "$REVISION"* ]]; then
+        target_str="\`${PIVOT_SHA:0:7}\`"
+    else
+        target_str="\`${PIVOT_SHA:0:7}\` (${REVISION})"
+    fi
+
+    echo "### 📦 Image Tracker"
+    echo ""
+    echo "| Package | Target Commit | Resolved Commit | Search Depth | Image Reference / Digest |"
+    echo "| :--- | :--- | :--- | :--- | :--- |"
+
+    for pkg in "${PKG_ORDER[@]}"; do
+        local payload="${IMAGES[$pkg]:-}"
+        local path="${IMAGE_PATHS[$pkg]:-}"
+        if [[ -n "$payload" ]]; then
+            local sha digest created pr_num msg
+            IFS='|' read -r sha digest created pr_num msg <<< "$payload"
+            local ref="ghcr.io/${path}@${digest}"
+            local resolved_str="\`${sha:0:7}\`"
+            local depth=0
+            for i in "${!CANDIDATES[@]}"; do
+                if [[ "${CANDIDATES[$i]}" == "$sha"* || "$sha" == "${CANDIDATES[$i]}"* ]]; then
+                    depth=$((i + 1))
+                    break
+                fi
+            done
+            local depth_str
+            if [[ "$depth" -eq 1 ]]; then
+                depth_str="1"
+            elif [[ "$depth" -gt 1 ]]; then
+                depth_str="${depth} (walked)"
+            else
+                depth_str="—"
+            fi
+            echo "| \`${pkg}\` | ${target_str} | ${resolved_str} | ${depth_str} | \`${ref}\` |"
+        else
+            echo "| \`${pkg}\` | ${target_str} | — | — | *Not resolved* |"
+        fi
+    done
+    echo ""
+}
+
+if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
+    render_step_summary >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+fi
 
 # Output results
 if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then

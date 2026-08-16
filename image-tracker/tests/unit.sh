@@ -137,6 +137,103 @@ test_pr_extraction() {
     assert_eq "$r_pr" "" "Empty PR number handled cleanly"
 }
 
+# -- Step summary rendering tests -------------------------------------------
+
+render_step_summary() {
+    local target_str
+    if [[ "$REVISION" == "$PIVOT_SHA"* || "$PIVOT_SHA" == "$REVISION"* ]]; then
+        target_str="\`${PIVOT_SHA:0:7}\`"
+    else
+        target_str="\`${PIVOT_SHA:0:7}\` (${REVISION})"
+    fi
+
+    echo "### 📦 Image Tracker"
+    echo ""
+    echo "| Package | Target Commit | Resolved Commit | Search Depth | Image Reference / Digest |"
+    echo "| :--- | :--- | :--- | :--- | :--- |"
+
+    for pkg in "${PKG_ORDER[@]}"; do
+        local payload="${IMAGES[$pkg]:-}"
+        local path="${IMAGE_PATHS[$pkg]:-}"
+        if [[ -n "$payload" ]]; then
+            local sha digest created pr_num msg
+            IFS='|' read -r sha digest created pr_num msg <<< "$payload"
+            local ref="ghcr.io/${path}@${digest}"
+            local resolved_str="\`${sha:0:7}\`"
+            local depth=0
+            for i in "${!CANDIDATES[@]}"; do
+                if [[ "${CANDIDATES[$i]}" == "$sha"* || "$sha" == "${CANDIDATES[$i]}"* ]]; then
+                    depth=$((i + 1))
+                    break
+                fi
+            done
+            local depth_str
+            if [[ "$depth" -eq 1 ]]; then
+                depth_str="1"
+            elif [[ "$depth" -gt 1 ]]; then
+                depth_str="${depth} (walked)"
+            else
+                depth_str="—"
+            fi
+            echo "| \`${pkg}\` | ${target_str} | ${resolved_str} | ${depth_str} | \`${ref}\` |"
+        else
+            echo "| \`${pkg}\` | ${target_str} | — | — | *Not resolved* |"
+        fi
+    done
+    echo ""
+}
+
+test_render_step_summary_head_and_walked() {
+    local PIVOT_SHA="a1b2c3d4e5f67890123456789012345678901234"
+    local REVISION="HEAD"
+    local CANDIDATES=(
+        "a1b2c3d4e5f67890123456789012345678901234"
+        "b2c3d4e5f67890123456789012345678901234a1"
+        "e4f5g6h789012345678901234567890123456789"
+    )
+    local PKG_ORDER=("backend" "frontend")
+    unset IMAGE_PATHS IMAGES
+    declare -A IMAGE_PATHS=(
+        ["backend"]="bcgov/quickstart-openshift/backend"
+        ["frontend"]="bcgov/quickstart-openshift/frontend"
+    )
+    declare -A IMAGES=(
+        ["backend"]="a1b2c3d4e5f67890123456789012345678901234|sha256:7f83b1...|2026-01-01T00:00:00Z|10|Backend commit"
+        ["frontend"]="e4f5g6h789012345678901234567890123456789|sha256:39ac21...|2026-01-01T00:00:00Z|11|Frontend commit"
+    )
+
+    local output
+    output=$(render_step_summary)
+
+    local expected=$'### 📦 Image Tracker\n\n| Package | Target Commit | Resolved Commit | Search Depth | Image Reference / Digest |\n| :--- | :--- | :--- | :--- | :--- |\n| `backend` | `a1b2c3d` (HEAD) | `a1b2c3d` | 1 | `ghcr.io/bcgov/quickstart-openshift/backend@sha256:7f83b1...` |\n| `frontend` | `a1b2c3d` (HEAD) | `e4f5g6h` | 3 (walked) | `ghcr.io/bcgov/quickstart-openshift/frontend@sha256:39ac21...` |'
+
+    assert_eq "$output" "$expected" "step summary matches proposed provenance audit table format"
+}
+
+test_render_step_summary_with_missing_and_sha_revision() {
+    local PIVOT_SHA="a1b2c3d4e5f67890123456789012345678901234"
+    local REVISION="a1b2c3d"
+    local CANDIDATES=(
+        "a1b2c3d4e5f67890123456789012345678901234"
+    )
+    local PKG_ORDER=("api" "db")
+    unset IMAGE_PATHS IMAGES
+    declare -A IMAGE_PATHS=(
+        ["api"]="bcgov/myapp/api"
+        ["db"]="bcgov/myapp/db"
+    )
+    declare -A IMAGES=(
+        ["api"]="a1b2c3d4e5f67890123456789012345678901234|sha256:111111|2026-01-01T00:00:00Z||Api commit"
+    )
+
+    local output
+    output=$(render_step_summary)
+
+    local expected=$'### 📦 Image Tracker\n\n| Package | Target Commit | Resolved Commit | Search Depth | Image Reference / Digest |\n| :--- | :--- | :--- | :--- | :--- |\n| `api` | `a1b2c3d` | `a1b2c3d` | 1 | `ghcr.io/bcgov/myapp/api@sha256:111111` |\n| `db` | `a1b2c3d` | — | — | *Not resolved* |'
+
+    assert_eq "$output" "$expected" "step summary handles sha revision and missing packages"
+}
+
 echo "Running image-tracker unit tests..."
 echo "Bash: $BASH_VERSION"
 echo ""
@@ -150,6 +247,8 @@ test_whitespace_only_entries_ignored
 test_space_separated_packages
 test_git_head_resolution
 test_pr_extraction
+test_render_step_summary_head_and_walked
+test_render_step_summary_with_missing_and_sha_revision
 echo ""
 echo "Results: $passed passed, $failed failed"
 [[ $failed -gt 0 ]] && exit 1
