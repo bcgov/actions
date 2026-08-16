@@ -2,11 +2,18 @@ name: Test Actionlint
 
 on:
   workflow_call:
+  pull_request:
+    paths:
+      - 'actionlint/**'
+      - '.github/workflows/test-actionlint.yml'
+      - '.tool-versions'
+      - '.github/workflows/**'
   push:
     branches: [main]
     paths:
       - 'actionlint/**'
       - '.github/workflows/test-actionlint.yml'
+      - '.tool-versions'
   workflow_dispatch:
 
 concurrency:

@@ -2,11 +2,18 @@ name: Test Get PR
 
 on:
   workflow_call:
+  pull_request:
+    paths:
+      - 'get-pr/**'
+      - '.github/workflows/test-get-pr.yml'
+      - '.tool-versions'
+      - '.github/workflows/**'
   push:
     branches: [main]
     paths:
       - 'get-pr/**'
       - '.github/workflows/test-get-pr.yml'
+      - '.tool-versions'
   workflow_dispatch:
 
 permissions: {}

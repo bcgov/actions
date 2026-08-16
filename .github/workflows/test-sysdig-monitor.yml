@@ -2,6 +2,18 @@ name: Test Sysdig Monitor
 
 on:
   workflow_call:
+  pull_request:
+    paths:
+      - 'sysdig-monitor/**'
+      - '.github/workflows/test-sysdig-monitor.yml'
+      - '.tool-versions'
+      - '.github/workflows/**'
+  push:
+    branches: [main]
+    paths:
+      - 'sysdig-monitor/**'
+      - '.github/workflows/test-sysdig-monitor.yml'
+      - '.tool-versions'
   workflow_dispatch:
 
 concurrency:

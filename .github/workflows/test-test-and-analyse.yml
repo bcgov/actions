@@ -2,11 +2,18 @@ name: Test Test and Analyse
 
 on:
   workflow_call:
+  pull_request:
+    paths:
+      - 'test-and-analyse/**'
+      - '.github/workflows/test-test-and-analyse.yml'
+      - '.tool-versions'
+      - '.github/workflows/**'
   push:
     branches: [main]
     paths:
       - 'test-and-analyse/**'
       - '.github/workflows/test-test-and-analyse.yml'
+      - '.tool-versions'
   workflow_dispatch:
 
 concurrency:

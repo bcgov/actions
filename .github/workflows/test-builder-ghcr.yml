@@ -2,6 +2,19 @@ name: Test Builder GHCR
 
 on:
   workflow_call:
+  pull_request:
+    paths:
+      - 'builder-ghcr/**'
+      - '.github/workflows/test-builder-ghcr.yml'
+      - '.tool-versions'
+      - '.github/workflows/**'
+  push:
+    branches: [main]
+    paths:
+      - 'builder-ghcr/**'
+      - '.github/workflows/test-builder-ghcr.yml'
+      - '.tool-versions'
+  workflow_dispatch:
 
 concurrency:
   # Unique per suite: github.workflow is the *caller* name (CI), so sharing
@@ -231,7 +244,7 @@ jobs:
           build_file: builder-ghcr/tests/Dockerfile
           tags: ${{ github.event.number }}-selftest
           sbom: "false"
-          # Both paths gate this suite in ci.yml, so the diff always has a match to find.
+          # Both paths gate this suite, so the diff always has a match to find.
           triggers: |
             builder-ghcr/
             .github/workflows/

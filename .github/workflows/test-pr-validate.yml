@@ -2,11 +2,22 @@ name: Test PR Validate
 
 on:
   workflow_call:
+  pull_request:
+    paths:
+      - 'pr-validate/**'
+      - '.github/workflows/test-pr-validate.yml'
+      - '.github/workflows/.pr-validate.yml'
+      - '.github/workflows/pr-validate.yml'
+      - '.tool-versions'
+      - '.github/workflows/**'
   push:
     branches: [main]
     paths:
       - 'pr-validate/**'
       - '.github/workflows/test-pr-validate.yml'
+      - '.github/workflows/.pr-validate.yml'
+      - '.github/workflows/pr-validate.yml'
+      - '.tool-versions'
   workflow_dispatch:
 
 concurrency:

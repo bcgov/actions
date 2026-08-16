@@ -2,6 +2,18 @@ name: Test Add to PR Descriptions
 
 on:
   workflow_call:
+  pull_request:
+    paths:
+      - 'pr-description-add/**'
+      - '.github/workflows/test-pr-description-add.yml'
+      - '.tool-versions'
+      - '.github/workflows/**'
+  push:
+    branches: [main]
+    paths:
+      - 'pr-description-add/**'
+      - '.github/workflows/test-pr-description-add.yml'
+      - '.tool-versions'
   workflow_dispatch:
 
 permissions: {}

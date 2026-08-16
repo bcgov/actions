@@ -2,11 +2,18 @@ name: Test Diff Triggers
 
 on:
   workflow_call:
+  pull_request:
+    paths:
+      - 'diff-triggers/**'
+      - '.github/workflows/test-diff-triggers.yml'
+      - '.tool-versions'
+      - '.github/workflows/**'
   push:
     branches: [main]
     paths:
       - 'diff-triggers/**'
       - '.github/workflows/test-diff-triggers.yml'
+      - '.tool-versions'
   workflow_dispatch:
 
 permissions: {}
