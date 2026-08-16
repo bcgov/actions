@@ -3,6 +3,10 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Source the actual action script to test real implementation functions directly
+source "${SCRIPT_DIR}/../action.sh"
+
 passed=0
 failed=0
 
@@ -19,28 +23,6 @@ assert_eq() {
         echo "  Actual:   '$actual'"
         failed=$((failed + 1))
     fi
-}
-
-# Mirror of the package-path mapping logic in action.sh.
-# Populates the associative array IMAGE_PATHS in the caller's scope.
-map_packages() {
-    local package_input="$1"
-    local repository="$2"
-    unset IMAGE_PATHS
-    declare -gA IMAGE_PATHS
-    local repo_name="${repository#*/}"
-    local lc_repo="${repository,,}"
-    local pkg
-    # Normalize separators: turn commas and whitespace into newlines, then read line by line
-    while IFS= read -r pkg; do
-        pkg="${pkg//[[:space:]]/}"
-        [[ -z "$pkg" ]] && continue
-        if [[ "${pkg,,}" == "${repo_name,,}" ]]; then
-            IMAGE_PATHS["$pkg"]="${lc_repo}"
-        else
-            IMAGE_PATHS["$pkg"]="${lc_repo}/${pkg,,}"
-        fi
-    done < <(echo "$package_input" | tr ',' '\n' | tr -s '[:space:]' '\n')
 }
 
 test_single_package_nested() {
@@ -82,11 +64,7 @@ test_case_normalization() {
 }
 
 test_empty_input_rejected_in_action() {
-    # The action.sh should reject empty input; we can't run the whole action
-    # here, but we can at least verify our helper yields zero packages.
     map_packages "" "bcgov/myapp"
-    # Dereferencing an empty declared-but-unpopulated -A array under `set -u`
-    # can trip; explicitly guard with ${var+x}.
     local count=0
     if [[ -v IMAGE_PATHS ]]; then count="${#IMAGE_PATHS[@]}"; fi
     assert_eq "$count" "0" "empty input yields no packages"
@@ -137,51 +115,29 @@ test_pr_extraction() {
     assert_eq "$r_pr" "" "Empty PR number handled cleanly"
 }
 
-# -- Step summary rendering tests -------------------------------------------
+# -- Candidate matching tests -----------------------------------------------
 
-render_step_summary() {
-    local target_str
-    if [[ "$REVISION" == "$PIVOT_SHA"* || "$PIVOT_SHA" == "$REVISION"* ]]; then
-        target_str="\`${PIVOT_SHA:0:7}\`"
-    else
-        target_str="\`${PIVOT_SHA:0:7}\` (${REVISION})"
-    fi
+test_matches_candidate_pr_tag_isolation() {
+    local CANDIDATES=(
+        "1111111111111111111111111111111111111111"
+        "2222222222222222222222222222222222222222"
+    )
+    unset PR_MAP PR_NUM_MAP
+    declare -A PR_MAP=()
+    declare -A PR_NUM_MAP=(
+        ["2222222222222222222222222222222222222222"]="99"
+    )
 
-    echo "### 📦 Image Tracker"
-    echo ""
-    echo "| Package | Target Commit | Resolved Commit | Search Depth | Image Reference / Digest |"
-    echo "| :--- | :--- | :--- | :--- | :--- |"
+    local match_cand2
+    match_cand2=$(matches_candidate "" "pr-99" && echo "true" || echo "false")
+    assert_eq "$match_cand2" "true" "matches_candidate succeeds for registered PR tag"
 
-    for pkg in "${PKG_ORDER[@]}"; do
-        local payload="${IMAGES[$pkg]:-}"
-        local path="${IMAGE_PATHS[$pkg]:-}"
-        if [[ -n "$payload" ]]; then
-            local sha digest created pr_num msg
-            IFS='|' read -r sha digest created pr_num msg <<< "$payload"
-            local ref="ghcr.io/${path}@${digest}"
-            local resolved_str="\`${sha:0:7}\`"
-            local depth=0
-            for i in "${!CANDIDATES[@]}"; do
-                if [[ "${CANDIDATES[$i]}" == "$sha"* || "$sha" == "${CANDIDATES[$i]}"* ]]; then
-                    depth=$((i + 1))
-                    break
-                fi
-            done
-            local depth_str
-            if [[ "$depth" -eq 1 ]]; then
-                depth_str="1"
-            elif [[ "$depth" -gt 1 ]]; then
-                depth_str="${depth} (walked)"
-            else
-                depth_str="—"
-            fi
-            echo "| \`${pkg}\` | ${target_str} | ${resolved_str} | ${depth_str} | \`${ref}\` |"
-        else
-            echo "| \`${pkg}\` | ${target_str} | — | — | *Not resolved* |"
-        fi
-    done
-    echo ""
+    local match_unregistered
+    match_unregistered=$(matches_candidate "" "pr-100" && echo "true" || echo "false")
+    assert_eq "$match_unregistered" "false" "matches_candidate rejects unregistered PR tag"
 }
+
+# -- Step summary rendering tests -------------------------------------------
 
 test_render_step_summary_head_and_walked() {
     local PIVOT_SHA="a1b2c3d4e5f67890123456789012345678901234"
@@ -234,6 +190,29 @@ test_render_step_summary_with_missing_and_sha_revision() {
     assert_eq "$output" "$expected" "step summary handles sha revision and missing packages"
 }
 
+test_render_step_summary_escapes_pipes() {
+    local PIVOT_SHA="a1b2c3d4e5f67890123456789012345678901234"
+    local REVISION="feature|branch"
+    local CANDIDATES=(
+        "a1b2c3d4e5f67890123456789012345678901234"
+    )
+    local PKG_ORDER=("app|service")
+    unset IMAGE_PATHS IMAGES
+    declare -A IMAGE_PATHS=(
+        ["app|service"]="bcgov/myapp/app_service"
+    )
+    declare -A IMAGES=(
+        ["app|service"]="a1b2c3d4e5f67890123456789012345678901234|sha256:222222|2026-01-01T00:00:00Z||Pipe commit"
+    )
+
+    local output
+    output=$(render_step_summary)
+
+    local expected=$'### 📦 Image Tracker\n\n| Package | Target Commit | Resolved Commit | Search Depth | Image Reference / Digest |\n| :--- | :--- | :--- | :--- | :--- |\n| `app\|service` | `a1b2c3d` (feature\|branch) | `a1b2c3d` | 1 | `ghcr.io/bcgov/myapp/app_service@sha256:222222` |'
+
+    assert_eq "$output" "$expected" "step summary escapes pipes in revision and package names"
+}
+
 echo "Running image-tracker unit tests..."
 echo "Bash: $BASH_VERSION"
 echo ""
@@ -247,8 +226,10 @@ test_whitespace_only_entries_ignored
 test_space_separated_packages
 test_git_head_resolution
 test_pr_extraction
+test_matches_candidate_pr_tag_isolation
 test_render_step_summary_head_and_walked
 test_render_step_summary_with_missing_and_sha_revision
+test_render_step_summary_escapes_pipes
 echo ""
 echo "Results: $passed passed, $failed failed"
 [[ $failed -gt 0 ]] && exit 1
