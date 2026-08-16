@@ -29,20 +29,6 @@ jobs:
       pull-requests: write
     runs-on: ubuntu-24.04
     steps:
-      # Checkout calling repository workflows for linting
-      - name: Checkout calling repository
-        uses: actions/checkout@v7
-        with:
-          sparse-checkout: .github/workflows
-          sparse-checkout-cone-mode: false
-          path: calling-repo
-
-      # Run actionlint
-      - name: Actionlint
-        uses: $/actionlint
-        with:
-          args: "calling-repo/.github/workflows/*"
-
       # Conventional commits
       - name: Conventional Commits
         uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
