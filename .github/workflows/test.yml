@@ -1,0 +1,827 @@
+name: Test Suite
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: test-suite-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  filter:
+    name: Detect Changes
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      changes: ${{ steps.diff.outputs.changes }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Filter Changed Paths
+        id: diff
+        uses: $/diff-triggers
+        with:
+          filters: |
+            actionlint:
+              - 'actionlint/**'
+            builder-ghcr:
+              - 'builder-ghcr/**'
+            diff-triggers:
+              - 'diff-triggers/**'
+            get-pr:
+              - 'get-pr/**'
+            image-tracker:
+              - 'image-tracker/**'
+            workflow-notifier:
+              - 'workflow-notifier/**'
+            pr-description-add:
+              - 'pr-description-add/**'
+            pr-validate:
+              - 'pr-validate/**'
+              - '.github/workflows/pr-validate.yml'
+              - '.github/workflows/.pr-validate.yml'
+            sysdig-monitor:
+              - 'sysdig-monitor/**'
+            test-and-analyse:
+              - 'test-and-analyse/**'
+            workflows:
+              - '.github/workflows/**'
+              - '.tool-versions'
+
+  # ─── ACTIONLINT ─────────────────────────────────────────────────────────────
+  test-actionlint:
+    name: Test Actionlint
+    needs: [filter]
+    if: contains(fromJSON(needs.filter.outputs.changes), 'actionlint') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Test Auto Checkout
+        uses: $/actionlint
+
+      - name: Assert Workspace Fetched
+        run: |
+          if [ ! -f .github/workflows/test.yml ]; then
+            echo "Error! Auto checkout did not populate the workspace."
+            exit 1
+          fi
+          echo "Auto checkout verified."
+
+      - name: Setup Subdirectory Checkout
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/workflows
+          sparse-checkout-cone-mode: false
+          path: calling-repo
+
+      - name: Test Caller Arranged Checkout
+        uses: $/actionlint
+        with:
+          args: calling-repo/.github/workflows/*
+
+      - name: Assert Caller Checkout Survived
+        run: |
+          if [ ! -f calling-repo/.github/workflows/test.yml ]; then
+            echo "Error! The action cleaned away the caller's subdirectory checkout."
+            exit 1
+          fi
+          echo "Caller-arranged workspace verified intact."
+
+  # ─── BUILDER GHCR ───────────────────────────────────────────────────────────
+  test-builder-ghcr-build:
+    name: Test Builder GHCR (Build)
+    needs: [filter]
+    if: contains(fromJSON(needs.filter.outputs.changes), 'builder-ghcr') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - id: build
+        uses: $/builder-ghcr
+        with:
+          package: backend
+          repository: bcgov/quickstart-openshift
+
+      - if: steps.build.outputs.triggered != 'false'
+        run: |
+          echo "Outputs: ${{ toJSON(steps.build.outputs) }}"
+          if [ -z "${{ steps.build.outputs.digest }}" ]; then
+            echo "Error! Verify outputs."
+            exit 1
+          fi
+          if [ "${{ steps.build.outputs.registry_host }}" != "ghcr.io" ]; then
+            echo "Error! registry_host mismatch: ${{ steps.build.outputs.registry_host }}"
+            exit 1
+          fi
+          if [ -z "${{ steps.build.outputs.image_path }}" ]; then
+            echo "Error! image_path is empty."
+            exit 1
+          fi
+          echo "Verified registry_host and image_path: ${{ steps.build.outputs.registry_host }} and ${{ steps.build.outputs.image_path }}"
+
+  test-builder-ghcr-matrix:
+    name: Test Builder GHCR (No Attestation / Advanced / Single Package / Metadata / Self)
+    needs: [filter]
+    if: contains(fromJSON(needs.filter.outputs.changes), 'builder-ghcr') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Test No Attestation
+        id: no-attestation
+        uses: $/builder-ghcr
+        with:
+          package: frontend
+          build_context: frontend
+          repository: bcgov/quickstart-openshift
+          tags: ${{ github.event.number || github.run_id }}-no-attestation
+          tag_fallback: test
+          triggers: ('frontend/')
+
+      - name: Test Advanced (Root Build Context)
+        id: advanced
+        uses: $/builder-ghcr
+        with:
+          package: api
+          build_context: .
+          build_file: api/Dockerfile
+          repository: bcgov/nr-fom
+          tags: |
+            ${{ github.event.number || github.run_id }}
+            ${{ github.event.number || github.run_id }}-multiline
+            pr-latest
+
+      - name: Test Single Package Repo Format
+        id: single-package
+        uses: $/builder-ghcr
+        with:
+          package: action-builder-ghcr
+          build_context: .
+          build_file: ./Dockerfile
+          repository: bcgov/nr-peach
+          tags: |
+            ${{ github.event.number || github.run_id }}
+            single-package-test
+
+      - name: Test Metadata Tags
+        id: metadata-tags
+        uses: $/builder-ghcr
+        with:
+          package: frontend
+          build_context: frontend
+          repository: bcgov/quickstart-openshift
+          tags: |
+            ${{ github.event.number || github.run_id }}
+            custom-tag
+          tag_fallback: test
+          triggers: ('frontend/')
+          metadata_tags: "true"
+          metadata_flavor: |
+            latest=true
+          metadata_tag_rules: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha
+
+      - name: Test Self Repo
+        id: self-repo
+        uses: $/builder-ghcr
+        with:
+          package: builder-ghcr-selftest
+          build_context: builder-ghcr/tests
+          build_file: builder-ghcr/tests/Dockerfile
+          tags: ${{ github.event.number || github.run_id }}-selftest
+          sbom: "false"
+          triggers: |
+            builder-ghcr/
+            .github/workflows/
+
+  # ─── DIFF TRIGGERS ──────────────────────────────────────────────────────────
+  test-diff-triggers:
+    name: Test Diff Triggers
+    needs: [filter]
+    if: contains(fromJSON(needs.filter.outputs.changes), 'diff-triggers') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Run Parser Self-Check
+        run: node diff-triggers/self-check.js
+
+      - name: Test Match
+        id: match
+        uses: $/diff-triggers
+        with:
+          triggers: |
+            diff-triggers/
+            action.yml
+            .github/
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Test No Match
+        id: no_match
+        uses: $/diff-triggers
+        with:
+          triggers: |
+            path/to/nowhere
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Test Omitted Triggers
+        id: omitted
+        uses: $/diff-triggers
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Test Custom Ref
+        id: custom_ref
+        uses: $/diff-triggers
+        with:
+          triggers: |
+            diff-triggers/
+            action.yml
+            .github/
+          ref: ${{ github.event.pull_request.base.sha || 'HEAD~1' }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Test Formats (Bash / Comma / Semi / JSON)
+        id: formats
+        uses: $/diff-triggers
+        with:
+          triggers: '["diff-triggers/", "action.yml", ".github/"]'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Test Dynamic Filters
+        id: dynamic_filters
+        uses: $/diff-triggers
+        with:
+          filters: |
+            diff-triggers:
+              - 'diff-triggers/**'
+              - 'action.yml'
+              - '.github/'
+            non-existent:
+              - 'non-existent-path/**'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Assert Outputs
+        run: |
+          echo "Match: ${{ steps.match.outputs.triggered }} (expected: true)"
+          echo "No-Match: ${{ steps.no_match.outputs.triggered }} (expected: false)"
+          echo "Omitted: ${{ steps.omitted.outputs.triggered }} (expected: true)"
+          echo "Custom Ref: ${{ steps.custom_ref.outputs.triggered }} (expected: true)"
+          echo "Dynamic matched: ${{ steps.dynamic_filters.outputs['diff-triggers'] }} (expected: true)"
+          echo "Dynamic unmatched: ${{ steps.dynamic_filters.outputs['non-existent'] }} (expected: false)"
+          echo "Dynamic changes: ${{ steps.dynamic_filters.outputs.changes }}"
+
+          if [[ "${{ steps.match.outputs.triggered }}" != "true" ]] || \
+             [[ "${{ steps.no_match.outputs.triggered }}" != "false" ]] || \
+             [[ "${{ steps.omitted.outputs.triggered }}" != "true" ]] || \
+             [[ "${{ steps.custom_ref.outputs.triggered }}" != "true" ]] || \
+             [[ "${{ steps.dynamic_filters.outputs['diff-triggers'] }}" != "true" ]] || \
+             [[ "${{ steps.dynamic_filters.outputs['non-existent'] }}" != "false" ]] || \
+             [[ '${{ steps.dynamic_filters.outputs.changes }}' != '["diff-triggers"]' ]]; then
+            echo "Error: Diff-triggers output assertion failed."
+            exit 1
+          fi
+          echo "All diff-triggers assertions passed."
+
+      - name: Test Existing Checkout Preservation
+        run: echo sentinel >> README.md
+
+      - uses: $/diff-triggers
+        with:
+          triggers: |
+            diff-triggers/
+            .github/
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Assert Existing Checkout Survived
+        run: |
+          if ! grep -q sentinel README.md; then
+            echo "Error! diff-triggers re-cloned over caller checkout."
+            exit 1
+          fi
+          echo "Verified: caller's checkout left intact."
+
+  # ─── GET PR ─────────────────────────────────────────────────────────────────
+  test-get-pr:
+    name: Test Get PR
+    needs: [filter]
+    if: contains(fromJSON(needs.filter.outputs.changes), 'get-pr') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Run Get PR Action
+        id: vars
+        uses: $/get-pr
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify PR Number
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ -z "${{ steps.vars.outputs.pr }}" ]; then
+            echo "Error: Expected PR number on pull_request event."
+            exit 1
+          fi
+          echo "PR: ${{ steps.vars.outputs.pr }}"
+
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Run Scenario Tests
+        run: |
+          node -e "
+            const { execSync } = require('child_process');
+            console.log('Running Get PR Scenarios...');
+            // Pull Request event simulation
+            const prOut = execSync('node get-pr/index.js', {
+              env: {
+                ...process.env,
+                TEST_EVENT_NAME: 'pull_request',
+                TEST_EVENT_PATH: '',
+                GITHUB_EVENT_PATH: '',
+                GITHUB_EVENT_NUMBER: '42'
+              }
+            }).toString();
+            console.log(prOut);
+            if (!prOut.includes('PR: 42')) throw new Error('Failed pull_request test');
+
+            // Merge Group simulation
+            const mgOut = execSync('node get-pr/index.js', {
+              env: {
+                ...process.env,
+                TEST_EVENT_NAME: 'merge_group',
+                TEST_EVENT_PATH: '',
+                GITHUB_EVENT_PATH: '',
+                MERGE_GROUP_HEAD_REF: 'refs/heads/gh-readonly-queue/main/pr-99-abcdef'
+              }
+            }).toString();
+            console.log(mgOut);
+            if (!mgOut.includes('PR: 99')) throw new Error('Failed merge_group test');
+            console.log('All scenarios passed.');
+          "
+
+  # ─── IMAGE TRACKER ──────────────────────────────────────────────────────────
+  test-image-tracker:
+    name: Test Image Tracker (${{ matrix.repo }} / ${{ matrix.package }})
+    needs: [filter]
+    if: contains(fromJSON(needs.filter.outputs.changes), 'image-tracker') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+      pull-requests: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - repo: bcgov/quickstart-openshift
+            package: frontend
+          - repo: bcgov/quickstart-openshift
+            package: backend
+          - repo: miniontech/vexilon
+            package: agnav
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Run Unit Tests
+        run: bash image-tracker/tests/unit.sh
+
+      - name: Validate action.yml
+        run: |
+          test -f image-tracker/action.yml
+          pip install pyyaml -q
+          python3 -c "import yaml; yaml.safe_load(open('image-tracker/action.yml'))"
+
+      - name: Checkout target repo
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ matrix.repo }}
+          path: target
+          fetch-depth: 0
+
+      - id: discover
+        name: Discover labeled image for package
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_REPO: ${{ matrix.repo }}
+          PACKAGE: ${{ matrix.package }}
+        run: |
+          set -euo pipefail
+          lc_repo=$(echo "${TARGET_REPO}" | tr '[:upper:]' '[:lower:]')
+          image_path="${lc_repo}/${PACKAGE}"
+          accept='application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json'
+          accept_m='application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json'
+
+          probe_tag() {
+            local tag="$1" b="$2"
+            local resp body mtype child cfg rev mdigest
+            resp=$(curl -sS -i -H "Authorization: Bearer ${b}" -H "Accept: ${accept}" \
+              "https://ghcr.io/v2/${image_path}/manifests/${tag}")
+            mdigest=$(printf '%s' "$resp" \
+              | awk 'BEGIN{IGNORECASE=1}/^docker-content-digest:/{gsub(/\r/,""); print $2; exit}')
+            body=$(printf '%s' "$resp" | awk 'BEGIN{p=0}/^\r?$/{p=1;next}p{print}')
+            mtype=$(printf '%s' "$body" | jq -r '.mediaType // empty')
+            if [[ "$mtype" == *index* || "$mtype" == *manifest.list* ]]; then
+              child=$(printf '%s' "$body" | jq -r '
+                (.manifests[] | select(.platform.architecture=="amd64" and (.platform.os//"")!="unknown") | .digest),
+                (.manifests[0].digest)' 2>/dev/null | head -1)
+              body=$(curl -sS -H "Authorization: Bearer ${b}" -H "Accept: ${accept_m}" \
+                "https://ghcr.io/v2/${image_path}/manifests/${child}" 2>/dev/null || true)
+            fi
+            cfg=$(printf '%s' "$body" | jq -r '.config.digest // empty')
+            [[ -z "$cfg" ]] && return 0
+            rev=$(curl -sSL -H "Authorization: Bearer ${b}" \
+              "https://ghcr.io/v2/${image_path}/blobs/${cfg}" \
+              | jq -r '.config.Labels["org.opencontainers.image.revision"] // empty' 2>/dev/null || true)
+            [[ -z "$rev" || "$rev" == "null" ]] && return 0
+            printf '%s\t%s' "$rev" "$mdigest"
+          }
+
+          bearer=$(curl -sS -u "x:${GH_TOKEN}" \
+            "https://ghcr.io/token?scope=repository:${image_path}:pull" | jq -r '.token')
+
+          found_rev=""
+          found_digest=""
+          pr_num=""
+
+          for cand in $(cd target && git rev-list --topo-order -n 20 HEAD); do
+            short_sha="${cand:0:7}"
+            pr_num=$(GH_TOKEN="$GH_TOKEN" gh api "/repos/${TARGET_REPO}/commits/${cand}/pulls" --jq 'if length > 0 then .[0].number else empty end' 2>/dev/null || true)
+
+            result=$(probe_tag "sha-${short_sha}" "$bearer" || true)
+            if [[ -z "$result" ]]; then
+              result=$(probe_tag "sha-${cand}" "$bearer" || true)
+            fi
+            if [[ -z "$result" && -n "$pr_num" ]]; then
+              result=$(probe_tag "pr-${pr_num}" "$bearer" || true)
+            fi
+
+            if [[ -n "$result" ]]; then
+              found_rev="${result%%$'\t'*}"
+              found_digest="${result##*$'\t'}"
+              break
+            fi
+          done
+
+          if [[ -z "$found_rev" ]]; then
+            echo "::error::No labeled image found for ${PACKAGE} in ${TARGET_REPO}"
+            exit 1
+          fi
+
+          (
+            cd target
+            git fetch --quiet origin "${found_rev}" 2>/dev/null || true
+          )
+
+          echo "Ground truth: pkg=${PACKAGE} commit=${found_rev} digest=${found_digest} pr=${pr_num}"
+          {
+            echo "revision=${found_rev}"
+            echo "digest=${found_digest}"
+            echo "pr=${pr_num}"
+          } >> "$GITHUB_OUTPUT"
+
+      - id: track
+        name: Resolve via image-tracker action
+        uses: $/image-tracker
+        with:
+          package: ${{ matrix.package }}
+          revision: ${{ steps.discover.outputs.revision }}
+          repository: ${{ matrix.repo }}
+          dir: target
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify action outputs
+        env:
+          TARGET_REPO: ${{ matrix.repo }}
+          PACKAGE: ${{ matrix.package }}
+          EXPECTED_DIGEST: ${{ steps.discover.outputs.digest }}
+          EXPECTED_PR: ${{ steps.discover.outputs.pr }}
+          GOT_DIGEST: ${{ steps.track.outputs.digest }}
+          GOT_IMAGE: ${{ steps.track.outputs.image }}
+          GOT_IMAGES: ${{ steps.track.outputs.images }}
+          GOT_PR: ${{ steps.track.outputs.pr }}
+        run: |
+          set -euo pipefail
+          lc_repo=$(echo "$TARGET_REPO" | tr '[:upper:]' '[:lower:]')
+          image_path="${lc_repo}/${PACKAGE}"
+
+          echo "Got digest:  ${GOT_DIGEST}"
+          echo "Got image:   ${GOT_IMAGE}"
+          echo "Got images:  ${GOT_IMAGES}"
+          echo "Got pr:      ${GOT_PR}"
+          echo "Expected:    ${EXPECTED_DIGEST}"
+
+          if [[ "$GOT_DIGEST" != "$EXPECTED_DIGEST" ]]; then
+            echo "::error::${PACKAGE}: digest mismatch: got ${GOT_DIGEST} expected ${EXPECTED_DIGEST}"
+            exit 1
+          fi
+          if [[ "$GOT_IMAGE" != "ghcr.io/${image_path}@${EXPECTED_DIGEST}" ]]; then
+            echo "::error::${PACKAGE}: image ref wrong: got ${GOT_IMAGE}"
+            exit 1
+          fi
+          if ! echo "$GOT_IMAGES" | jq -e --arg k "$PACKAGE" '.[$k]' >/dev/null 2>&1; then
+            echo "::error::${PACKAGE}: images JSON missing key ${PACKAGE}"
+            exit 1
+          fi
+          if [[ -n "$EXPECTED_PR" && "$GOT_PR" != "$EXPECTED_PR" ]]; then
+            echo "::error::${PACKAGE}: pr mismatch: got '${GOT_PR}' expected '${EXPECTED_PR}'"
+            exit 1
+          fi
+          echo "✅ ${PACKAGE}: resolved correctly"
+
+  # ─── WORKFLOW NOTIFIER ──────────────────────────────────────────────────────
+  test-notifier:
+    name: Test Workflow Notifier
+    needs: [filter]
+    if: contains(fromJSON(needs.filter.outputs.changes), 'workflow-notifier') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/CODEOWNERS
+          sparse-checkout-cone-mode: false
+
+      - name: Dry Run - Simulate Failure Notification
+        id: dry_run
+        uses: $/workflow-notifier
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          title: "[DRY RUN] Simulating a failure for testing"
+          body: "This is a dry run test of the notifier action."
+          dry_run: true
+
+      - name: Verify Outputs
+        run: |
+          echo "Output: issue_number = ${{ steps.dry_run.outputs.issue_number }}"
+          echo "Output: assignees    = ${{ steps.dry_run.outputs.assignees }}"
+          if [ "${{ steps.dry_run.outputs.issue_number }}" != "0" ]; then
+            echo "::error::Dry run should have returned issue_number 0"
+            exit 1
+          fi
+          if [ -z "${{ steps.dry_run.outputs.assignees }}" ]; then
+            echo "::error::No assignees detected"
+            exit 1
+          fi
+          echo "All notifier tests passed."
+
+  # ─── PR DESCRIPTION ADD ────────────────────────────────────────────────────
+  test-pr-description-add:
+    name: Test PR Description Add
+    needs: [filter]
+    if: contains(fromJSON(needs.filter.outputs.changes), 'pr-description-add') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: $/pr-description-add
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          add_markdown: "Automated Integration Test Verification"
+
+  # ─── PR VALIDATE ───────────────────────────────────────────────────────────
+  test-pr-validate:
+    name: Test PR Validate
+    needs: [filter]
+    if: contains(fromJSON(needs.filter.outputs.changes), 'pr-validate') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Test Default Inputs
+        uses: $/pr-validate
+        with:
+          conventional_commits: "false"
+          reject_forks: "false"
+
+      - name: Test Disabled Conventional Commits
+        uses: $/pr-validate
+        with:
+          conventional_commits: "false"
+
+      - name: Test Disabled Fork Rejection
+        uses: $/pr-validate
+        with:
+          reject_forks: "false"
+          conventional_commits: "false"
+
+  # ─── SYSDIG MONITOR ────────────────────────────────────────────────────────
+  test-sysdig-monitor:
+    name: Test Sysdig Monitor
+    needs: [filter]
+    if: contains(fromJSON(needs.filter.outputs.changes), 'sysdig-monitor') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Run Unit Tests
+        run: bash sysdig-monitor/tests/unit.sh
+
+      - name: Validate action.yml
+        run: |
+          test -f sysdig-monitor/action.yml
+          pip install pyyaml -q
+          python3 -c "import yaml; yaml.safe_load(open('sysdig-monitor/action.yml'))"
+
+      - name: Validate channel template
+        run: |
+          python3 -c "import json; json.load(open('sysdig-monitor/templates/channel.json'))"
+
+      - name: Action no-ops when token is empty
+        uses: $/sysdig-monitor
+        with:
+          sysdig_api_token: ''
+          oc_namespace: abc123-prod
+          app: dry-run-app
+
+  # ─── TEST AND ANALYSE ───────────────────────────────────────────────────────
+  test-test-and-analyse:
+    name: Test Test and Analyse (${{ matrix.name }})
+    needs: [filter]
+    if: contains(fromJSON(needs.filter.outputs.changes), 'test-and-analyse') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: write
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [backend-triggered, backend-not-triggered, frontend-basic, frontend-no-triggers, waste-frontend, java-basic, fom-autodiscover]
+        include:
+          - name: backend-triggered
+            dir: backend
+            triggers: ""
+            expected_triggered: true
+            repository: bcgov/quickstart-openshift
+            test_command: npm install --no-package-lock && npm run test:cov
+            exercise_sonar: true
+          - name: backend-not-triggered
+            dir: backend
+            triggers: "('not-existent-path/')"
+            expected_triggered: false
+            repository: bcgov/quickstart-openshift
+            test_command: npm install --no-package-lock && npm run test:cov
+          - name: frontend-basic
+            dir: frontend
+            triggers: ""
+            expected_triggered: true
+            repository: bcgov/quickstart-openshift
+            test_command: npm install --no-package-lock && npm run test:cov
+          - name: frontend-no-triggers
+            dir: frontend
+            expected_triggered: true
+            dep_scan: off
+            test_command: npm install --no-package-lock && npm run test:cov
+            repository: bcgov/quickstart-openshift
+          - name: waste-frontend
+            dir: frontend
+            expected_triggered: true
+            dep_scan: warn
+            test_command: echo "Good enough for testing knip!"
+            repository: bcgov/nr-waste-plus
+          - name: java-basic
+            dir: backend
+            language: java
+            java_version: "17"
+            triggers: ""
+            expected_triggered: true
+            repository: bcgov/nr-forest-client
+            test_command: timeout 10m mvn -B verify -P all-tests -DskipTests
+            cache: "none"
+          - name: fom-autodiscover
+            dir: ""
+            triggers: ""
+            expected_triggered: true
+            repository: bcgov/nr-fom
+            test_command: echo "Testing autodiscover on nr-fom"
+            expected_config: ".github/knip.json"
+            cache: "none"
+    steps:
+      - id: action
+        uses: $/test-and-analyse
+        with:
+          checkout_path: test-project
+          commands: |
+            ${{ matrix.test_command }}
+          dir: test-project/${{ matrix.dir }}
+          node_version: "24"
+          language: ${{ matrix.language || 'node' }}
+          java_version: ${{ matrix.java_version || '21' }}
+          repository: ${{ matrix.repository }}
+          triggers: ${{ matrix.triggers }}
+          sonar_token: ${{ matrix.exercise_sonar == true && secrets.SONAR_TOKEN || '' }}
+          require_sonar: 'false'
+          cache: ${{ matrix.cache || 'npm' }}
+
+      - name: Verify trigger behavior
+        run: |
+          expected="${{ matrix.expected_triggered }}"
+          if [ "${{ matrix.name }}" = "backend-not-triggered" ] && [ "${{ github.event_name }}" != "pull_request" ]; then
+            expected="true"
+          fi
+          actual="${{ steps.action.outputs.triggered }}"
+          if [ "$actual" != "$expected" ]; then
+            echo "❌ ${{ matrix.name }}: expected triggered=$expected, got $actual"
+            exit 1
+          fi
+          echo "✅ ${{ matrix.name }}: expected triggered=$expected, got $actual"
+
+      - name: Verify discovered knip config
+        if: matrix.expected_config != ''
+        run: |
+          CONFIG_OUT="${{ steps.action.outputs.knip_config }}"
+          EXPECTED_SUFFIX="${{ matrix.expected_config }}"
+          if [[ "$CONFIG_OUT" != *"$EXPECTED_SUFFIX" ]]; then
+            echo "❌ Expected knip_config output to end with '$EXPECTED_SUFFIX', got '$CONFIG_OUT'"
+            exit 1
+          fi
+          echo "✅ Discovered Knip config correctly matched: $CONFIG_OUT"
+
+  test-test-and-analyse-shallow:
+    name: Test Test and Analyse (Existing Shallow Checkout)
+    needs: [filter]
+    if: contains(fromJSON(needs.filter.outputs.changes), 'test-and-analyse') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - run: echo sentinel >> README.md
+
+      - uses: $/test-and-analyse
+        with:
+          commands: echo "Nothing to run; this cell is about the checkout."
+          dir: .
+          cache: none
+          dep_scan: off
+
+      - name: Verify history deepened in place
+        run: |
+          if [ "$(git rev-parse --is-shallow-repository)" != "false" ]; then
+            echo "❌ History is still shallow"
+            exit 1
+          fi
+          if ! grep -q sentinel README.md; then
+            echo "❌ The action re-cloned over caller checkout"
+            exit 1
+          fi
+          echo "✅ Deepened in place, caller's checkout intact."
+
+  # ─── RESULTS AGGREGATOR ─────────────────────────────────────────────────────
+  results:
+    name: PR Results
+    needs:
+      - filter
+      - test-actionlint
+      - test-builder-ghcr-build
+      - test-builder-ghcr-matrix
+      - test-diff-triggers
+      - test-get-pr
+      - test-image-tracker
+      - test-notifier
+      - test-pr-description-add
+      - test-pr-validate
+      - test-sysdig-monitor
+      - test-test-and-analyse
+      - test-test-and-analyse-shallow
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check Results
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: |
+          echo "CI validation failed."
+          exit 1
+      - name: Success
+        run: echo "All test suites completed successfully."
