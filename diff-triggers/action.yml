@@ -36,70 +36,9 @@ inputs:
 outputs:
   triggered:
     description: Boolean result of triggers
-    value: ${{ steps.diff.outputs.triggered }}
-  actionlint:
-    description: Dynamic filter output for actionlint
-    value: ${{ steps.diff.outputs.actionlint }}
-  builder-ghcr:
-    description: Dynamic filter output for builder-ghcr
-    value: ${{ steps.diff.outputs['builder-ghcr'] }}
-  diff-triggers:
-    description: Dynamic filter output for diff-triggers
-    value: ${{ steps.diff.outputs['diff-triggers'] }}
-  get-pr:
-    description: Dynamic filter output for get-pr
-    value: ${{ steps.diff.outputs['get-pr'] }}
-  image-tracker:
-    description: Dynamic filter output for image-tracker
-    value: ${{ steps.diff.outputs['image-tracker'] }}
-  pr-description-add:
-    description: Dynamic filter output for pr-description-add
-    value: ${{ steps.diff.outputs['pr-description-add'] }}
-  pr-validate:
-    description: Dynamic filter output for pr-validate
-    value: ${{ steps.diff.outputs['pr-validate'] }}
-  sysdig-monitor:
-    description: Dynamic filter output for sysdig-monitor
-    value: ${{ steps.diff.outputs['sysdig-monitor'] }}
-  test-and-analyse:
-    description: Dynamic filter output for test-and-analyse
-    value: ${{ steps.diff.outputs['test-and-analyse'] }}
-  workflow-notifier:
-    description: Dynamic filter output for workflow-notifier
-    value: ${{ steps.diff.outputs['workflow-notifier'] }}
-  workflows:
-    description: Dynamic filter output for workflows
-    value: ${{ steps.diff.outputs.workflows }}
+  changes:
+    description: JSON array of matching filter names when using filters input
 
 runs:
-  using: composite
-  steps:
-    # Fetch only when the workspace holds no repository; index.js deepens shallow
-    # history itself. clean: false so this can never delete a workspace it did
-    # not create. Second hashFiles pattern catches worktrees and submodules,
-    # where .git is a gitdir file rather than a directory.
-    - name: Checkout repository
-      uses: actions/checkout@v7
-      if: hashFiles('.git/HEAD', '.git') == ''
-      with:
-        clean: false
-        token: ${{ inputs.github_token }}
-        repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
-        ref: ${{ github.event.pull_request.head.sha || github.ref }}
-        fetch-depth: ${{ (github.event.pull_request && !inputs.ref) && 1 || 0 }}
-
-    - id: diff
-      shell: bash
-      env:
-        INPUT_TRIGGERS: ${{ inputs.triggers }}
-        INPUT_FILTERS: ${{ inputs.filters }}
-        INPUT_REF: ${{ inputs.ref }}
-        INPUT_ANNOTATIONS: ${{ inputs.annotations }}
-        INPUT_GITHUB_TOKEN: ${{ inputs.github_token }}
-        GITHUB_WORKFLOW: ${{ github.workflow }}
-        GITHUB_JOB: ${{ github.job }}
-        EVENT_PR_BASE_DEFAULT_BRANCH: ${{ github.event.pull_request.base.repo.default_branch }}
-        EVENT_PR_BASE_CLONE_URL: ${{ github.event.pull_request.base.repo.clone_url }}
-        EVENT_REPOSITORY_CLONE_URL: ${{ github.event.repository.clone_url }}
-      run: node ${{ github.action_path }}/index.js
-
+  using: node24
+  main: index.js

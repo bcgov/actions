@@ -141,6 +141,28 @@ jobs:
           triggers: '["diff-triggers/", "action.yml", ".github/"]'
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
+  test-dynamic-filters:
+    name: "Test Dynamic Filters (Expected: arbitrary keys work)"
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      diff_triggers: ${{ steps.test.outputs['diff-triggers'] }}
+      non_existent: ${{ steps.test.outputs['non-existent'] }}
+      changes: ${{ steps.test.outputs.changes }}
+    steps:
+      - uses: $/diff-triggers
+        id: test
+        with:
+          filters: |
+            diff-triggers:
+              - 'diff-triggers/**'
+              - 'action.yml'
+              - '.github/'
+            non-existent:
+              - 'non-existent-path/**'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
   # Every other job here runs with an empty workspace, so they only cover the
   # half where the action fetches. This covers the half where it must not.
   test-existing-checkout:
@@ -176,7 +198,7 @@ jobs:
 
   verify-results:
     name: Verify Results
-    needs: [self-check, test-triggers-match, test-triggers-no-match, test-triggers-omitted, test-custom-ref, test-legacy-bash-format, test-comma-separated-triggers, test-semicolon-separated-triggers, test-json-array-triggers, test-existing-checkout]
+    needs: [self-check, test-triggers-match, test-triggers-no-match, test-triggers-omitted, test-custom-ref, test-legacy-bash-format, test-comma-separated-triggers, test-semicolon-separated-triggers, test-json-array-triggers, test-dynamic-filters, test-existing-checkout]
     runs-on: ubuntu-24.04
     steps:
       - name: Assert outputs
@@ -207,6 +229,8 @@ jobs:
           echo "Comma-separated triggered: ${{ needs.test-comma-separated-triggers.outputs.triggered }} (expected: true)"
           echo "Semicolon-separated triggered: ${{ needs.test-semicolon-separated-triggers.outputs.triggered }} (expected: true)"
           echo "JSON Array triggered: ${{ needs.test-json-array-triggers.outputs.triggered }} (expected: true)"
+          echo "Dynamic filter diff-triggers triggered: ${{ needs.test-dynamic-filters.outputs.diff_triggers }} (expected: true)"
+          echo "Dynamic filter non-existent triggered: ${{ needs.test-dynamic-filters.outputs.non_existent }} (expected: false)"
           
           if [[ "${{ needs.test-legacy-bash-format.outputs.triggered }}" != "true" ]]; then
             echo "Error: test-legacy-bash-format failed"
@@ -222,6 +246,14 @@ jobs:
           fi
           if [[ "${{ needs.test-json-array-triggers.outputs.triggered }}" != "true" ]]; then
             echo "Error: test-json-array-triggers failed"
+            exit 1
+          fi
+          if [[ "${{ needs.test-dynamic-filters.outputs.diff_triggers }}" != "true" ]]; then
+            echo "Error: test-dynamic-filters (diff-triggers) failed"
+            exit 1
+          fi
+          if [[ "${{ needs.test-dynamic-filters.outputs.non_existent }}" != "false" ]]; then
+            echo "Error: test-dynamic-filters (non-existent) failed"
             exit 1
           fi
           echo "All diff-triggers integration test cases passed successfully!"
