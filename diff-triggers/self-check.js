@@ -38,4 +38,13 @@ for (const p of inline.frontend) {
   assert.ok(!p.includes('[') && !p.includes(']'), `bracket leaked into pathspec: ${p}`);
 }
 
+// Reserved output keys ('triggered', 'changes') must throw an error.
+assert.throws(() => {
+  parseFilters('triggered: [foo/]\n');
+}, /Filter name 'triggered' is reserved/);
+
+assert.throws(() => {
+  parseFilters('changes: [bar/]\n');
+}, /Filter name 'changes' is reserved/);
+
 console.log('diff-triggers self-check: ok');

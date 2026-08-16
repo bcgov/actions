@@ -93,6 +93,8 @@ function parseTriggers(raw) {
   return tokens;
 }
 
+const RESERVED_OUTPUT_KEYS = new Set(['triggered', 'changes']);
+
 /**
  * Parse filters mapping from a YAML-like multiline string.
  * Maps keys to arrays of path patterns.
@@ -114,6 +116,10 @@ function parseFilters(raw) {
       const colonIndex = trimmed.indexOf(':');
       const key = trimmed.slice(0, colonIndex).trim();
       const val = trimmed.slice(colonIndex + 1).trim();
+
+      if (RESERVED_OUTPUT_KEYS.has(key)) {
+        throw new Error(`Filter name '${key}' is reserved by diff-triggers outputs ('triggered', 'changes'). Please choose a different key.`);
+      }
 
       currentKey = key;
       filters[currentKey] = [];

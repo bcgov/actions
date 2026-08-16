@@ -256,5 +256,9 @@ jobs:
             echo "Error: test-dynamic-filters (non-existent) failed"
             exit 1
           fi
+          if [[ '${{ needs.test-dynamic-filters.outputs.changes }}' != '["diff-triggers"]' ]]; then
+            echo "Error: test-dynamic-filters (changes) failed"
+            exit 1
+          fi
           echo "All diff-triggers integration test cases passed successfully!"
 

@@ -65,7 +65,7 @@ The action supports multiple formats for the `triggers` input:
 # Output
 
 - `triggered`: Boolean string (`'true'` or `'false'`) indicating if any triggers matched.
-- `<key>`: When using the `filters` input, dynamic boolean string outputs (`'true'` or `'false'`) for each configured filter key.
+- `<key>`: When using the `filters` input, dynamic boolean string outputs (`'true'` or `'false'`) for each configured filter key (`triggered` and `changes` are reserved and cannot be used as filter keys).
 - `changes`: When using the `filters` input, a JSON array of all filter keys that matched changes (e.g. `["backend", "frontend"]`).
 
 # Logging & Visibility
