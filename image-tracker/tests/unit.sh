@@ -213,6 +213,66 @@ test_render_step_summary_escapes_pipes() {
     assert_eq "$output" "$expected" "step summary escapes pipes in revision and package names"
 }
 
+test_parse_auth_header_ghcr() {
+    local parsed
+    parsed=$(parse_auth_header 'www-authenticate: Bearer realm="https://ghcr.io/token",service="ghcr.io",scope="repository:user/image:pull"')
+    assert_eq "$parsed" "https://ghcr.io/token|ghcr.io" "parse auth header for GHCR"
+}
+
+test_parse_auth_header_docker_hub() {
+    local parsed
+    parsed=$(parse_auth_header 'WWW-Authenticate: Bearer realm="https://auth.docker.io/token",service="registry.docker.io"')
+    assert_eq "$parsed" "https://auth.docker.io/token|registry.docker.io" "parse auth header for Docker Hub"
+}
+
+test_parse_auth_header_quay() {
+    local parsed
+    parsed=$(parse_auth_header 'Www-Authenticate: Bearer realm="https://quay.io/v2/auth",service="quay.io"')
+    assert_eq "$parsed" "https://quay.io/v2/auth|quay.io" "parse auth header for Quay"
+}
+
+test_parse_auth_header_artifactory() {
+    local parsed
+    parsed=$(parse_auth_header 'www-authenticate: Bearer realm="https://artifactory.corp/v2/token"')
+    assert_eq "$parsed" "https://artifactory.corp/v2/token|" "parse auth header without service"
+}
+
+test_parse_auth_header_unquoted_and_case() {
+    local parsed
+    parsed=$(parse_auth_header 'WWW-AUTHENTICATE: Bearer REALM=https://example.com/token,SERVICE=example.com')
+    assert_eq "$parsed" "https://example.com/token|example.com" "parse unquoted auth header with upper case keys"
+}
+
+test_parse_auth_header_no_realm() {
+    local parsed
+    parsed=$(parse_auth_header 'www-authenticate: Basic realm="foo"')
+    assert_eq "$parsed" "foo|" "parse auth header basic realm"
+}
+
+test_render_step_summary_custom_registry() {
+    local REGISTRY="registry-1.docker.io"
+    local PIVOT_SHA="a1b2c3d4e5f67890123456789012345678901234"
+    local REVISION="HEAD"
+    local CANDIDATES=(
+        "a1b2c3d4e5f67890123456789012345678901234"
+    )
+    local PKG_ORDER=("backend")
+    unset IMAGE_PATHS IMAGES
+    declare -A IMAGE_PATHS=(
+        ["backend"]="bcgov/quickstart-openshift/backend"
+    )
+    declare -A IMAGES=(
+        ["backend"]="a1b2c3d4e5f67890123456789012345678901234|sha256:7f83b1...|2026-01-01T00:00:00Z|10|Backend commit"
+    )
+
+    local output
+    output=$(render_step_summary)
+
+    local expected=$'### 📦 Image Tracker\n\n| Package | Target Commit | Resolved Commit | Search Depth | Image Reference / Digest |\n| :--- | :--- | :--- | :--- | :--- |\n| `backend` | `a1b2c3d` (HEAD) | `a1b2c3d` | 1 | `registry-1.docker.io/bcgov/quickstart-openshift/backend@sha256:7f83b1...` |'
+
+    assert_eq "$output" "$expected" "step summary uses custom registry host in image reference"
+}
+
 echo "Running image-tracker unit tests..."
 echo "Bash: $BASH_VERSION"
 echo ""
@@ -227,9 +287,16 @@ test_space_separated_packages
 test_git_head_resolution
 test_pr_extraction
 test_matches_candidate_pr_tag_isolation
+test_parse_auth_header_ghcr
+test_parse_auth_header_docker_hub
+test_parse_auth_header_quay
+test_parse_auth_header_artifactory
+test_parse_auth_header_unquoted_and_case
+test_parse_auth_header_no_realm
 test_render_step_summary_head_and_walked
 test_render_step_summary_with_missing_and_sha_revision
 test_render_step_summary_escapes_pipes
+test_render_step_summary_custom_registry
 echo ""
 echo "Results: $passed passed, $failed failed"
 [[ $failed -gt 0 ]] && exit 1

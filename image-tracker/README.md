@@ -1,6 +1,6 @@
 # Image Tracker
 
-Resolve immutable GHCR image **digests** for a given git commit by reading the
+Resolve immutable OCI image **digests** for a given git commit by reading the
 `org.opencontainers.image.revision` OCI label embedded in each image's config.
 
 ## Permissions
@@ -23,8 +23,10 @@ Every OCI-compliant image has a config blob. Builds that use
 `org.opencontainers.image.revision` — the git commit SHA that produced the
 image.
 
-config, and returns the **manifest digest** (`sha256:...`) of the image whose
-revision label matches your target commit. 
+The action resolves the git history of your target revision, queries the target
+OCI registry (GHCR by default, or any generic OCI registry via standard `Www-Authenticate`
+token discovery), and returns the **manifest digest** (`sha256:...`) of the image whose
+revision label matches your target commit.
 
 Tag names (`sha-<7>`, `pr-123`, `latest`, etc.) are used as search hints, but the **label is the sole authority**. Even if a tag matches your SHA, the tracker will verify the internal OCI label before returning the digest.
 
@@ -67,6 +69,17 @@ Multiple packages:
     echo "frontend: $(echo '${{ steps.tracker.outputs.images }}' | jq -r '.frontend')"
 ```
 
+Custom OCI Registry (e.g. Docker Hub, Artifactory, AWS ECR, Quay):
+
+```yaml
+- id: tracker
+  uses: bcgov/actions/image-tracker@vX.Y.Z
+  with:
+    registry: registry-1.docker.io
+    repository: myorg/myrepo
+    package: app
+```
+
 Resolve a non-HEAD revision (tag, branch, or SHA):
 
 ```yaml
@@ -97,22 +110,23 @@ External repository:
 | Input        | Required | Default              | Description                                                                    |
 | ------------ | -------- | -------------------- | ------------------------------------------------------------------------------ |
 | `package`    | ✔        | —                    | One or more package names (comma/space/newline separated).                     |
+| `registry`   |          | `ghcr.io`            | OCI registry host (e.g. `ghcr.io`, `registry-1.docker.io`, `quay.io`).         |
 | `revision`   |          | `HEAD`               | Git revision (SHA, branch, or tag) to resolve against.                         |
 | `repository` |          | current repo         | Repository owning the images.                                                  |
 | `dir`        |          | `.`                  | Working directory containing the git repository.                               |
-| `github_token` |        | `github.token`       | GitHub token used to mint a GHCR bearer token.                                 |
+| `github_token` |        | `github.token`       | GitHub token or registry token for authentication.                             |
 | `max_tags`   |          | `500`                | Upper bound on tags inspected per package before failing.                      |
 | `max_depth`  |          | `1`                  | Max number of commits back in history to search for an image.                  |
 
 Package-to-image-path convention:
-- If package name == repository name → `ghcr.io/<owner>/<repo>`
-- Otherwise → `ghcr.io/<owner>/<repo>/<package>`
+- If package name == repository name → `<registry>/<owner>/<repo>`
+- Otherwise → `<registry>/<owner>/<repo>/<package>`
 
 ## Outputs
 
 | Output    | Description                                                                                       |
 | --------- | ------------------------------------------------------------------------------------------------- |
-| `images`  | JSON object: `{"<pkg>": "ghcr.io/<owner>/<repo>/<pkg>@sha256:..."}`. Fully pullable references.   |
+| `images`  | JSON object: `{"<pkg>": "<registry>/<owner>/<repo>/<pkg>@sha256:..."}`. Fully pullable references. |
 | `digests` | JSON object: `{"<pkg>": "sha256:..."}`. Bare digests only.                                        |
 | `image`   | Convenience — the fully-qualified digest reference for the first package. Empty on failure.       |
 | `digest`  | Convenience — the bare digest for the first package. Empty on failure.                            |

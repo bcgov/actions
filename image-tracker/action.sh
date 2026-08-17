@@ -6,10 +6,11 @@
 #
 # Inputs (Env Vars):
 #   PACKAGE/INPUT_PACKAGE: Comma-separated package names
+#   REGISTRY/INPUT_REGISTRY: Target registry (default: ghcr.io)
 #   REVISION/INPUT_REVISION: Git ref (default: HEAD)
 #   REPOSITORY/INPUT_REPOSITORY: Target repo (default: GITHUB_REPOSITORY)
 #   DIR/INPUT_DIR: Working directory (default: .)
-#   TOKEN/INPUT_TOKEN: GitHub Token (default: GITHUB_TOKEN)
+#   TOKEN/INPUT_TOKEN: GitHub / Registry Token (default: GITHUB_TOKEN)
 #   MAX_TAGS/INPUT_MAX_TAGS: Max registry tags to scan (default: 500)
 #   MAX_DEPTH/INPUT_MAX_DEPTH: Max git depth to walk (default: 1)
 
@@ -70,13 +71,96 @@ map_packages() {
 }
 
 # ---- Registry Logic --------------------------------------------------------
+parse_auth_header() {
+    local header="$1"
+    local realm="" service=""
+    local realm_q_re='[Rr][Ee][Aa][Ll][Mm]="([^"]+)"'
+    local realm_uq_re='[Rr][Ee][Aa][Ll][Mm]=([^,[:space:]]+)'
+    local service_q_re='[Ss][Ee][Rr][Vv][Ii][Cc][Ee]="([^"]+)"'
+    local service_uq_re='[Ss][Ee][Rr][Vv][Ii][Cc][Ee]=([^,[:space:]]+)'
+
+    if [[ "$header" =~ $realm_q_re ]]; then
+        realm="${BASH_REMATCH[1]}"
+    elif [[ "$header" =~ $realm_uq_re ]]; then
+        realm="${BASH_REMATCH[1]}"
+    fi
+
+    if [[ "$header" =~ $service_q_re ]]; then
+        service="${BASH_REMATCH[1]}"
+    elif [[ "$header" =~ $service_uq_re ]]; then
+        service="${BASH_REMATCH[1]}"
+    fi
+    printf '%s|%s' "$realm" "$service"
+}
+
 registry_token() {
     local repo="$1"
-    if [[ -n "${TOKEN:-}" ]]; then
-        curl -sS -u "x:${TOKEN}" "https://ghcr.io/token?scope=repository:${repo}:pull" | jq -r '.token'
-    else
-        curl -sS "https://ghcr.io/token?scope=repository:${repo}:pull" | jq -r '.token'
+    local reg="${REGISTRY:-ghcr.io}"
+    local token="${TOKEN:-}"
+
+    local probe_url="https://${reg}/v2/${repo}/manifests/latest"
+    local hfile
+    hfile=$(mktemp)
+    local status
+    status=$(curl -sS -D "$hfile" -o /dev/null -w "%{http_code}" "$probe_url" 2>/dev/null || echo "000")
+
+    # If registry endpoint allows unauthenticated access (2xx), no token needed
+    if [[ "$status" =~ ^2 ]]; then
+        rm -f "$hfile"
+        echo "__NO_AUTH__"
+        return 0
     fi
+
+    local auth_header
+    auth_header=$(grep -iE '^www-authenticate:' "$hfile" | tr -d '\r' | grep -iE 'Bearer' | head -1 || true)
+    rm -f "$hfile"
+
+    if [[ -z "$auth_header" ]]; then
+        # Fallback challenge probe to /v2/
+        hfile=$(mktemp)
+        curl -sS -D "$hfile" -o /dev/null "https://${reg}/v2/" 2>/dev/null || true
+        auth_header=$(grep -iE '^www-authenticate:' "$hfile" | tr -d '\r' | grep -iE 'Bearer' | head -1 || true)
+        rm -f "$hfile"
+    fi
+
+    # If no Bearer challenge found, return __NO_AUTH__ if token is empty, otherwise fail
+    if [[ -z "$auth_header" ]]; then
+        if [[ -z "$token" ]]; then
+            echo "__NO_AUTH__"
+            return 0
+        fi
+        return 1
+    fi
+
+    local parsed realm service
+    parsed=$(parse_auth_header "$auth_header")
+    realm="${parsed%%|*}"
+    service="${parsed##*|}"
+
+    if [[ -z "$realm" ]]; then
+        return 1
+    fi
+
+    local sep="?"
+    [[ "$realm" == *\?* ]] && sep="&"
+    local params="scope=repository:${repo}:pull"
+    [[ -n "$service" ]] && params="service=${service}&${params}"
+    local token_url="${realm}${sep}${params}"
+
+    local resp
+    if [[ -n "$token" ]]; then
+        resp=$(curl -sS -u "x:${token}" "$token_url" 2>/dev/null || true)
+    else
+        resp=$(curl -sS "$token_url" 2>/dev/null || true)
+    fi
+
+    local bearer
+    bearer=$(printf '%s' "$resp" | jq -r '.token // .access_token // empty' 2>/dev/null || true)
+    if [[ -n "$bearer" && "$bearer" != "null" ]]; then
+        echo "$bearer"
+        return 0
+    fi
+    return 1
 }
 
 matches_candidate() {
@@ -118,25 +202,31 @@ matches_candidate() {
 
 probe_tag() {
     local image_path="$1" tag="$2" bearer="$3"
-    local base="https://ghcr.io/v2/${image_path}"
+    local reg="${REGISTRY:-ghcr.io}"
+    local base="https://${reg}/v2/${image_path}"
     local accept="application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json, */*"
-    
+
+    local auth_args=()
+    if [[ -n "$bearer" && "$bearer" != "__NO_AUTH__" ]]; then
+        auth_args=(-H "Authorization: Bearer ${bearer}")
+    fi
+
     local hfile
     hfile=$(mktemp)
     local mbody mdigest mtype
-    
-    mbody=$(curl -sS -L -D "$hfile" -H "Authorization: Bearer ${bearer}" -H "Accept: ${accept}" "${base}/manifests/${tag}")
+
+    mbody=$(curl -sS -L -D "$hfile" "${auth_args[@]}" -H "Accept: ${accept}" "${base}/manifests/${tag}" 2>/dev/null || true)
     mdigest=$(grep -iE '^docker-content-digest:' "$hfile" | tail -1 | awk '{print $2}' | tr -d '\r')
     mtype=$(printf '%s' "$mbody" | jq -r '.mediaType // empty' 2>/dev/null || true)
-    
+
     # Fallback to body digest if not in headers
     [[ -z "$mdigest" ]] && mdigest=$(printf '%s' "$mbody" | jq -r '.digest // empty' 2>/dev/null || true)
-    
+
     if [[ -z "$mdigest" || "$mdigest" == "null" ]]; then
         rm -f "$hfile"
         return 1
     fi
-    
+
     # Extract metadata (OCI Annotations)
     local revision created
     revision=$(printf '%s' "$mbody" | jq -r '.annotations["org.opencontainers.image.revision"] // empty' 2>/dev/null || true)
@@ -148,7 +238,7 @@ probe_tag() {
         cd=$(printf '%s' "$mbody" | jq -r '.manifests[] | select(.platform.architecture == "amd64" and (.platform.os // "") != "unknown") | .digest' 2>/dev/null | head -1)
         [[ -z "$cd" ]] && cd=$(printf '%s' "$mbody" | jq -r '.manifests[0].digest' 2>/dev/null | head -1)
         if [[ -n "$cd" ]]; then
-            mbody=$(curl -sS -L -H "Authorization: Bearer ${bearer}" -H "Accept: ${accept}" "${base}/manifests/${cd}")
+            mbody=$(curl -sS -L "${auth_args[@]}" -H "Accept: ${accept}" "${base}/manifests/${cd}" 2>/dev/null || true)
             [[ -z "$revision" || "$revision" == "null" ]] && revision=$(printf '%s' "$mbody" | jq -r '.annotations["org.opencontainers.image.revision"] // empty' 2>/dev/null || true)
             [[ -z "$created" || "$created" == "null" ]] && created=$(printf '%s' "$mbody" | jq -r '.annotations["org.opencontainers.image.created"] // empty' 2>/dev/null || true)
         fi
@@ -160,12 +250,12 @@ probe_tag() {
         cd_final=$(printf '%s' "$mbody" | jq -r '.config.digest // empty' 2>/dev/null || true)
         if [[ -n "$cd_final" ]]; then
             local config
-            config=$(curl -sSL -H "Authorization: Bearer ${bearer}" "${base}/blobs/${cd_final}")
+            config=$(curl -sSL "${auth_args[@]}" "${base}/blobs/${cd_final}" 2>/dev/null || true)
             revision=$(printf '%s' "$config" | jq -r '.config.Labels["org.opencontainers.image.revision"] // empty' 2>/dev/null || true)
             [[ -z "$created" || "$created" == "null" ]] && created=$(printf '%s' "$config" | jq -r '.config.Labels["org.opencontainers.image.created"] // empty' 2>/dev/null || true)
         fi
     fi
-    
+
     rm -f "$hfile"
     if [[ "$tag" =~ ^pr-([0-9]+)$ ]]; then
         DIGEST_PR_MAP["$mdigest"]="${BASH_REMATCH[1]}"
@@ -177,7 +267,7 @@ probe_tag() {
         for cand in "${CANDIDATES[@]}"; do
              local ph="${PR_MAP[$cand]:-}"
              local pn="${PR_NUM_MAP[$cand]:-}"
-             
+
              # Decoupled decision: does the revision label match OR does the tag follow a known pattern?
              local pattern_match=false
              if [[ -n "$pn" && ( "$tag" == "pr-$pn" || "$tag" == "$pn" ) ]]; then
@@ -189,7 +279,7 @@ probe_tag() {
              if [[ ( -n "$revision" && "$revision" == "$cand"* ) || ( -n "$ph" && -n "$revision" && "$revision" == "$ph"* ) || ( -n "$pn" && "$revision" == "pr-$pn" ) || "$pattern_match" == "true" ]]; then
                  local title="${PR_TITLE_MAP[$cand]:-}"
                  [[ -z "$title" || "$title" == "null" ]] && title=$(git log -1 --format=%s "$cand" 2>/dev/null || echo "Unknown commit message")
-                 
+
                  local display_ref="$tag"
                  if [[ "$tag" == "sha-${cand:0:7}" || ( -n "$pn" && ( "$tag" == "pr-$pn" || "$tag" == "$pn" ) ) || ( -n "$ph" && "$tag" == "sha-${ph:0:7}" ) ]]; then
                      display_ref="$tag"
@@ -201,7 +291,7 @@ probe_tag() {
                  [[ -n "$title" ]] && audit_msg+=": $title"
                  [[ -n "$created" ]] && audit_msg+=" | Built: $created"
                  log_info "$audit_msg"
-                 
+
                  # 2. Stdout for machine-readable pipe-delimited payload
                  printf '%s|%s|%s|%s|%s' "$cand" "$mdigest" "$created" "${pn:-}" "$title"
                  return 0
@@ -213,28 +303,29 @@ probe_tag() {
 
 resolve_digest() {
     local image_path="$1" bearer="$2"
+    local reg="${REGISTRY:-ghcr.io}"
     local owner_orig="${REPOSITORY%%/*}"
     local pkg="${image_path#*/}"
     local pkg_enc="${pkg//\//%2F}"
-    
+
     local raw_data=""
-    if command -v gh &>/dev/null && [[ -n "$TOKEN" ]]; then
+    if [[ "$reg" == "ghcr.io" ]] && command -v gh &>/dev/null && [[ -n "$TOKEN" ]]; then
         # Fetch both digest (name) and tags for each version
         raw_data=$(GITHUB_TOKEN="$TOKEN" GH_TOKEN="$TOKEN" gh api "/orgs/${owner_orig}/packages/container/${pkg_enc}/versions?per_page=100" --jq 'if length > 0 then .[] | [.name, (.metadata.container.tags | join(","))] | @tsv else empty end' 2>/dev/null || true)
         if [[ -z "$raw_data" ]]; then
             raw_data=$(GITHUB_TOKEN="$TOKEN" GH_TOKEN="$TOKEN" gh api "/users/${owner_orig}/packages/container/${pkg_enc}/versions?per_page=100" --jq 'if length > 0 then .[] | [.name, (.metadata.container.tags | join(","))] | @tsv else empty end' 2>/dev/null || true)
         fi
     fi
-    
+
     local tags_seen=0
     if [[ -n "$raw_data" ]]; then
         while IFS=$'\t' read -r digest tags; do
             [[ -z "$digest" ]] && continue
             tags_seen=$((tags_seen + 1))
             [[ "$tags_seen" -gt "$MAX_TAGS" ]] && return 2
-            
+
             printf "\r      -> [%d/%d] Inspecting digest: %s... \033[K" "$tags_seen" "$MAX_TAGS" "${digest:0:15}" >&2
-            
+
             # Use the most relevant tag from the list for probing (e.g. pr-N or N if it exists)
             local probe_ref="$digest"
             IFS=',' read -ra tag_arr <<< "$tags"
@@ -254,6 +345,28 @@ resolve_digest() {
             res=$(probe_tag "$image_path" "$probe_ref" "$bearer" || true)
             if [[ -n "$res" ]]; then echo -ne "\r\033[K" >&2; echo "$res"; return 0; fi
         done <<< "$raw_data"
+    else
+        # Standard OCI /v2/<name>/tags/list fallback
+        local auth_args=()
+        if [[ -n "$bearer" && "$bearer" != "__NO_AUTH__" ]]; then
+            auth_args=(-H "Authorization: Bearer ${bearer}")
+        fi
+        local tags_json
+        tags_json=$(curl -sS "${auth_args[@]}" "https://${reg}/v2/${image_path}/tags/list" 2>/dev/null || true)
+        local tag_list
+        tag_list=$(printf '%s' "$tags_json" | jq -r '.tags[]? // empty' 2>/dev/null || true)
+        if [[ -n "$tag_list" ]]; then
+            while IFS= read -r tag; do
+                [[ -z "$tag" ]] && continue
+                tags_seen=$((tags_seen + 1))
+                [[ "$tags_seen" -gt "$MAX_TAGS" ]] && return 2
+
+                printf "\r      -> [%d/%d] Inspecting tag: %s... \033[K" "$tags_seen" "$MAX_TAGS" "${tag:0:15}" >&2
+                local res
+                res=$(probe_tag "$image_path" "$tag" "$bearer" || true)
+                if [[ -n "$res" ]]; then echo -ne "\r\033[K" >&2; echo "$res"; return 0; fi
+            done <<< "$tag_list"
+        fi
     fi
     echo -ne "\r\033[K" >&2
     return 1
@@ -261,6 +374,7 @@ resolve_digest() {
 
 # ---- Markdown Summary ------------------------------------------------------
 render_step_summary() {
+    local reg="${REGISTRY:-ghcr.io}"
     local revision_display="${REVISION//|/\\|}"
     local target_str
     if [[ "$REVISION" == "$PIVOT_SHA"* || "$PIVOT_SHA" == "$REVISION"* ]]; then
@@ -281,7 +395,7 @@ render_step_summary() {
         if [[ -n "$payload" ]]; then
             local sha digest created pr_num msg
             IFS='|' read -r sha digest created pr_num msg <<< "$payload"
-            local ref="ghcr.io/${path}@${digest}"
+            local ref="${reg}/${path}@${digest}"
             local resolved_str="\`${sha:0:7}\`"
             local depth=0
             for i in "${!CANDIDATES[@]}"; do
@@ -326,6 +440,11 @@ run_main() {
     fi
 
     # 3. Other Settings
+    REGISTRY="${REGISTRY:-${INPUT_REGISTRY:-ghcr.io}}"
+    REGISTRY="${REGISTRY#https://}"
+    REGISTRY="${REGISTRY#http://}"
+    REGISTRY="${REGISTRY%/}"
+    REGISTRY="${REGISTRY:-ghcr.io}"
     REVISION="${REVISION:-${INPUT_REVISION:-HEAD}}"
     DIR="${DIR:-${INPUT_DIR:-.}}"
     TOKEN="${TOKEN:-${INPUT_TOKEN:-${GITHUB_TOKEN:-}}}"
@@ -451,6 +570,7 @@ run_main() {
 
     # ---- Execution -------------------------------------------------------------
     log_group "Image Tracker — resolving ancestry for $REVISION"
+    log_info "Registry: $REGISTRY"
     log_info "Repository: $REPOSITORY"
     log_info "Starting SHA: $PIVOT_SHA"
 
@@ -513,7 +633,7 @@ run_main() {
         fi
 
         IFS='|' read -r sha digest created pr_num msg <<< "$res"
-        ref="ghcr.io/${path}@${digest}"
+        ref="${REGISTRY}/${path}@${digest}"
         printf "  [✓] HIT: %s -> %s\n" "$pkg" "$ref" >&2
         
         IMAGES["$pkg"]="$res"
@@ -539,7 +659,7 @@ run_main() {
             if [[ -n "$first_payload" ]]; then
                 { IFS='|' read -r _ r_digest _ p_pr _; } <<< "$first_payload"
                 f_path="${IMAGE_PATHS["$first_pkg"]:-}"
-                printf "image=ghcr.io/%s@%s\n" "$f_path" "$r_digest" >> "$GITHUB_OUTPUT"
+                printf "image=%s/%s@%s\n" "$REGISTRY" "$f_path" "$r_digest" >> "$GITHUB_OUTPUT"
                 printf "digest=%s\n" "$r_digest" >> "$GITHUB_OUTPUT"
                 if [[ -n "$p_pr" && "$p_pr" != "null" ]]; then
                     r_pr="$p_pr"
