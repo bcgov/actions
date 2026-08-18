@@ -317,7 +317,7 @@ async function probeTag(
             sha: cand,
             digest: finalDigest,
             created,
-            prNum: pn || '',
+            prNum: pn || digestPrMap[finalDigest] || '',
             msg: title
           };
         }
@@ -554,7 +554,7 @@ async function runMain() {
 
   const revision = env.REVISION || env.INPUT_REVISION || 'HEAD';
   const dir = env.DIR || env.INPUT_DIR || '.';
-  const token = env.TOKEN || env.INPUT_TOKEN || env.GITHUB_TOKEN || '';
+  const token = env.TOKEN || env.INPUT_TOKEN || env.INPUT_GITHUB_TOKEN || env.GITHUB_TOKEN || env.GH_TOKEN || '';
   const maxTagsStr = env.MAX_TAGS || env.INPUT_MAX_TAGS || '500';
   const maxDepthStr = env.MAX_DEPTH || env.INPUT_MAX_DEPTH || '1';
   const debug = env.DEBUG || env.INPUT_DEBUG || 'false';
