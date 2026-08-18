@@ -1,5 +1,5 @@
 name: 'Image Tracker'
-description: 'Resolve GHCR image digests for a git commit using OCI revision labels.'
+description: 'Resolve OCI image digests for a git commit using OCI revision labels.'
 branding:
   icon: eye
   color: blue
@@ -8,10 +8,13 @@ inputs:
   package:
     description: |
       One or more package names (comma, space, or newline separated).
-      Each resolves to `ghcr.io/<owner>/<repo>/<package>`, except when the
+      Each resolves to `<registry>/<owner>/<repo>/<package>`, except when the
       package name matches the repo name, in which case it resolves to
-      `ghcr.io/<owner>/<repo>`.
+      `<registry>/<owner>/<repo>`.
     required: true
+  registry:
+    description: 'OCI registry host (defaults to ghcr.io).'
+    default: 'ghcr.io'
   debug:
     description: 'Enable debug logging'
     default: 'false'
@@ -25,7 +28,7 @@ inputs:
     description: 'Working directory containing the git repository.'
     default: '.'
   github_token:
-    description: 'GitHub token for GHCR auth (defaults to github.token).'
+    description: 'GitHub token or registry token for auth (defaults to github.token).'
     default: ${{ github.token }}
   max_tags:
     description: 'Upper bound on tags inspected per package before failing.'
@@ -39,39 +42,23 @@ outputs:
     description: |
       JSON object mapping each package to its fully-qualified digest reference:
       `{"frontend": "ghcr.io/owner/repo/frontend@sha256:..."}`.
-    value: ${{ steps.resolve.outputs.images }}
   digests:
     description: |
       JSON object mapping each package to its manifest digest only:
       `{"frontend": "sha256:..."}`.
-    value: ${{ steps.resolve.outputs.digests }}
   image:
     description: |
       Convenience — fully-qualified digest reference for the first (or only)
       package. Empty if nothing was resolved.
-    value: ${{ steps.resolve.outputs.image }}
   digest:
     description: |
       Convenience — manifest digest for the first (or only) package.
       Empty if nothing was resolved.
-    value: ${{ steps.resolve.outputs.digest }}
   pr:
     description: |
       Convenience — resolved PR number (e.g. 123) for the first resolved package/commit.
       Empty if no PR number could be resolved.
-    value: ${{ steps.resolve.outputs.pr }}
 
 runs:
-  using: 'composite'
-  steps:
-    - id: resolve
-      shell: bash
-      env:
-        INPUT_PACKAGE: ${{ inputs.package }}
-        INPUT_REVISION: ${{ inputs.revision }}
-        INPUT_REPOSITORY: ${{ inputs.repository }}
-        INPUT_DIR: ${{ inputs.dir }}
-        INPUT_TOKEN: ${{ inputs.github_token }}
-        INPUT_MAX_TAGS: ${{ inputs.max_tags }}
-        INPUT_MAX_DEPTH: ${{ inputs.max_depth }}
-      run: bash ${{ github.action_path }}/action.sh
+  using: 'node24'
+  main: 'index.js'

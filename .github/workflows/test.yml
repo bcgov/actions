@@ -365,8 +365,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
       - name: Run Unit Tests
-        run: bash image-tracker/tests/unit.sh
+        run: node --test image-tracker/tests/unit.test.js
 
       - name: Validate action.yml
         run: |
