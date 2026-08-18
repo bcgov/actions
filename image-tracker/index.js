@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const { execSync, spawnSync } = require('node:child_process');
+const { execSync, execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const process = require('node:process');
@@ -254,6 +254,19 @@ async function probeTag(
           if (!created) {
             created = childBody.annotations?.['org.opencontainers.image.created'] || '';
           }
+          if (!revision) {
+            const childConfigDigest = childBody.config?.digest;
+            if (childConfigDigest) {
+              const childBlobRes = await fetch(`${base}/blobs/${childConfigDigest}`, { headers });
+              if (childBlobRes.ok) {
+                const childConfigObj = await childBlobRes.json();
+                revision = childConfigObj.config?.Labels?.['org.opencontainers.image.revision'] || '';
+                if (!created) {
+                  created = childConfigObj.config?.Labels?.['org.opencontainers.image.created'] || '';
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -300,7 +313,10 @@ async function probeTag(
           let title = prTitleMap[cand] || '';
           if (!title) {
             try {
-              title = execSync(`git log -1 --format=%s ${cand}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
+              title = execFileSync('git', ['log', '-1', '--format=%s', cand], {
+                encoding: 'utf8',
+                stdio: ['pipe', 'pipe', 'ignore']
+              }).trim();
             } catch (err) {
               title = 'Unknown commit message';
             }
@@ -455,7 +471,7 @@ function renderStepSummary({
   imagePaths = {},
   images = {}
 }) {
-  const revisionDisplay = revision.replace(/\|/g, '\\|');
+  const revisionDisplay = revision.replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
   let targetStr = '';
   if (pivotSha && (revision.startsWith(pivotSha.slice(0, 7)) || pivotSha.startsWith(revision))) {
     targetStr = `\`${pivotSha.slice(0, 7)}\``;
@@ -473,7 +489,7 @@ function renderStepSummary({
   ];
 
   for (const pkg of pkgOrder) {
-    const pkgDisplay = pkg.replace(/\|/g, '\\|');
+    const pkgDisplay = pkg.replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
     const hitObj = images[pkg];
     const path = imagePaths[pkg] || '';
 
@@ -534,7 +550,10 @@ async function runMain() {
   let repository = env.REPOSITORY || env.INPUT_REPOSITORY || env.GITHUB_REPOSITORY || '';
   if (!repository) {
     try {
-      const remoteUrl = execSync('git remote get-url origin', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
+      const remoteUrl = execFileSync('git', ['remote', 'get-url', 'origin'], {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'ignore']
+      }).trim();
       const match = remoteUrl.match(/github\.com[:/]([^/]+\/[^/.]+)/);
       if (match) repository = match[1];
     } catch (err) {}
@@ -559,17 +578,17 @@ async function runMain() {
   const maxDepthStr = env.MAX_DEPTH || env.INPUT_MAX_DEPTH || '1';
   const debug = env.DEBUG || env.INPUT_DEBUG || 'false';
 
-  const maxTags = parseInt(maxTagsStr, 10);
-  const maxDepth = parseInt(maxDepthStr, 10);
-
-  if (isNaN(maxTags) || maxTags <= 0) {
+  if (!/^\d+$/.test(maxTagsStr) || parseInt(maxTagsStr, 10) <= 0) {
     logError('MAX_TAGS must be a positive integer.');
     process.exit(1);
   }
-  if (isNaN(maxDepth) || maxDepth <= 0) {
+  if (!/^\d+$/.test(maxDepthStr) || parseInt(maxDepthStr, 10) <= 0) {
     logError('MAX_DEPTH must be a positive integer.');
     process.exit(1);
   }
+  const maxTags = parseInt(maxTagsStr, 10);
+  const maxDepth = parseInt(maxDepthStr, 10);
+
   if (!packageInput) {
     logError('Missing required package names. Usage: node index.js pkg1 [pkg2 ...]');
     process.exit(1);
@@ -597,7 +616,7 @@ async function runMain() {
   // ---- Git Ancestry Resolution -----------------------------------------------
   let pivotSha = '';
   try {
-    pivotSha = execSync(`git rev-parse --verify --quiet "${revision}^{commit}"`, {
+    pivotSha = execFileSync('git', ['rev-parse', '--verify', '--quiet', `${revision}^{commit}`], {
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'ignore']
     }).trim();
@@ -624,10 +643,10 @@ async function runMain() {
 
           logInfo(`Revision matches PR #${prNum}. Fetching ref...`);
           try {
-            execSync(`git fetch origin pull/${prNum}/head:refs/remotes/origin/pr/${prNum} --quiet`, {
+            execFileSync('git', ['fetch', 'origin', `pull/${prNum}/head:refs/remotes/origin/pr/${prNum}`, '--quiet'], {
               stdio: 'ignore'
             });
-            pivotSha = execSync(`git rev-parse --verify --quiet "${revision}^{commit}"`, {
+            pivotSha = execFileSync('git', ['rev-parse', '--verify', '--quiet', `${revision}^{commit}`], {
               encoding: 'utf8',
               stdio: ['pipe', 'pipe', 'ignore']
             }).trim();
@@ -648,7 +667,7 @@ async function runMain() {
 
   let candidates = [];
   try {
-    const revListOut = execSync(`git rev-list --topo-order -n ${maxDepth} ${pivotSha}`, {
+    const revListOut = execFileSync('git', ['rev-list', '--topo-order', '-n', String(maxDepth), '--', pivotSha], {
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'ignore']
     }).trim();
@@ -661,7 +680,10 @@ async function runMain() {
     candidateMap[sha] = true;
     let msg = '';
     try {
-      msg = execSync(`git log -1 --format=%s ${sha}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
+      msg = execFileSync('git', ['log', '-1', '--format=%s', sha], {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'ignore']
+      }).trim();
     } catch (err) {}
 
     const prFromMsg = msg.match(/\(#([0-9]+)\)/);
@@ -674,7 +696,7 @@ async function runMain() {
       try {
         const apiShas = [sha];
         try {
-          const parents = execSync(`git log -1 --format=%P ${sha}`, {
+          const parents = execFileSync('git', ['log', '-1', '--format=%P', sha], {
             encoding: 'utf8',
             stdio: ['pipe', 'pipe', 'ignore']
           })
@@ -763,7 +785,7 @@ async function runMain() {
       }
 
       if (!res) {
-        res = await probeTag(path, `sha-${candidate.slice(0, 7)}`, bearer, registry, candidates, prMap, prNumMap, prTitleMap, digestPrMap, debug);
+        res = await probeTag(path, `sha-${candidate.slice(0, 7)}`, bearer, registry, candidates, prMap, prNumMap, prTitleMap, debug);
       }
 
       if (res) break;

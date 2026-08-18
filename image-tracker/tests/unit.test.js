@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { execSync } = require('node:child_process');
+const { execSync, execFileSync } = require('node:child_process');
 const {
   mapPackages,
   parseAuthHeader,
@@ -82,11 +82,11 @@ test('Package mapping - space separated packages', () => {
 test('Git plumbing sanity - HEAD resolution', () => {
   let sha = '';
   try {
-    sha = execSync('git -c safe.directory=* rev-parse --verify --quiet HEAD', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
+    sha = execFileSync('git', ['-c', 'safe.directory=*', 'rev-parse', '--verify', '--quiet', 'HEAD'], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
   } catch (err) {}
   if (!sha) {
     try {
-      sha = execSync('git rev-parse --verify --quiet HEAD', { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
+      sha = execFileSync('git', ['rev-parse', '--verify', '--quiet', 'HEAD'], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
     } catch (err) {}
   }
   const ok = /^[a-f0-9]{40}$/.test(sha);
