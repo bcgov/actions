@@ -22,9 +22,21 @@ This is useful in CI/CD pipelines where not every package/app needs to be rebuil
 
 This action publishes to **the GHCR namespace of the repository that is running the workflow** (`github.repository`). A `push` on a fork therefore lands in the fork owner's registry, where `GITHUB_TOKEN` has `packages: write`. Same-repo pull requests keep working as before.
 
-Fork pull requests against the *upstream* repo cannot push: GitHub makes `GITHUB_TOKEN` read-only. This action fails fast in that case rather than spending minutes on a 403. Do not run it on `pull_request_target` from a fork either — that event has write access to the base registry and this action checkouts PR head, which would publish untrusted images.
+### Recommended pattern: `push` on the fork, not `pull_request_target`
 
-The image is always tagged with the source commit SHA (`source_sha` output: PR head SHA, or `github.sha` on push). An upstream deploy job can pull it without sharing job outputs:
+**Do not use `pull_request_target` for builds or deploys.** That event runs the workflow file from the upstream default branch, not from the contributor's PR — so workflow changes in the PR never execute, which is confusing and hard to debug. It also runs with upstream secrets against fork code, which is a common source of security incidents.
+
+Instead, split responsibilities:
+
+| Where | Event | What runs |
+| --- | --- | --- |
+| **Fork** | `push` | Build and push images (workflow from the contributor's branch) |
+| **Upstream** | `pull_request` | Validate, test, lint (workflow from the PR merge ref; no secrets on external forks) |
+| **Upstream** | `workflow_dispatch` or merge | Deploy to OpenShift using `ghcr.io/<fork-owner>/...:<head.sha>` (secrets stay on workflows you control) |
+
+Fork `pull_request` against upstream cannot push images: GitHub makes `GITHUB_TOKEN` read-only. This action fails fast rather than spending minutes on a 403. `pull_request_target` from a fork is also refused — it would publish untrusted PR-head code to the base registry.
+
+The image is always tagged with the source commit SHA (`source_sha` output: PR head SHA, or `github.sha` on push). A deploy job can pull by SHA without sharing build outputs:
 
 `ghcr.io/<fork-owner>/<repo>/<package>:<head.sha>`
 
