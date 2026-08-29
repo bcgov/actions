@@ -520,13 +520,12 @@ runs:
       env:
         IMAGE_PATH: ${{ steps.vars.outputs.image_path }}
         SOURCE_SHA: ${{ steps.vars.outputs.source_sha }}
-        DOCS_URL: https://github.com/bcgov/actions/blob/${{ github.action_ref || 'main' }}/builder-ghcr/README.md#fork-builds
       run: |
         set -euo pipefail
         # shellcheck source=context.sh
         source "${{ github.action_path }}/context.sh"
 
-        msg="$(fork_visibility_message "${DOCS_URL}")"
+        msg="$(fork_visibility_message)"
         echo "::warning::WARNING: ${msg}"
 
         {
