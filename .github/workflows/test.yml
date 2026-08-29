@@ -79,9 +79,17 @@ jobs:
       - if: steps.build.outputs.triggered != 'false'
         run: |
           echo "Outputs: ${{ toJSON(steps.build.outputs) }}"
-          if [ -z "${{ steps.build.outputs.digest }}" ]; then
-            echo "Error! Verify outputs."
+          pushed="${{ steps.build.outputs.pushed }}"
+          if [ "$pushed" = "true" ] && [ -z "${{ steps.build.outputs.digest }}" ]; then
+            echo "Error! digest required when pushed=true."
             exit 1
+          fi
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.event.pull_request.head.repo.fork }}" = "true" ]; then
+            if [ "$pushed" != "false" ]; then
+              echo "Error! fork pull_request must not push to GHCR."
+              exit 1
+            fi
+            echo "Fork PR: build validated locally (pushed=false, digest optional)."
           fi
           if [ "${{ steps.build.outputs.registry_host }}" != "ghcr.io" ]; then
             echo "Error! registry_host mismatch: ${{ steps.build.outputs.registry_host }}"
