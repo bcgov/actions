@@ -72,11 +72,11 @@ assert_contains "$fork_prt" "refuses pull_request_target" "fork pull_request_tar
 assert_contains "$fork_prt" "untrusted" "pull_request_target message names the trust issue"
 assert_contains "$fork_prt" "builder-ghcr/README.md#fork-builds" "pull_request_target message links to docs"
 
-msg="$(fork_visibility_message bcgov/actions/backend abcdef)"
-assert_contains "$msg" "ImagePullBackOff" "visibility message names the deploy symptom"
-assert_contains "$msg" "ghcr.io/bcgov/actions/backend:abcdef" "visibility message names the image"
-assert_contains "$msg" "Change visibility" "visibility message names the fix"
+msg="$(fork_visibility_message)"
+assert_contains "$msg" "Images built from forks require" "visibility message states the requirement"
+assert_contains "$msg" "package visibility to public" "visibility message names the fix"
 assert_contains "$msg" "builder-ghcr/README.md#fork-builds" "visibility message links to docs"
+assert_contains "$msg" "for details" "visibility message points to readme for directions"
 
 assert_eq "$(is_fork_repository true && echo yes || echo no)" "yes" "is_fork_repository true"
 assert_eq "$(is_fork_repository false && echo yes || echo no)" "no" "is_fork_repository false"

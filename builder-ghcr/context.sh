@@ -48,14 +48,11 @@ EOF
 
 BUILDER_GHCR_FORK_DOCS_URL="${BUILDER_GHCR_FORK_DOCS_URL:-https://github.com/bcgov/actions/blob/main/builder-ghcr/README.md#fork-builds}"
 
-# fork_visibility_message IMAGE_PATH SOURCE_SHA [DOCS_URL]
-# One-line notice for fork GHCR packages (private by default).
+# fork_visibility_message [DOCS_URL]
 fork_visibility_message() {
-  local image_path="$1"
-  local source_sha="$2"
-  local docs_url="${3:-$BUILDER_GHCR_FORK_DOCS_URL}"
-  printf 'GHCR packages on forks are private by default. If upstream deploy fails with ImagePullBackOff, make ghcr.io/%s:%s public: open your GitHub Packages page, select the package, Package settings, Danger Zone, Change visibility, Public (one-time per package). Details: %s' \
-    "$image_path" "$source_sha" "$docs_url"
+  local docs_url="${1:-$BUILDER_GHCR_FORK_DOCS_URL}"
+  printf 'Images built from forks require that the fork set package visibility to public. See %s for details.' \
+    "$docs_url"
 }
 
 # is_fork_repository REPO_IS_FORK

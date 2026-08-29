@@ -526,15 +526,13 @@ runs:
         # shellcheck source=context.sh
         source "${{ github.action_path }}/context.sh"
 
-        msg="$(fork_visibility_message "${IMAGE_PATH}" "${SOURCE_SHA}" "${DOCS_URL}")"
-        echo "::warning title=GHCR package visibility::${msg}"
+        msg="$(fork_visibility_message "${DOCS_URL}")"
+        echo "::warning::WARNING: ${msg}"
 
         {
-          echo "### Fork build: make the GHCR package public"
+          echo "### Fork GHCR visibility"
           echo ""
-          echo "This workflow ran on a **fork**. Images are in **your** GHCR namespace and are **private by default**. If the upstream PR deploy fails with \`ImagePullBackOff\`, open your [GitHub Packages](https://github.com/${{ github.repository }}?tab=packages) page, select \`${IMAGE_PATH}\`, go to **Package settings → Danger Zone → Change visibility → Public**. One-time per package."
+          echo "WARNING: ${msg}"
           echo ""
           echo "Image: \`ghcr.io/${IMAGE_PATH}:${SOURCE_SHA}\`"
-          echo ""
-          echo "Full guide: [builder-ghcr fork builds](${DOCS_URL})"
         } >> "$GITHUB_STEP_SUMMARY"
