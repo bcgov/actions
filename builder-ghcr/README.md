@@ -28,7 +28,7 @@ Use the **same workflow** on upstream and fork (`on: [push, pull_request]`). The
 | `pull_request` (same repo) | Upstream | `ghcr.io/<upstream>/...` | Yes |
 | `pull_request` (fork → upstream) | Upstream | `ghcr.io/<fork-owner>/...` (outputs) | **No** — validates/builds locally; image publishes on fork `push` |
 
-On a fork pull request, `image_path` and `source_sha` point at the fork image (`ghcr.io/<fork-owner>/...:<head.sha>`). Use the same workflow for build → image-tracker → deploy; when the image is not in GHCR yet, image-tracker exits successfully with an empty `digest` and deploy should no-op. Images publish on `push` to the fork.
+On a fork pull request, `image_path` and `source_sha` point at the fork image (`ghcr.io/<fork-owner>/...:<head.sha>`). Use the same workflow for build → image-tracker → deploy; when the image is not in GHCR yet, image-tracker exits successfully with an empty `digest`. Gate deploy with `if: steps.tracker.outputs.digest != ''` (or handle emptiness in the deploy action). Images publish on `push` to the fork.
 
 **Do not use `pull_request_target` for builds or deploys.** That event runs the workflow file from the upstream default branch, not from the contributor's PR. This action refuses fork `pull_request_target` outright.
 
@@ -375,7 +375,7 @@ Two SBOM formats are generated and uploaded as workflow artifacts:
 | `registry_host` | The registry host name, always `ghcr.io` |
 | `image_path` | The full image path including the tag, always with a leading slash, in the format `/owner/repo/image:tag` (or `/owner/repo:tag` when the package matches the repository name) |
 | `source_sha` | Git commit SHA tagged on the image (PR head SHA, or `github.sha` on push) |
-| `pushed` | Summary telemetry for the job log — not for workflow `if:` conditions. Use image-tracker `digest` (empty → deploy no-op). |
+| `pushed` | Summary telemetry for the job log — not for workflow `if:` conditions. Gate deploy on image-tracker `digest` (`if: steps.tracker.outputs.digest != ''`). |
 
 New image digest (SHA).  This applies to build and retags.
 

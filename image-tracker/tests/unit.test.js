@@ -375,13 +375,23 @@ test('resolveImageRepository - explicit override and auto fork target', () => {
   );
   assert.strictEqual(
     resolveImageRepository({
-      inputRepository: 'bcgov/foo',
+      inputRepository: '',
       ghRepository: 'bcgov/foo',
       eventName: 'pull_request',
       headRepository: 'fork/foo'
     }),
     'fork/foo',
-    'default input auto-targets fork GHCR on fork PR'
+    'omitted input auto-targets fork GHCR on fork PR'
+  );
+  assert.strictEqual(
+    resolveImageRepository({
+      inputRepository: 'bcgov/foo',
+      ghRepository: 'bcgov/foo',
+      eventName: 'pull_request',
+      headRepository: 'fork/foo'
+    }),
+    'bcgov/foo',
+    'explicit workflow repo still resolves upstream images on fork PR'
   );
   assert.strictEqual(
     resolveImageRepository({

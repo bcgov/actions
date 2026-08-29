@@ -95,13 +95,13 @@ function resolveImageRepository({
   const gh = normalizeRepo(ghRepository);
   const fallback = normalizeRepo(fallbackRepository);
 
-  if (input && gh && input !== gh) {
+  if (input) {
     return input;
   }
   if (gh) {
     return publishRepository(eventName, gh, headRepository);
   }
-  return input || fallback;
+  return fallback;
 }
 
 // Fork pull_request often has no GHCR image yet — miss is expected, not fatal.
@@ -628,7 +628,7 @@ async function runMain() {
   }
 
   let repository = resolveImageRepository({
-    inputRepository: rawInput || ghRepository,
+    inputRepository: rawInput,
     ghRepository,
     eventName,
     headRepository,
