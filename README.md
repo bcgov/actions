@@ -103,7 +103,9 @@ Refer to each action's directory for its exact minimum required permissions bloc
 
 Use the **same workflow** on upstream and fork (`on: [push, pull_request]`). Individual actions adapt where they can — no `if: fork` guards required in consumer YAML.
 
-On a fork `pull_request` into upstream, GitHub grants a **read-only** `GITHUB_TOKEN` on the base repository. Steps that need write access (updating PR descriptions, creating issues, pushing packages to the base org's GHCR) are skipped or fail. That is expected platform behaviour, not a misconfiguration.
+On a fork `pull_request` into upstream, GitHub grants a **read-only** `GITHUB_TOKEN` on the base repository. Actions that need write access no-op or warn; that is expected.
+
+**Pipeline contract:** run the same `build → image-tracker → deploy` steps everywhere. Builder outputs always name the correct GHCR coordinates (`image_path`, `source_sha`). Image-tracker returns a `digest` when the image exists, or exits successfully with an empty `digest` when it does not (typical on fork PRs before a fork `push`). Deploy should no-op on an empty digest — no `if: fork` or `if: pushed` in workflow YAML.
 
 | Concern | Where to read more |
 |---|---|

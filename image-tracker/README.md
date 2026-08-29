@@ -94,9 +94,11 @@ External repository:
 
 ## Fork pull requests
 
-On a fork `pull_request` into upstream, images live in the **fork owner's** GHCR (`pull_request.head.repo`), not the base repo. When `repository` is omitted or matches `github.repository`, image-tracker resolves against the fork automatically — the same publish-target contract as [`builder-ghcr`](../builder-ghcr/README.md#fork-builds).
+On a fork `pull_request` into upstream, images live in the **fork owner's** GHCR (`pull_request.head.repo`). When `repository` is omitted or matches `github.repository`, image-tracker resolves against the fork automatically — the same publish-target contract as [`builder-ghcr`](../builder-ghcr/README.md#fork-builds).
 
-Fork packages must be **public** if upstream CI needs to pull them. If no image exists yet, push to your fork first. See the [fork pull requests guide](../README.md#fork-pull-requests).
+If no image exists yet, the action emits a warning and **exits successfully** with empty `digest` / `image` outputs. Downstream deploy steps should no-op on an empty digest — same workflow, no `if: fork` guards.
+
+Fork packages must be **public** if upstream CI needs to pull them. See the [fork pull requests guide](../README.md#fork-pull-requests).
 
 ## Inputs
 

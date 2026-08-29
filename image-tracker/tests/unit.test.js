@@ -394,3 +394,18 @@ test('resolveImageRepository - explicit override and auto fork target', () => {
     'fork push uses workflow repository'
   );
 });
+
+test('imageResolveMissIsExpected - fork PR only', () => {
+  const { imageResolveMissIsExpected } = require('../index.js');
+  assert.strictEqual(
+    imageResolveMissIsExpected('pull_request', 'bcgov/foo', 'fork/foo'),
+    true,
+    'fork pull_request miss is expected'
+  );
+  assert.strictEqual(
+    imageResolveMissIsExpected('pull_request', 'bcgov/foo', 'bcgov/foo'),
+    false,
+    'same-repo PR miss is an error'
+  );
+  assert.strictEqual(imageResolveMissIsExpected('push', 'fork/foo', ''), false, 'push miss is an error');
+});

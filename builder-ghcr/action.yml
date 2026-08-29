@@ -118,7 +118,7 @@ outputs:
     value: ${{ steps.resolved_sha.outputs.source_sha || steps.vars.outputs.source_sha }}
 
   pushed:
-    description: "Whether the image was pushed (or retagged) in GHCR this run. False on fork pull_request (validates/builds locally; publish happens on fork push)."
+    description: "Summary only — whether GHCR received an image this run. Do not branch workflows on this; use image-tracker digest (empty means deploy no-op)."
     value: ${{ steps.final_outputs.outputs.pushed }}
 
 runs:

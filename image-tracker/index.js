@@ -104,6 +104,11 @@ function resolveImageRepository({
   return input || fallback;
 }
 
+// Fork pull_request often has no GHCR image yet — miss is expected, not fatal.
+function imageResolveMissIsExpected(eventName, ghRepo, headRepo) {
+  return eventName === 'pull_request' && isForkPr(ghRepo, headRepo);
+}
+
 // ---- Package Mapping -------------------------------------------------------
 function mapPackages(packageInput, repository) {
   const imagePaths = {};
@@ -939,6 +944,10 @@ async function runMain() {
           if (d) digestsJson[k] = d;
         }
         outputLines.push(`digests=${JSON.stringify(digestsJson)}`);
+      } else {
+        outputLines.push('image=');
+        outputLines.push('digest=');
+        outputLines.push('digests={}');
       }
       outputLines.push(`pr=${rPr}`);
       fs.appendFileSync(env.GITHUB_OUTPUT, outputLines.join('\n') + '\n');
@@ -948,12 +957,14 @@ async function runMain() {
   }
 
   if (missing.length > 0) {
-    if (eventName === 'pull_request' && isForkPr(ghRepository, headRepository)) {
+    if (imageResolveMissIsExpected(eventName, ghRepository, headRepository)) {
       logWarn(
-        `Fork pull_request: no images in ${registry} for ${repository}. ` +
-          `Publish on push to your fork (packages must be public for upstream CI to pull). ` +
+        `Fork pull_request: no image in ${registry} for ${missing.join(', ')} at ${repository}. ` +
+          `Downstream deploy should no-op on an empty digest. ` +
+          `Images publish on push to your fork (packages must be public for upstream CI to pull). ` +
           `See ${ACTIONS_FORK_DOCS_URL}`
       );
+      return;
     }
     logError(`Failed to resolve: ${missing.join(' ')}`);
     process.exit(1);
@@ -979,6 +990,7 @@ module.exports = {
   isForkPr,
   publishRepository,
   resolveImageRepository,
+  imageResolveMissIsExpected,
   headRepositoryFromEvent,
   runMain
 };
