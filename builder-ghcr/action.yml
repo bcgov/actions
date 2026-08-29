@@ -28,6 +28,7 @@ inputs:
     description: |
       Default tag(s); e.g. pr#, test, prod.
       Supports multiline input for multiple tags.
+      The source commit SHA is always added so deploy can pull by git SHA.
       Example: |
         pr123
         demo
@@ -112,37 +113,57 @@ outputs:
     description: "The full image path including the tag, always with a leading slash, in the format `/owner/repo/image:tag` (or `/owner/repo:tag` when the package matches the repository name)"
     value: ${{ steps.final_outputs.outputs.image_path }}
 
+  source_sha:
+    description: "Git commit SHA tagged on the image (PR head SHA, or github.sha on push). Deploy workflows can pull ghcr.io/<owner>/<repo>/<package>:<source_sha>."
+    value: ${{ steps.vars.outputs.source_sha }}
+
 runs:
   using: composite
   steps:
-    # Initialize variables.
+    # Initialize variables. Image destination is github.repository (the repo
+    # whose GITHUB_TOKEN is running): on a fork push that is the fork's GHCR.
     - id: vars
       shell: bash
       env:
         INPUT_PACKAGE: ${{ inputs.package }}
         CONTEXT_REPO: ${{ github.event.repository.name }}
         INPUT_TAGS: ${{ inputs.tags }}
+        EVENT_NAME: ${{ github.event_name }}
+        GH_REPOSITORY: ${{ github.repository }}
+        HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        EVENT_SHA: ${{ github.sha }}
       run: |
         # Set variables.
         set -euo pipefail
+        # shellcheck source=context.sh
+        source "${{ github.action_path }}/context.sh"
 
-        # If package matches repo name, use simpler image_path
-        if [ "${INPUT_PACKAGE,,}" = "${CONTEXT_REPO,,}" ]; then
-          image_path="${{ github.repository }}"
-        else
-          image_path="${{ github.repository }}/${{ inputs.package }}"
+        reason="$(refuse_reason "${EVENT_NAME}" "${GH_REPOSITORY}" "${HEAD_REPO}")"
+        if [ -n "${reason}" ]; then
+          echo "::error::${reason}"
+          exit 1
         fi
-        echo "image_path=${image_path,,}" >> $GITHUB_OUTPUT
-        echo "image_name=ghcr.io/${image_path,,}" >> $GITHUB_OUTPUT
-        echo "registry_host=ghcr.io" >> $GITHUB_OUTPUT
 
+        image_path="$(image_path_for "${INPUT_PACKAGE}" "${GH_REPOSITORY}" "${CONTEXT_REPO}")"
+        sha="$(source_sha "${HEAD_SHA}" "${EVENT_SHA}")"
+        tags="$(merge_sha_tag "${INPUT_TAGS}" "${sha}")"
+
+        echo "image_path=${image_path}" >> "$GITHUB_OUTPUT"
+        echo "image_name=ghcr.io/${image_path}" >> "$GITHUB_OUTPUT"
+        echo "registry_host=ghcr.io" >> "$GITHUB_OUTPUT"
+        echo "source_sha=${sha}" >> "$GITHUB_OUTPUT"
+        {
+          echo "tags<<EOF"
+          printf '%s\n' "${tags}"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
 
         # Extract first tag for artifact naming (sanitized for artifact name compatibility).
         # Fallback to 'artifact' if sanitized tag is empty.
-        first_tag=$(printf '%s\n' "${INPUT_TAGS}" | grep -v '^$' | head -n 1 | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]._-' || true)
-        
+        first_tag=$(printf '%s\n' "${tags}" | grep -v '^$' | head -n 1 | tr -cd '[:alnum:]._-' || true)
         first_tag="${first_tag:-artifact}"
-        echo "first_tag=${first_tag}" >> $GITHUB_OUTPUT
+        echo "first_tag=${first_tag}" >> "$GITHUB_OUTPUT"
 
     # Send triggers to diff action
     # Fork PRs: diff-triggers automatically detects fork PR context from
@@ -228,7 +249,7 @@ runs:
         repository: ${{ steps.vars.outputs.image_path }}
         target: ${{ inputs.tag_fallback }}
         tags: |
-          ${{ inputs.tags }}
+          ${{ steps.vars.outputs.tags }}
         token: ${{ inputs.github_token }}
 
 
@@ -274,7 +295,7 @@ runs:
       if: steps.build.outputs.triggered == 'true'
       shell: bash
       env:
-        INPUT_TAGS: ${{ inputs.tags }}
+        INPUT_TAGS: ${{ steps.vars.outputs.tags }}
         META_TAGS: ${{ steps.meta.outputs.tags || '' }}
         META_LABELS: ${{ steps.meta.outputs.labels || '' }}
         META_ANNOTATIONS: ${{ steps.meta.outputs.annotations || '' }}
@@ -451,8 +472,8 @@ runs:
         else
           echo "digest=${{ steps.build.outputs.fallback_digest }}" >> $GITHUB_OUTPUT
           # For retagged images, use the first tag from inputs.tags or fallback
-          tag=$(printf '%s\n' "${{ inputs.tags }}" | grep -v '^$' | head -n 1 | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]._-' || true)
-          tag="${tag:-${{ inputs.tag_fallback }}}"
+          tag=$(printf '%s\n' "${{ steps.vars.outputs.tags }}" | grep -v '^$' | head -n 1 | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]._-' || true)
+          tag="${tag:-${{ steps.vars.outputs.source_sha }}}"
           tag="${tag:-latest}"
           image_path="/${{ steps.vars.outputs.image_path }}:${tag}"
         fi
@@ -467,6 +488,7 @@ runs:
         echo "digest: ${{ steps.final_outputs.outputs.digest }}"
         echo "registry_host: ${{ steps.vars.outputs.registry_host }}"
         echo "image_path: ${{ steps.final_outputs.outputs.image_path }}"
+        echo "source_sha: ${{ steps.vars.outputs.source_sha }}"
 
         # Add to GitHub Job Summary
         echo "### Container Build Summary" >> $GITHUB_STEP_SUMMARY
@@ -476,6 +498,7 @@ runs:
         echo "| **digest** | \`${{ steps.final_outputs.outputs.digest }}\` |" >> $GITHUB_STEP_SUMMARY
         echo "| **registry_host** | \`${{ steps.vars.outputs.registry_host }}\` |" >> $GITHUB_STEP_SUMMARY
         echo "| **image_path** | \`${{ steps.final_outputs.outputs.image_path }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| **source_sha** | \`${{ steps.vars.outputs.source_sha }}\` |" >> $GITHUB_STEP_SUMMARY
 
         if [ "${{ steps.build.outputs.triggered }}" == "true" ]; then
           echo "tags: ${{ steps.tags.outputs.final_tags }}"
@@ -486,7 +509,7 @@ runs:
             echo "> Attestation failed. Check logs for details." >> $GITHUB_STEP_SUMMARY
           fi
         else
-          echo "retagged: ${{ inputs.tag_fallback }} -> ${{ inputs.tags }}"
-          echo "| **retagged** | \`${{ inputs.tag_fallback }} -> ${{ inputs.tags }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "retagged: ${{ inputs.tag_fallback }} -> ${{ steps.vars.outputs.tags }}"
+          echo "| **retagged** | \`${{ inputs.tag_fallback }} -> ${{ steps.vars.outputs.tags }}\` |" >> $GITHUB_STEP_SUMMARY
         fi
         echo "-----------------------"
