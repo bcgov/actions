@@ -46,6 +46,64 @@ function logEndGroup() {
   }
 }
 
+const ACTIONS_FORK_DOCS_URL =
+  'https://github.com/bcgov/actions/blob/main/README.md#fork-pull-requests';
+
+// ---- Repository resolution (mirrors builder-ghcr publish_repository) ---------
+function normalizeRepo(repo) {
+  return (repo || '').trim().toLowerCase();
+}
+
+function isForkPr(ghRepo, headRepo) {
+  const gh = normalizeRepo(ghRepo);
+  const head = normalizeRepo(headRepo);
+  return head.length > 0 && head !== gh;
+}
+
+function publishRepository(eventName, ghRepo, headRepo) {
+  if (eventName === 'pull_request' && isForkPr(ghRepo, headRepo)) {
+    return normalizeRepo(headRepo);
+  }
+  return normalizeRepo(ghRepo);
+}
+
+function readGithubEvent() {
+  const eventPath = process.env.GITHUB_EVENT_PATH;
+  if (!eventPath || !fs.existsSync(eventPath)) {
+    return {};
+  }
+  try {
+    return JSON.parse(fs.readFileSync(eventPath, 'utf8'));
+  } catch {
+    return {};
+  }
+}
+
+function headRepositoryFromEvent(event) {
+  return event?.pull_request?.head?.repo?.full_name || '';
+}
+
+// Explicit repository input overrides; otherwise match builder-ghcr publish targets.
+function resolveImageRepository({
+  inputRepository,
+  ghRepository,
+  eventName,
+  headRepository,
+  fallbackRepository
+}) {
+  const input = normalizeRepo(inputRepository);
+  const gh = normalizeRepo(ghRepository);
+  const fallback = normalizeRepo(fallbackRepository);
+
+  if (input && gh && input !== gh) {
+    return input;
+  }
+  if (gh) {
+    return publishRepository(eventName, gh, headRepository);
+  }
+  return input || fallback;
+}
+
 // ---- Package Mapping -------------------------------------------------------
 function mapPackages(packageInput, repository) {
   const imagePaths = {};
@@ -545,19 +603,32 @@ function extractPrNumber(payload) {
 async function runMain() {
   const env = process.env;
   const args = process.argv.slice(2);
+  const ghRepository = env.GITHUB_REPOSITORY || '';
+  const eventName = env.GITHUB_EVENT_NAME || '';
+  const event = readGithubEvent();
+  const headRepository = headRepositoryFromEvent(event);
 
   // 1. Repository
-  let repository = env.REPOSITORY || env.INPUT_REPOSITORY || env.GITHUB_REPOSITORY || '';
-  if (!repository) {
+  const rawInput = (env.REPOSITORY || env.INPUT_REPOSITORY || '').trim();
+  let fallbackRepository = rawInput || ghRepository;
+  if (!fallbackRepository) {
     try {
       const remoteUrl = execFileSync('git', ['remote', 'get-url', 'origin'], {
         encoding: 'utf8',
         stdio: ['pipe', 'pipe', 'ignore']
       }).trim();
       const match = remoteUrl.match(/github\.com[:/]([^/]+\/[^/.]+)/);
-      if (match) repository = match[1];
+      if (match) fallbackRepository = match[1];
     } catch (err) {}
   }
+
+  let repository = resolveImageRepository({
+    inputRepository: rawInput || ghRepository,
+    ghRepository,
+    eventName,
+    headRepository,
+    fallbackRepository
+  });
 
   // 2. Package Input
   let packageInput = '';
@@ -877,6 +948,13 @@ async function runMain() {
   }
 
   if (missing.length > 0) {
+    if (eventName === 'pull_request' && isForkPr(ghRepository, headRepository)) {
+      logWarn(
+        `Fork pull_request: no images in ${registry} for ${repository}. ` +
+          `Publish on push to your fork (packages must be public for upstream CI to pull). ` +
+          `See ${ACTIONS_FORK_DOCS_URL}`
+      );
+    }
     logError(`Failed to resolve: ${missing.join(' ')}`);
     process.exit(1);
   }
@@ -898,5 +976,9 @@ module.exports = {
   resolveDigestIterative,
   renderStepSummary,
   extractPrNumber,
+  isForkPr,
+  publishRepository,
+  resolveImageRepository,
+  headRepositoryFromEvent,
   runMain
 };

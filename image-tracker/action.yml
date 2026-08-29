@@ -22,7 +22,10 @@ inputs:
     description: 'Git revision (SHA, branch, or tag) to resolve against.'
     default: 'HEAD'
   repository:
-    description: 'Repository owning the images (defaults to current).'
+    description: |
+      Repository owning the images. Defaults to the workflow repository; on fork
+      pull_request auto-targets head.repo (same contract as builder-ghcr).
+      An explicit value overrides auto-resolution.
     default: ${{ github.repository }}
   dir:
     description: 'Working directory containing the git repository.'

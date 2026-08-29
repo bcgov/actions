@@ -108,7 +108,7 @@ On a fork `pull_request` into upstream, GitHub grants a **read-only** `GITHUB_TO
 | Concern | Where to read more |
 |---|---|
 | Container builds and GHCR | [builder-ghcr — Fork builds](./builder-ghcr/README.md#fork-builds) |
-| Image digest lookup | [image-tracker](./image-tracker/) (fork-aware resolution planned) |
+| Image digest lookup | [image-tracker — Fork pull requests](./image-tracker/README.md#fork-pull-requests) |
 
 **Do not use `pull_request_target`** for builds or deploys from fork PRs.
 

@@ -92,13 +92,19 @@ External repository:
     dir: target
 ```
 
+## Fork pull requests
+
+On a fork `pull_request` into upstream, images live in the **fork owner's** GHCR (`pull_request.head.repo`), not the base repo. When `repository` is omitted or matches `github.repository`, image-tracker resolves against the fork automatically — the same publish-target contract as [`builder-ghcr`](../builder-ghcr/README.md#fork-builds).
+
+Fork packages must be **public** if upstream CI needs to pull them. If no image exists yet, push to your fork first. See the [fork pull requests guide](../README.md#fork-pull-requests).
+
 ## Inputs
 
 | Input        | Required | Default              | Description                                                                    |
 | ------------ | -------- | -------------------- | ------------------------------------------------------------------------------ |
 | `package`    | ✔        | —                    | One or more package names (comma/space/newline separated).                     |
 | `revision`   |          | `HEAD`               | Git revision (SHA, branch, or tag) to resolve against.                         |
-| `repository` |          | current repo         | Repository owning the images.                                                  |
+| `repository` |          | auto                 | GHCR owner/repo for images. Defaults to workflow repo; on fork `pull_request` auto-targets `head.repo` (same contract as `builder-ghcr`). Explicit value overrides. |
 | `dir`        |          | `.`                  | Working directory containing the git repository.                               |
 | `github_token` |        | `github.token`       | GitHub token used to mint a GHCR bearer token.                                 |
 | `max_tags`   |          | `500`                | Upper bound on tags inspected per package before failing.                      |
