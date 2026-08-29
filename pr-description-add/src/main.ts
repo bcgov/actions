@@ -1,4 +1,4 @@
-import {error, getInput, info, setFailed} from '@actions/core'
+import {error, getInput, info, notice, setFailed} from '@actions/core'
 import {context, getOctokit} from '@actions/github'
 
 // Action input
@@ -38,6 +38,13 @@ async function action(): Promise<void> {
   // Ensure pull request exists
   if (!context.payload.pull_request) {
     setFailed('Error: No pull request found in context. Exiting.')
+    return
+  }
+
+  if (context.payload.pull_request.head.repo.fork) {
+    notice(
+      'Cannot update PR descriptions from fork workflows (read-only token on the base repo). See https://github.com/bcgov/actions/blob/main/README.md#fork-pull-requests'
+    )
     return
   }
 

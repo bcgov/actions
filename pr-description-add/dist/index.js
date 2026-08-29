@@ -31980,7 +31980,7 @@ function warning(message, properties = {}) {
  * @param properties optional properties to add to the annotation.
  */
 function notice(message, properties = {}) {
-    issueCommand('notice', toCommandProperties(properties), message instanceof Error ? message.toString() : message);
+    command_issueCommand('notice', utils_toCommandProperties(properties), message instanceof Error ? message.toString() : message);
 }
 /**
  * Writes info to log with console.log.
@@ -36408,6 +36408,10 @@ async function action() {
     // Ensure pull request exists
     if (!github_context.payload.pull_request) {
         setFailed('Error: No pull request found in context. Exiting.');
+        return;
+    }
+    if (github_context.payload.pull_request.head.repo.fork) {
+        notice('Cannot update PR descriptions from fork workflows (read-only token on the base repo). See https://github.com/bcgov/actions/blob/main/README.md#fork-pull-requests');
         return;
     }
     const prNumber = github_context.payload.pull_request.number;

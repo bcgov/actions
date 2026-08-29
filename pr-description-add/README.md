@@ -24,11 +24,9 @@ permissions:
 
 
 
-#### Forks
-Forks receive purposefully limited rights, preventing this action from running successfully.  It is recommended to avoid that with a condition.
-```
-    if: "!github.event.pull_request.head.repo.fork"
-```
+## Fork pull requests
+
+Fork PRs cannot update the upstream PR description — GitHub grants a read-only token on the base repo. The action detects fork PRs, emits a notice, and exits successfully. See the [fork pull requests guide](https://github.com/bcgov/actions/blob/main/README.md#fork-pull-requests).
 
 ## Example #1, minimal
 
