@@ -24,18 +24,18 @@ jobs:
       pull-requests: write
     runs-on: ubuntu-24.04
     steps:
+      # Fork PRs: warn first — orientation before validation; must run even if later steps fail
+      - name: Fork notice
+        if: github.event.pull_request.head.repo.fork
+        run: |
+          echo "::warning::Fork pull requests run with read-only tokens on the base repository; some steps may be skipped or fail. See https://github.com/bcgov/actions/blob/main/README.md#fork-pull-requests for details."
+
       # Conventional commits
       - name: Conventional Commits
         uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
         if: inputs.conventional_commits
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # Fork PRs: warn only (read-only token, different GHCR targets, etc.)
-      - name: Fork notice
-        if: github.event.pull_request.head.repo.fork
-        run: |
-          echo "::warning::Fork pull requests run with read-only tokens on the base repository; some steps may be skipped or fail. See https://github.com/bcgov/actions/blob/main/README.md#fork-pull-requests for details."
 
       # Add PR Description, doesn't work with forks
       - name: PR Description
