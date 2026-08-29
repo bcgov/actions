@@ -37,9 +37,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Add PR Description, doesn't work with forks
+      # Add PR Description (no-ops on fork PRs inside the action)
       - name: PR Description
-        if: inputs.markdown_links != '' && !github.event.pull_request.head.repo.fork
+        if: inputs.markdown_links != ''
         uses: $/pr-description-add
         env:
           DOMAIN: apps.silver.devops.gov.bc.ca
