@@ -6,7 +6,7 @@ Validate Pull Request metadata and apply organizational guardrails to contributo
 
 - ✅ **Conventional Commits**: Enforces semantic pull request titles (e.g. `feat: ...`, `fix: ...`) per [conventionalcommits.org](https://www.conventionalcommits.org/) using `amannn/action-semantic-pull-request`.
 - ✅ **Educational UX**: Provides explicit, custom GitHub annotations when title validation fails, instructing contributors exactly how to fix the issue without manually retrying CI.
-- ✅ **Fork Blocking**: (Configurable) Rejects pull requests opened from forks with actionable guidance explaining that maintainers must review and re-host external contributions to execute privileged CI runners.
+- ✅ **Fork notice**: Emits a warning on fork pull requests with a link to fork CI configuration guidance. Validation continues (conventional commits, etc.).
 
 ## Permissions
 
@@ -22,8 +22,7 @@ permissions:
 ```yaml
 - name: Validate PR
   uses: bcgov/actions/pr-validate@vX.Y.Z # Replace with latest release tag
-  # No inputs required! 
-  # By default, it will check the PR title, reject forks, and use the native runner token.
+  # No inputs required — checks PR title and emits a fork notice when applicable.
 
 - name: Validate PR (With Custom Inputs)
   uses: bcgov/actions/pr-validate@vX.Y.Z
@@ -31,8 +30,8 @@ permissions:
     # Optional: Enforce Conventional Commits format on the PR title
     # Default: "true"
     conventional_commits: "true"
-
-    # Optional: Reject PRs originating from forks
-    # Default: "true"
-    reject_forks: "true"
 ```
+
+### Fork pull requests
+
+Fork PRs receive a workflow warning and continue validation. They use read-only tokens on the base repo; actions that need write access (e.g. `pr-description-add`) must no-op or be skipped separately. See the [fork pull requests guide](../README.md#fork-pull-requests).

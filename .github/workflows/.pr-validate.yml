@@ -9,11 +9,6 @@ on:
         default: true
         required: false
         type: boolean
-      reject_forks:
-        description: 'Reject forks? [true|false]'
-        default: true
-        required: false
-        type: boolean
       markdown_links:
         description: 'Links for PR description'
         required: false
@@ -29,17 +24,18 @@ jobs:
       pull-requests: write
     runs-on: ubuntu-24.04
     steps:
+      # Fork PRs: warn first — orientation before validation; must run even if later steps fail
+      - name: Fork notice
+        if: github.event.pull_request.head.repo.fork
+        run: |
+          echo "::warning::Fork pull requests run with read-only tokens on the base repository; some steps may be skipped or fail. See https://github.com/bcgov/actions/blob/main/README.md#fork-pull-requests for details."
+
       # Conventional commits
       - name: Conventional Commits
         uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
         if: inputs.conventional_commits
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # Check for forks
-      - name: Fork Check
-        if: inputs.reject_forks && github.event.pull_request.head.repo.fork
-        run: exit 1
 
       # Add PR Description, doesn't work with forks
       - name: PR Description
@@ -73,5 +69,5 @@ jobs:
 
           #### Common Validation Requirements:
           - **Conventional Commits**: PR titles must follow the [Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/).
-          - **Forks**: Direct pull requests from external forks are not supported by the runner validation pipelines.
+          - **Forks**: Fork pull requests run with read-only tokens; some steps (e.g. PR description updates) are skipped. See the [fork pull requests guide](https://github.com/bcgov/actions/blob/main/README.md#fork-pull-requests).
           EOF
