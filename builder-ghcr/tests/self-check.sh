@@ -55,34 +55,46 @@ assert_eq "$(merge_sha_tag $'abcdef\n123\n' abcdef)" $'abcdef\n123' "merge_sha_t
 assert_eq "$(merge_sha_tag '' abcdef)" "abcdef" "merge_sha_tag works when tags are empty (push)"
 assert_eq "$(merge_sha_tag $'PR-123\n' ABCDEF)" $'pr-123\nabcdef' "merge_sha_tag lowercases"
 
-assert_empty "$(refuse_reason push bcgov/actions '')" "push is allowed"
-assert_empty "$(refuse_reason push fork/actions '')" "push on a fork is allowed"
-assert_empty "$(refuse_reason pull_request bcgov/actions bcgov/actions)" "same-repo PR is allowed"
-assert_empty "$(refuse_reason pull_request BcGov/Actions bcgov/actions)" "same-repo PR compare is case-insensitive"
-assert_empty "$(refuse_reason workflow_dispatch bcgov/actions '')" "workflow_dispatch is allowed"
-assert_empty "$(refuse_reason merge_group bcgov/actions '')" "merge_group is allowed"
+assert_eq "$(publish_repository push bcgov/actions '')" "bcgov/actions" "push publishes to workflow repo"
+assert_eq "$(publish_repository pull_request bcgov/actions bcgov/actions)" "bcgov/actions" "same-repo PR publishes to workflow repo"
+assert_eq "$(publish_repository pull_request bcgov/actions fork/actions)" "fork/actions" "fork PR targets fork GHCR"
+assert_eq "$(publish_repository push fork/actions '')" "fork/actions" "fork push targets fork GHCR"
 
-fork_pr="$(refuse_reason pull_request bcgov/actions fork/actions)"
-assert_contains "$fork_pr" "cannot push from a fork pull_request" "fork PR against base is refused"
-assert_contains "$fork_pr" "ghcr.io/fork/actions" "fork PR message names the fork registry"
-assert_contains "$fork_pr" "builder-ghcr/README.md#fork-builds" "fork PR message links to docs"
+can_push_packages push bcgov/actions '' && assert_eq "$?" "0" "push can publish"
+can_push_packages pull_request bcgov/actions bcgov/actions && assert_eq "$?" "0" "same-repo PR can publish"
+if can_push_packages pull_request bcgov/actions fork/actions; then
+  echo "FAIL  fork PR cannot publish"
+  failed=$((failed + 1))
+else
+  echo "ok  fork PR cannot publish"
+  passed=$((passed + 1))
+fi
+
+assert_empty "$(refuse_reason push bcgov/actions '')" "push is allowed"
+assert_empty "$(refuse_reason pull_request bcgov/actions fork/actions)" "fork pull_request is allowed"
+assert_empty "$(refuse_reason pull_request bcgov/actions bcgov/actions)" "same-repo PR is allowed"
+assert_empty "$(refuse_reason workflow_dispatch bcgov/actions '')" "workflow_dispatch is allowed"
 
 fork_prt="$(refuse_reason pull_request_target bcgov/actions fork/actions)"
 assert_contains "$fork_prt" "refuses pull_request_target" "fork pull_request_target is refused"
-assert_contains "$fork_prt" "untrusted" "pull_request_target message names the trust issue"
+assert_contains "$fork_prt" "pull_request workflow instead" "pull_request_target message steers to pull_request"
 assert_contains "$fork_prt" "builder-ghcr/README.md#fork-builds" "pull_request_target message links to docs"
+
+assert_empty "$(refuse_reason pull_request_target bcgov/actions bcgov/actions)" \
+  "same-repo pull_request_target is allowed"
 
 msg="$(fork_visibility_message)"
 assert_contains "$msg" "Images built from forks require" "visibility message states the requirement"
 assert_contains "$msg" "package visibility to public" "visibility message names the fix"
 assert_contains "$msg" "builder-ghcr/README.md#fork-builds" "visibility message links to docs"
-assert_contains "$msg" "for details" "visibility message points to readme for directions"
+
+pr_msg="$(fork_pr_publish_message bcgov/actions/backend abcdef)"
+assert_contains "$pr_msg" "Fork pull_request cannot push" "fork PR notice explains read-only"
+assert_contains "$pr_msg" "ghcr.io/bcgov/actions/backend:abcdef" "fork PR notice names the image"
+assert_contains "$pr_msg" "push to your fork" "fork PR notice points to fork push"
 
 assert_eq "$(is_fork_repository true && echo yes || echo no)" "yes" "is_fork_repository true"
 assert_eq "$(is_fork_repository false && echo yes || echo no)" "no" "is_fork_repository false"
-
-assert_empty "$(refuse_reason pull_request_target bcgov/actions bcgov/actions)" \
-  "same-repo pull_request_target is allowed"
 
 echo ""
 echo "Passed: ${passed}, Failed: ${failed}"

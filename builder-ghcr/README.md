@@ -20,32 +20,23 @@ This is useful in CI/CD pipelines where not every package/app needs to be rebuil
 
 ## Fork builds
 
-This action publishes to **the GHCR namespace of the repository that is running the workflow** (`github.repository`). A `push` on a fork therefore lands in the fork owner's registry, where `GITHUB_TOKEN` has `packages: write`. Same-repo pull requests keep working as before.
+Use the **same workflow** on upstream and fork (`on: [push, pull_request]`). The action adapts — no `if: fork` in your YAML.
 
-### Recommended pattern: `push` on the fork, not `pull_request_target`
+| Event | Where it runs | Publishes to | Pushes? |
+| --- | --- | --- | --- |
+| `push` on fork | Fork | `ghcr.io/<fork-owner>/...` | Yes |
+| `pull_request` (same repo) | Upstream | `ghcr.io/<upstream>/...` | Yes |
+| `pull_request` (fork → upstream) | Upstream | `ghcr.io/<fork-owner>/...` (outputs) | **No** — validates/builds locally; image publishes on fork `push` |
 
-**Do not use `pull_request_target` for builds or deploys.** That event runs the workflow file from the upstream default branch, not from the contributor's PR — so workflow changes in the PR never execute, which is confusing and hard to debug. It also runs with upstream secrets against fork code, which is a common source of security incidents.
+On a fork pull request, `image_path` and `source_sha` still point at the fork image (`ghcr.io/<fork-owner>/...:<head.sha>`) so deploy steps in the same workflow can reference the right coordinates. Check `pushed` — when `false`, wait for the contributor's fork `push` (or a prior one) before deploying.
 
-Instead, split responsibilities:
-
-| Where | Event | What runs |
-| --- | --- | --- |
-| **Fork** | `push` | Build and push images (workflow from the contributor's branch) |
-| **Upstream** | `pull_request` | Validate, test, lint (workflow from the PR merge ref; no secrets on external forks) |
-| **Upstream** | `workflow_dispatch` or merge | Deploy to OpenShift using `ghcr.io/<fork-owner>/...:<head.sha>` (secrets stay on workflows you control) |
-
-Fork `pull_request` against upstream cannot push images: GitHub makes `GITHUB_TOKEN` read-only. This action fails fast rather than spending minutes on a 403. `pull_request_target` from a fork is also refused — it would publish untrusted PR-head code to the base registry.
-
-The image is always tagged with the source commit SHA (`source_sha` output: PR head SHA, or `github.sha` on push). A deploy job can pull by SHA without sharing build outputs:
-
-`ghcr.io/<fork-owner>/<repo>/<package>:<head.sha>`
-
-(or `ghcr.io/<fork-owner>/<repo>:<head.sha>` when `package` matches the repository name).
+**Do not use `pull_request_target` for builds or deploys.** That event runs the workflow file from the upstream default branch, not from the contributor's PR. This action refuses fork `pull_request_target` outright.
 
 ```yaml
 on:
   push:
     branches-ignore: [main]
+  pull_request:
 
 jobs:
   build:
@@ -64,7 +55,7 @@ jobs:
           triggers: ('${{ matrix.package }}/')
 ```
 
-**GHCR visibility:** images pushed to a fork's GHCR are **private by default**. The action emits this warning on fork builds:
+**GHCR visibility:** images pushed to a fork's GHCR are **private by default**. The action emits this warning after a fork `push`:
 
 > WARNING: Images built from forks require that the fork set package visibility to public. See the [fork builds guide](https://github.com/bcgov/actions/blob/main/builder-ghcr/README.md#fork-builds) for details.
 
@@ -384,6 +375,7 @@ Two SBOM formats are generated and uploaded as workflow artifacts:
 | `registry_host` | The registry host name, always `ghcr.io` |
 | `image_path` | The full image path including the tag, always with a leading slash, in the format `/owner/repo/image:tag` (or `/owner/repo:tag` when the package matches the repository name) |
 | `source_sha` | Git commit SHA tagged on the image (PR head SHA, or `github.sha` on push) |
+| `pushed` | `true` when the image was pushed or retagged in GHCR this run; `false` on fork `pull_request` (publish happens on fork `push`) |
 
 New image digest (SHA).  This applies to build and retags.
 

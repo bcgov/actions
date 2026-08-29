@@ -117,16 +117,19 @@ outputs:
     description: "Git commit SHA tagged on the image (PR head SHA, or github.sha on push). Deploy workflows can pull ghcr.io/<owner>/<repo>/<package>:<source_sha>."
     value: ${{ steps.vars.outputs.source_sha }}
 
+  pushed:
+    description: "Whether the image was pushed (or retagged) in GHCR this run. False on fork pull_request (validates/builds locally; publish happens on fork push)."
+    value: ${{ steps.final_outputs.outputs.pushed }}
+
 runs:
   using: composite
   steps:
-    # Initialize variables. Image destination is github.repository (the repo
-    # whose GITHUB_TOKEN is running): on a fork push that is the fork's GHCR.
+    # Publish target follows the workflow context: fork push → fork GHCR;
+    # fork pull_request → head-repo GHCR (read-only here; push on fork push).
     - id: vars
       shell: bash
       env:
         INPUT_PACKAGE: ${{ inputs.package }}
-        CONTEXT_REPO: ${{ github.event.repository.name }}
         INPUT_TAGS: ${{ inputs.tags }}
         EVENT_NAME: ${{ github.event_name }}
         GH_REPOSITORY: ${{ github.repository }}
@@ -145,14 +148,23 @@ runs:
           exit 1
         fi
 
-        image_path="$(image_path_for "${INPUT_PACKAGE}" "${GH_REPOSITORY}" "${CONTEXT_REPO}")"
+        publish_repo="$(publish_repository "${EVENT_NAME}" "${GH_REPOSITORY}" "${HEAD_REPO}")"
+        publish_name="${publish_repo##*/}"
+        image_path="$(image_path_for "${INPUT_PACKAGE}" "${publish_repo}" "${publish_name}")"
         sha="$(source_sha "${HEAD_SHA}" "${EVENT_SHA}")"
         tags="$(merge_sha_tag "${INPUT_TAGS}" "${sha}")"
+
+        if can_push_packages "${EVENT_NAME}" "${GH_REPOSITORY}" "${HEAD_REPO}"; then
+          can_push=true
+        else
+          can_push=false
+        fi
 
         echo "image_path=${image_path}" >> "$GITHUB_OUTPUT"
         echo "image_name=ghcr.io/${image_path}" >> "$GITHUB_OUTPUT"
         echo "registry_host=ghcr.io" >> "$GITHUB_OUTPUT"
         echo "source_sha=${sha}" >> "$GITHUB_OUTPUT"
+        echo "can_push=${can_push}" >> "$GITHUB_OUTPUT"
         {
           echo "tags<<EOF"
           printf '%s\n' "${tags}"
@@ -243,7 +255,7 @@ runs:
     # If a build is not required, reuse a previous image
     - name: Recycle/retag Previous Images
       uses: shrink/actions-docker-registry-tag@e6aaef25c595b6e0edd18bf4c7dbfea3abd43299 # v5
-      if: steps.build.outputs.triggered != 'true'
+      if: steps.build.outputs.triggered != 'true' && steps.vars.outputs.can_push == 'true'
       with:
         registry: ghcr.io
         repository: ${{ steps.vars.outputs.image_path }}
@@ -251,7 +263,6 @@ runs:
         tags: |
           ${{ steps.vars.outputs.tags }}
         token: ${{ inputs.github_token }}
-
 
     # Checkout code for building - external repo (use default branch)
     - name: Checkout external repository
@@ -365,19 +376,31 @@ runs:
       with:
         context: .builder-context/${{ inputs.build_context || inputs.package }}
         file: .builder-context/${{ inputs.build_file || format('{0}/Dockerfile', inputs.package) }}
-        push: true
+        push: ${{ steps.vars.outputs.can_push == 'true' }}
         tags: ${{ steps.tags.outputs.final_tags }}
         labels: ${{ steps.tags.outputs.labels }}
         annotations: ${{ steps.tags.outputs.annotations }}
         cache-from: type=registry,ref=ghcr.io/${{ steps.vars.outputs.image_path }}:buildcache
-        cache-to: type=registry,ref=ghcr.io/${{ steps.vars.outputs.image_path }}:buildcache,mode=max
+        cache-to: ${{ steps.vars.outputs.can_push == 'true' && format('type=registry,ref=ghcr.io/{0}:buildcache,mode=max', steps.vars.outputs.image_path) || '' }}
         build-args: ${{ inputs.build_args }}
         secrets: |
           ${{ inputs.secrets }}
 
+    - name: Fork pull_request notice
+      if: steps.vars.outputs.can_push != 'true'
+      shell: bash
+      env:
+        IMAGE_PATH: ${{ steps.vars.outputs.image_path }}
+        SOURCE_SHA: ${{ steps.vars.outputs.source_sha }}
+      run: |
+        # shellcheck source=context.sh
+        source "${{ github.action_path }}/context.sh"
+        msg="$(fork_pr_publish_message "${IMAGE_PATH}" "${SOURCE_SHA}")"
+        echo "::notice::${msg}"
+
     - name: Generate SBOM
       id: sbom
-      if: steps.build.outputs.triggered == 'true' && inputs.sbom == 'true'
+      if: steps.build.outputs.triggered == 'true' && steps.vars.outputs.can_push == 'true' && inputs.sbom == 'true'
       continue-on-error: true
       shell: bash
       run: |
@@ -451,7 +474,7 @@ runs:
     - name: Attest
       continue-on-error: true
       id: attest
-      if: steps.build.outputs.triggered == 'true' && steps.attest_check.outputs.can_attest == 'true'
+      if: steps.build.outputs.triggered == 'true' && steps.vars.outputs.can_push == 'true' && steps.attest_check.outputs.can_attest == 'true'
       uses: actions/attest-build-provenance@v4
       with:
         subject-name: ghcr.io/${{ steps.vars.outputs.image_path }}
@@ -463,6 +486,11 @@ runs:
       id: final_outputs
       shell: bash
       run: |
+        pushed=false
+        if [ "${{ steps.vars.outputs.can_push }}" == "true" ]; then
+          pushed=true
+        fi
+
         if [ "${{ steps.build.outputs.triggered }}" == "true" ]; then
           echo "digest=${{ steps.build_and_push.outputs.digest }}" >> $GITHUB_OUTPUT
           # Derive image_path from the actual tags generated/pushed
@@ -478,6 +506,7 @@ runs:
           image_path="/${{ steps.vars.outputs.image_path }}:${tag}"
         fi
         echo "image_path=${image_path}" >> $GITHUB_OUTPUT
+        echo "pushed=${pushed}" >> $GITHUB_OUTPUT
 
     - name: Print summary outputs
       if: always()
@@ -499,6 +528,7 @@ runs:
         echo "| **registry_host** | \`${{ steps.vars.outputs.registry_host }}\` |" >> $GITHUB_STEP_SUMMARY
         echo "| **image_path** | \`${{ steps.final_outputs.outputs.image_path }}\` |" >> $GITHUB_STEP_SUMMARY
         echo "| **source_sha** | \`${{ steps.vars.outputs.source_sha }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| **pushed** | \`${{ steps.final_outputs.outputs.pushed }}\` |" >> $GITHUB_STEP_SUMMARY
 
         if [ "${{ steps.build.outputs.triggered }}" == "true" ]; then
           echo "tags: ${{ steps.tags.outputs.final_tags }}"
@@ -515,7 +545,7 @@ runs:
         echo "-----------------------"
 
     - name: Fork GHCR visibility notice
-      if: always() && github.event.repository.fork == 'true' && inputs.repository == github.repository
+      if: always() && steps.vars.outputs.can_push == 'true' && github.event.repository.fork == 'true' && inputs.repository == github.repository
       shell: bash
       env:
         IMAGE_PATH: ${{ steps.vars.outputs.image_path }}

@@ -46,6 +46,41 @@ EOF
   fi
 }
 
+# is_fork_pr GH_REPOSITORY HEAD_REPO
+# True when a pull_request originates from a different repository (fork).
+is_fork_pr() {
+  local gh_repo="${1,,}"
+  local head_repo="${2,,}"
+  [ -n "$head_repo" ] && [ "$head_repo" != "$gh_repo" ]
+}
+
+# publish_repository EVENT_NAME GH_REPOSITORY HEAD_REPO
+# GHCR owner/repo (or fork head repo on fork pull_request) where images live.
+publish_repository() {
+  local event_name="$1"
+  local gh_repo="${2,,}"
+  local head_repo="${3,,}"
+
+  if [ "$event_name" = "pull_request" ] && is_fork_pr "$gh_repo" "$head_repo"; then
+    printf '%s\n' "$head_repo"
+    return
+  fi
+  printf '%s\n' "$gh_repo"
+}
+
+# can_push_packages EVENT_NAME GH_REPOSITORY HEAD_REPO
+# Exits 0 when this run may push/retag to GHCR; 1 on read-only fork pull_request.
+can_push_packages() {
+  local event_name="$1"
+  local gh_repo="${2,,}"
+  local head_repo="${3,,}"
+
+  if [ "$event_name" = "pull_request" ] && is_fork_pr "$gh_repo" "$head_repo"; then
+    return 1
+  fi
+  return 0
+}
+
 BUILDER_GHCR_FORK_DOCS_URL="${BUILDER_GHCR_FORK_DOCS_URL:-https://github.com/bcgov/actions/blob/main/builder-ghcr/README.md#fork-builds}"
 
 # fork_visibility_message [DOCS_URL]
@@ -53,6 +88,15 @@ fork_visibility_message() {
   local docs_url="${1:-$BUILDER_GHCR_FORK_DOCS_URL}"
   printf 'Images built from forks require that the fork set package visibility to public. See %s for details.' \
     "$docs_url"
+}
+
+# fork_pr_publish_message IMAGE_PATH SOURCE_SHA [DOCS_URL]
+fork_pr_publish_message() {
+  local image_path="$1"
+  local source_sha="$2"
+  local docs_url="${3:-$BUILDER_GHCR_FORK_DOCS_URL}"
+  printf 'Fork pull_request cannot push to GHCR (read-only token). Build validates only; images publish on push to your fork at ghcr.io/%s:%s. See %s for details.' \
+    "$image_path" "$source_sha" "$docs_url"
 }
 
 # is_fork_repository REPO_IS_FORK
@@ -68,19 +112,13 @@ refuse_reason() {
   local gh_repo="${2,,}"
   local head_repo="${3,,}"
 
-  case "$event_name" in
-    pull_request|pull_request_target) ;;
-    *) return 0 ;;
-  esac
-
-  if [ -z "$head_repo" ] || [ "$head_repo" = "$gh_repo" ]; then
+  if [ "$event_name" != "pull_request_target" ]; then
     return 0
   fi
 
-  if [ "$event_name" = "pull_request_target" ]; then
-    printf '%s\n' "builder-ghcr refuses pull_request_target from a fork. That event has write access to ghcr.io/${gh_repo} and this action checkouts PR head, which would publish an untrusted image to the base registry. Build on push in the fork instead; images land in ghcr.io/${head_repo}. See ${BUILDER_GHCR_FORK_DOCS_URL}"
+  if ! is_fork_pr "$gh_repo" "$head_repo"; then
     return 0
   fi
 
-  printf '%s\n' "builder-ghcr cannot push from a fork pull_request. GITHUB_TOKEN is read-only for ghcr.io/${gh_repo}. Run this action from a push workflow on the fork so the image is published to ghcr.io/${head_repo} tagged with the commit SHA. See ${BUILDER_GHCR_FORK_DOCS_URL}"
+  printf '%s\n' "builder-ghcr refuses pull_request_target from a fork. That event has write access to ghcr.io/${gh_repo} and this action checkouts PR head, which would publish an untrusted image to the base registry. Use the same pull_request workflow instead; images publish on push to the fork. See ${BUILDER_GHCR_FORK_DOCS_URL}"
 }
