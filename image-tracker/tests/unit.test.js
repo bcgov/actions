@@ -338,3 +338,84 @@ test('Step summary rendering - custom registry host', () => {
 
   assert.strictEqual(output, expected, 'step summary uses custom registry host in image reference');
 });
+
+test('isForkPr - fork and same-repo', () => {
+  const { isForkPr } = require('../index.js');
+  assert.strictEqual(isForkPr('bcgov/actions', 'derekroberts/actions'), true, 'fork PR detected');
+  assert.strictEqual(isForkPr('bcgov/actions', 'bcgov/actions'), false, 'same-repo PR');
+  assert.strictEqual(isForkPr('bcgov/actions', ''), false, 'empty head repo');
+});
+
+test('publishRepository - matches builder-ghcr contract', () => {
+  const { publishRepository } = require('../index.js');
+  assert.strictEqual(
+    publishRepository('pull_request', 'bcgov/foo', 'fork/foo'),
+    'fork/foo',
+    'fork pull_request targets head repo'
+  );
+  assert.strictEqual(
+    publishRepository('pull_request', 'bcgov/foo', 'bcgov/foo'),
+    'bcgov/foo',
+    'same-repo pull_request'
+  );
+  assert.strictEqual(publishRepository('push', 'fork/foo', ''), 'fork/foo', 'push uses workflow repo');
+});
+
+test('resolveImageRepository - explicit override and auto fork target', () => {
+  const { resolveImageRepository } = require('../index.js');
+  assert.strictEqual(
+    resolveImageRepository({
+      inputRepository: 'bcgov/quickstart-openshift',
+      ghRepository: 'bcgov/actions',
+      eventName: 'pull_request',
+      headRepository: 'derekroberts/actions'
+    }),
+    'bcgov/quickstart-openshift',
+    'explicit repository overrides fork auto-resolution'
+  );
+  assert.strictEqual(
+    resolveImageRepository({
+      inputRepository: '',
+      ghRepository: 'bcgov/foo',
+      eventName: 'pull_request',
+      headRepository: 'fork/foo'
+    }),
+    'fork/foo',
+    'omitted input auto-targets fork GHCR on fork PR'
+  );
+  assert.strictEqual(
+    resolveImageRepository({
+      inputRepository: 'bcgov/foo',
+      ghRepository: 'bcgov/foo',
+      eventName: 'pull_request',
+      headRepository: 'fork/foo'
+    }),
+    'bcgov/foo',
+    'explicit workflow repo still resolves upstream images on fork PR'
+  );
+  assert.strictEqual(
+    resolveImageRepository({
+      inputRepository: '',
+      ghRepository: 'fork/foo',
+      eventName: 'push',
+      headRepository: ''
+    }),
+    'fork/foo',
+    'fork push uses workflow repository'
+  );
+});
+
+test('imageResolveMissIsExpected - fork PR only', () => {
+  const { imageResolveMissIsExpected } = require('../index.js');
+  assert.strictEqual(
+    imageResolveMissIsExpected('pull_request', 'bcgov/foo', 'fork/foo'),
+    true,
+    'fork pull_request miss is expected'
+  );
+  assert.strictEqual(
+    imageResolveMissIsExpected('pull_request', 'bcgov/foo', 'bcgov/foo'),
+    false,
+    'same-repo PR miss is an error'
+  );
+  assert.strictEqual(imageResolveMissIsExpected('push', 'fork/foo', ''), false, 'push miss is an error');
+});

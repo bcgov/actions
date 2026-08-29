@@ -22,8 +22,10 @@ inputs:
     description: 'Git revision (SHA, branch, or tag) to resolve against.'
     default: 'HEAD'
   repository:
-    description: 'Repository owning the images (defaults to current).'
-    default: ${{ github.repository }}
+    description: |
+      Repository owning the images. Omit to follow builder-ghcr publish
+      targets (fork pull_request → head.repo). Any nonempty value is used as-is,
+      including the workflow repository, so fork PRs can still resolve upstream images.
   dir:
     description: 'Working directory containing the git repository.'
     default: '.'

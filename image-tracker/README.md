@@ -52,6 +52,7 @@ resolved — there is no workaround short of rebuilding them with proper labels.
     package: frontend
 
 - name: Deploy
+  if: steps.tracker.outputs.digest != ''
   run: ./deploy.sh ${{ steps.tracker.outputs.digest }}
 ```
 
