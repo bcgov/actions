@@ -65,6 +65,11 @@ jobs:
       id-token: write
       attestations: write
     steps:
+      - uses: actions/checkout@v7
+
+      - name: Context self-check
+        run: bash builder-ghcr/tests/self-check.sh
+
       - id: build
         uses: $/builder-ghcr
         with:
