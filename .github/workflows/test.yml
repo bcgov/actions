@@ -584,21 +584,19 @@ jobs:
       contents: read
       pull-requests: read
     steps:
+      - uses: actions/checkout@v7
+
+      - name: Context self-check
+        run: bash pr-validate/tests/self-check.sh
+
       - name: Test Default Inputs
         uses: $/pr-validate
         with:
           conventional_commits: "false"
-          reject_forks: "false"
 
       - name: Test Disabled Conventional Commits
         uses: $/pr-validate
         with:
-          conventional_commits: "false"
-
-      - name: Test Disabled Fork Rejection
-        uses: $/pr-validate
-        with:
-          reject_forks: "false"
           conventional_commits: "false"
 
   # ─── SYSDIG MONITOR ────────────────────────────────────────────────────────

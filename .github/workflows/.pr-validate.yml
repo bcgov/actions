@@ -10,7 +10,7 @@ on:
         required: false
         type: boolean
       reject_forks:
-        description: 'Reject forks? [true|false]'
+        description: 'DEPRECATED: ignored. Fork PRs emit a warning and validation continues.'
         default: true
         required: false
         type: boolean
@@ -36,10 +36,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Check for forks
-      - name: Fork Check
-        if: inputs.reject_forks && github.event.pull_request.head.repo.fork
-        run: exit 1
+      # Fork PRs: warn only (read-only token, different GHCR targets, etc.)
+      - name: Fork notice
+        if: github.event.pull_request.head.repo.fork
+        run: |
+          echo "::warning::Fork pull requests use read-only tokens and different configuration. See https://github.com/bcgov/actions/blob/main/builder-ghcr/README.md#fork-builds for details."
 
       # Add PR Description, doesn't work with forks
       - name: PR Description
@@ -73,5 +74,5 @@ jobs:
 
           #### Common Validation Requirements:
           - **Conventional Commits**: PR titles must follow the [Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/).
-          - **Forks**: Direct pull requests from external forks are not supported by the runner validation pipelines.
+          - **Forks**: Fork pull requests run with read-only tokens; some steps (e.g. PR description updates) are skipped. See the [fork builds guide](https://github.com/bcgov/actions/blob/main/builder-ghcr/README.md#fork-builds).
           EOF

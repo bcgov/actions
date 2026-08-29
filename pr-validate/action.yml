@@ -9,7 +9,7 @@ inputs:
     description: "Enforce conventional commits?"
     default: "true"
   reject_forks:
-    description: "Reject forks? [true|false]"
+    description: "DEPRECATED: ignored. Fork PRs emit a warning and validation continues."
     default: "true"
   add_markdown:
     description: "DEPRECATED: Markdown injection is no longer supported"
@@ -25,12 +25,13 @@ runs:
         echo "::error::The markdown functionality has been deprecated and removed from pr-validate. Please use the standalone 'bcgov/actions/pr-description-add' action instead."
         exit 1
 
-    - name: Fork Check
-      if: inputs.reject_forks == 'true' && github.event.pull_request.head.repo.fork
+    - name: Fork notice
+      if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork
       shell: bash
       run: |
-        echo "::error::Pull requests directly from forks are not permitted by this repository's automated CI security policy. If you are an external contributor, a repository maintainer will need to review and re-host your branch internally to run CI."
-        exit 1
+        # shellcheck source=fork-notice.sh
+        source "${{ github.action_path }}/fork-notice.sh"
+        echo "::warning::$(fork_pr_warning)"
 
     - name: Conventional Commits
       if: inputs.conventional_commits == 'true' && github.event_name == 'pull_request'
