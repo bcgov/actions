@@ -24,10 +24,18 @@ jobs:
       pull-requests: write
     runs-on: ubuntu-24.04
     steps:
-      - name: Validate PR
-        uses: $/pr-validate
-        with:
-          conventional_commits: ${{ inputs.conventional_commits }}
+      # Conventional commits
+      - name: Conventional Commits
+        uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
+        if: inputs.conventional_commits
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Fork PRs: warn only (read-only token, different GHCR targets, etc.)
+      - name: Fork notice
+        if: github.event.pull_request.head.repo.fork
+        run: |
+          echo "::warning::Fork pull requests use read-only tokens and different configuration. See https://github.com/bcgov/actions/blob/main/builder-ghcr/README.md#fork-builds for details."
 
       # Add PR Description, doesn't work with forks
       - name: PR Description
