@@ -46,6 +46,24 @@ EOF
   fi
 }
 
+BUILDER_GHCR_FORK_DOCS_URL="${BUILDER_GHCR_FORK_DOCS_URL:-https://github.com/bcgov/actions/blob/main/builder-ghcr/README.md#fork-builds}"
+
+# fork_visibility_message IMAGE_PATH SOURCE_SHA [DOCS_URL]
+# One-line notice for fork GHCR packages (private by default).
+fork_visibility_message() {
+  local image_path="$1"
+  local source_sha="$2"
+  local docs_url="${3:-$BUILDER_GHCR_FORK_DOCS_URL}"
+  printf 'GHCR packages on forks are private by default. If upstream deploy fails with ImagePullBackOff, make ghcr.io/%s:%s public: open your GitHub Packages page, select the package, Package settings, Danger Zone, Change visibility, Public (one-time per package). Details: %s' \
+    "$image_path" "$source_sha" "$docs_url"
+}
+
+# is_fork_repository REPO_IS_FORK
+# REPO_IS_FORK is the string "true" or "false" from github.event.repository.fork.
+is_fork_repository() {
+  [ "${1,,}" = "true" ]
+}
+
 # refuse_reason EVENT_NAME GITHUB_REPOSITORY HEAD_REPO
 # Prints a reason to refuse, or nothing if the action may proceed.
 refuse_reason() {
@@ -63,9 +81,9 @@ refuse_reason() {
   fi
 
   if [ "$event_name" = "pull_request_target" ]; then
-    printf '%s\n' "builder-ghcr refuses pull_request_target from a fork. That event has write access to ghcr.io/${gh_repo} and this action checkouts PR head, which would publish an untrusted image to the base registry. Build on push in the fork instead; images land in ghcr.io/${head_repo}."
+    printf '%s\n' "builder-ghcr refuses pull_request_target from a fork. That event has write access to ghcr.io/${gh_repo} and this action checkouts PR head, which would publish an untrusted image to the base registry. Build on push in the fork instead; images land in ghcr.io/${head_repo}. See ${BUILDER_GHCR_FORK_DOCS_URL}"
     return 0
   fi
 
-  printf '%s\n' "builder-ghcr cannot push from a fork pull_request. GITHUB_TOKEN is read-only for ghcr.io/${gh_repo}. Run this action from a push workflow on the fork so the image is published to ghcr.io/${head_repo} tagged with the commit SHA."
+  printf '%s\n' "builder-ghcr cannot push from a fork pull_request. GITHUB_TOKEN is read-only for ghcr.io/${gh_repo}. Run this action from a push workflow on the fork so the image is published to ghcr.io/${head_repo} tagged with the commit SHA. See ${BUILDER_GHCR_FORK_DOCS_URL}"
 }

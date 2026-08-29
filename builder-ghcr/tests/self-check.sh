@@ -65,10 +65,21 @@ assert_empty "$(refuse_reason merge_group bcgov/actions '')" "merge_group is all
 fork_pr="$(refuse_reason pull_request bcgov/actions fork/actions)"
 assert_contains "$fork_pr" "cannot push from a fork pull_request" "fork PR against base is refused"
 assert_contains "$fork_pr" "ghcr.io/fork/actions" "fork PR message names the fork registry"
+assert_contains "$fork_pr" "builder-ghcr/README.md#fork-builds" "fork PR message links to docs"
 
 fork_prt="$(refuse_reason pull_request_target bcgov/actions fork/actions)"
 assert_contains "$fork_prt" "refuses pull_request_target" "fork pull_request_target is refused"
 assert_contains "$fork_prt" "untrusted" "pull_request_target message names the trust issue"
+assert_contains "$fork_prt" "builder-ghcr/README.md#fork-builds" "pull_request_target message links to docs"
+
+msg="$(fork_visibility_message bcgov/actions/backend abcdef)"
+assert_contains "$msg" "ImagePullBackOff" "visibility message names the deploy symptom"
+assert_contains "$msg" "ghcr.io/bcgov/actions/backend:abcdef" "visibility message names the image"
+assert_contains "$msg" "Change visibility" "visibility message names the fix"
+assert_contains "$msg" "builder-ghcr/README.md#fork-builds" "visibility message links to docs"
+
+assert_eq "$(is_fork_repository true && echo yes || echo no)" "yes" "is_fork_repository true"
+assert_eq "$(is_fork_repository false && echo yes || echo no)" "no" "is_fork_repository false"
 
 assert_empty "$(refuse_reason pull_request_target bcgov/actions bcgov/actions)" \
   "same-repo pull_request_target is allowed"

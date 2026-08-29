@@ -52,7 +52,7 @@ jobs:
           triggers: ('${{ matrix.package }}/')
 ```
 
-**GHCR visibility:** images pushed to a fork's GHCR are **private by default**. A cluster pulling without the fork owner's credentials will get `ImagePullBackOff` until the contributor sets the package to public (Package Settings → Danger Zone → Change Visibility). There is no supported `GITHUB_TOKEN` API for that change.
+**GHCR visibility:** images pushed to a fork's GHCR are **private by default**. A cluster pulling without the fork owner's credentials will get `ImagePullBackOff` until the contributor sets the package to public (Package Settings → Danger Zone → Change Visibility). There is no supported `GITHUB_TOKEN` API for that change. The action emits a workflow warning and job-summary callout on fork builds; see the [Fork builds](#fork-builds) section below.
 
 This tool is currently strongly opinionated and generates images with a rigid structure below.  This is intended to become more flexible in future.
 
