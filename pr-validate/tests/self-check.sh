@@ -20,7 +20,7 @@ assert_contains() {
 
 msg="$(fork_pr_warning)"
 assert_contains "$msg" "read-only tokens" "warning mentions read-only tokens"
-assert_contains "$msg" "builder-ghcr/README.md#fork-builds" "warning links to fork docs"
+assert_contains "$msg" "README.md#fork-pull-requests" "warning links to fork docs"
 
 echo ""
 echo "Passed: $passed, Failed: $failed"

@@ -35,7 +35,7 @@ jobs:
       - name: Fork notice
         if: github.event.pull_request.head.repo.fork
         run: |
-          echo "::warning::Fork pull requests use read-only tokens and different configuration. See https://github.com/bcgov/actions/blob/main/builder-ghcr/README.md#fork-builds for details."
+          echo "::warning::Fork pull requests run with read-only tokens on the base repository; some steps may be skipped or fail. See https://github.com/bcgov/actions/blob/main/README.md#fork-pull-requests for details."
 
       # Add PR Description, doesn't work with forks
       - name: PR Description
@@ -69,5 +69,5 @@ jobs:
 
           #### Common Validation Requirements:
           - **Conventional Commits**: PR titles must follow the [Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/).
-          - **Forks**: Fork pull requests run with read-only tokens; some steps (e.g. PR description updates) are skipped. See the [fork builds guide](https://github.com/bcgov/actions/blob/main/builder-ghcr/README.md#fork-builds).
+          - **Forks**: Fork pull requests run with read-only tokens; some steps (e.g. PR description updates) are skipped. See the [fork pull requests guide](https://github.com/bcgov/actions/blob/main/README.md#fork-pull-requests).
           EOF

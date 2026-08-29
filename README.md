@@ -99,6 +99,19 @@ Refer to each action's directory for its exact minimum required permissions bloc
 - **[test-and-analyse](./test-and-analyse/)**: `contents: read`, `actions: write` (optional, for caching)
 - **[workflow-notifier](./workflow-notifier/)**: `contents: read`, `issues: write`
 
+## Fork pull requests
+
+Use the **same workflow** on upstream and fork (`on: [push, pull_request]`). Individual actions adapt where they can — no `if: fork` guards required in consumer YAML.
+
+On a fork `pull_request` into upstream, GitHub grants a **read-only** `GITHUB_TOKEN` on the base repository. Steps that need write access (updating PR descriptions, creating issues, pushing packages to the base org's GHCR) are skipped or fail. That is expected platform behaviour, not a misconfiguration.
+
+| Concern | Where to read more |
+|---|---|
+| Container builds and GHCR | [builder-ghcr — Fork builds](./builder-ghcr/README.md#fork-builds) |
+| Image digest lookup | [image-tracker](./image-tracker/) (fork-aware resolution planned) |
+
+**Do not use `pull_request_target`** for builds or deploys from fork PRs.
+
 ## Releases and Version Pinning
 
 > **Never reference these actions with `@main`.** Always pin to a release tag (e.g. `@v1.2.3`) or, better yet, a full commit SHA.
