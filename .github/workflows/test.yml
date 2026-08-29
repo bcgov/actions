@@ -589,12 +589,7 @@ jobs:
       - name: Context self-check
         run: bash pr-validate/tests/self-check.sh
 
-      - name: Test Default Inputs
-        uses: $/pr-validate
-        with:
-          conventional_commits: "false"
-
-      - name: Test Disabled Conventional Commits
+      - name: Test pr-validate action
         uses: $/pr-validate
         with:
           conventional_commits: "false"

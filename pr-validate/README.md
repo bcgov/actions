@@ -35,5 +35,3 @@ permissions:
 ### Fork pull requests
 
 Fork PRs receive a workflow warning and continue validation. They use read-only tokens on the base repo; actions that need write access (e.g. `pr-description-add`) must no-op or be skipped separately. See the [fork builds guide](../builder-ghcr/README.md#fork-builds).
-
-The `reject_forks` input is deprecated and ignored; it remains only for backward compatibility.

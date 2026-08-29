@@ -1,5 +1,5 @@
 name: "PR Validate"
-description: "Validate Pull Request metadata like Conventional Commits and fork rules"
+description: "Validate Pull Request metadata like Conventional Commits"
 branding:
   icon: "check-circle"
   color: "blue"
@@ -7,9 +7,6 @@ branding:
 inputs:
   conventional_commits:
     description: "Enforce conventional commits?"
-    default: "true"
-  reject_forks:
-    description: "DEPRECATED: ignored. Fork PRs emit a warning and validation continues."
     default: "true"
   add_markdown:
     description: "DEPRECATED: Markdown injection is no longer supported"
