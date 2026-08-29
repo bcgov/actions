@@ -115,7 +115,7 @@ outputs:
 
   source_sha:
     description: "Git commit SHA tagged on the image (PR head SHA, or github.sha on push). Deploy workflows can pull ghcr.io/<owner>/<repo>/<package>:<source_sha>."
-    value: ${{ steps.vars.outputs.source_sha }}
+    value: ${{ steps.resolved_sha.outputs.source_sha || steps.vars.outputs.source_sha }}
 
   pushed:
     description: "Whether the image was pushed (or retagged) in GHCR this run. False on fork pull_request (validates/builds locally; publish happens on fork push)."
@@ -131,6 +131,7 @@ runs:
       env:
         INPUT_PACKAGE: ${{ inputs.package }}
         INPUT_TAGS: ${{ inputs.tags }}
+        INPUT_REPOSITORY: ${{ inputs.repository }}
         EVENT_NAME: ${{ github.event_name }}
         GH_REPOSITORY: ${{ github.repository }}
         HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
@@ -151,8 +152,14 @@ runs:
         publish_repo="$(publish_repository "${EVENT_NAME}" "${GH_REPOSITORY}" "${HEAD_REPO}")"
         publish_name="${publish_repo##*/}"
         image_path="$(image_path_for "${INPUT_PACKAGE}" "${publish_repo}" "${publish_name}")"
-        sha="$(source_sha "${HEAD_SHA}" "${EVENT_SHA}")"
-        tags="$(merge_sha_tag "${INPUT_TAGS}" "${sha}")"
+        if is_external_repository "${INPUT_REPOSITORY}" "${GH_REPOSITORY}"; then
+          # External checkouts resolve their own SHA after clone (see Resolve source SHA).
+          sha=""
+          tags="$(merge_sha_tag "${INPUT_TAGS}" "")"
+        else
+          sha="$(source_sha "${HEAD_SHA}" "${EVENT_SHA}")"
+          tags="$(merge_sha_tag "${INPUT_TAGS}" "${sha}")"
+        fi
 
         if can_push_packages "${EVENT_NAME}" "${GH_REPOSITORY}" "${HEAD_REPO}"; then
           can_push=true
@@ -288,6 +295,33 @@ runs:
         path: .builder-context
         clean: false
 
+    - name: Resolve source SHA
+      id: resolved_sha
+      if: steps.build.outputs.triggered == 'true'
+      shell: bash
+      env:
+        INPUT_TAGS: ${{ inputs.tags }}
+        INPUT_REPOSITORY: ${{ inputs.repository }}
+        GH_REPOSITORY: ${{ github.repository }}
+        WORKFLOW_SHA: ${{ steps.vars.outputs.source_sha }}
+      run: |
+        set -euo pipefail
+        # shellcheck source=context.sh
+        source "${{ github.action_path }}/context.sh"
+
+        if is_external_repository "${INPUT_REPOSITORY}" "${GH_REPOSITORY}"; then
+          sha="$(git -C .builder-context rev-parse HEAD)"
+        else
+          sha="${WORKFLOW_SHA}"
+        fi
+        tags="$(merge_sha_tag "${INPUT_TAGS}" "${sha}")"
+        echo "source_sha=${sha}" >> "$GITHUB_OUTPUT"
+        {
+          echo "tags<<EOF"
+          printf '%s\n' "${tags}"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+
     - name: Set up Docker Buildx
       if: steps.build.outputs.triggered == 'true'
       uses: docker/setup-buildx-action@v4
@@ -306,7 +340,7 @@ runs:
       if: steps.build.outputs.triggered == 'true'
       shell: bash
       env:
-        INPUT_TAGS: ${{ steps.vars.outputs.tags }}
+        INPUT_TAGS: ${{ steps.resolved_sha.outputs.tags }}
         META_TAGS: ${{ steps.meta.outputs.tags || '' }}
         META_LABELS: ${{ steps.meta.outputs.labels || '' }}
         META_ANNOTATIONS: ${{ steps.meta.outputs.annotations || '' }}
@@ -391,7 +425,7 @@ runs:
       shell: bash
       env:
         IMAGE_PATH: ${{ steps.vars.outputs.image_path }}
-        SOURCE_SHA: ${{ steps.vars.outputs.source_sha }}
+        SOURCE_SHA: ${{ steps.resolved_sha.outputs.source_sha || steps.vars.outputs.source_sha }}
       run: |
         # shellcheck source=context.sh
         source "${{ github.action_path }}/context.sh"
@@ -501,7 +535,7 @@ runs:
           echo "digest=${{ steps.build.outputs.fallback_digest }}" >> $GITHUB_OUTPUT
           # For retagged images, use the first tag from inputs.tags or fallback
           tag=$(printf '%s\n' "${{ steps.vars.outputs.tags }}" | grep -v '^$' | head -n 1 | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]._-' || true)
-          tag="${tag:-${{ steps.vars.outputs.source_sha }}}"
+          tag="${tag:-${{ steps.resolved_sha.outputs.source_sha || steps.vars.outputs.source_sha }}}"
           tag="${tag:-latest}"
           image_path="/${{ steps.vars.outputs.image_path }}:${tag}"
         fi
@@ -517,7 +551,7 @@ runs:
         echo "digest: ${{ steps.final_outputs.outputs.digest }}"
         echo "registry_host: ${{ steps.vars.outputs.registry_host }}"
         echo "image_path: ${{ steps.final_outputs.outputs.image_path }}"
-        echo "source_sha: ${{ steps.vars.outputs.source_sha }}"
+        echo "source_sha: ${{ steps.resolved_sha.outputs.source_sha || steps.vars.outputs.source_sha }}"
 
         # Add to GitHub Job Summary
         echo "### Container Build Summary" >> $GITHUB_STEP_SUMMARY
@@ -527,7 +561,7 @@ runs:
         echo "| **digest** | \`${{ steps.final_outputs.outputs.digest }}\` |" >> $GITHUB_STEP_SUMMARY
         echo "| **registry_host** | \`${{ steps.vars.outputs.registry_host }}\` |" >> $GITHUB_STEP_SUMMARY
         echo "| **image_path** | \`${{ steps.final_outputs.outputs.image_path }}\` |" >> $GITHUB_STEP_SUMMARY
-        echo "| **source_sha** | \`${{ steps.vars.outputs.source_sha }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| **source_sha** | \`${{ steps.resolved_sha.outputs.source_sha || steps.vars.outputs.source_sha }}\` |" >> $GITHUB_STEP_SUMMARY
         echo "| **pushed** | \`${{ steps.final_outputs.outputs.pushed }}\` |" >> $GITHUB_STEP_SUMMARY
 
         if [ "${{ steps.build.outputs.triggered }}" == "true" ]; then
@@ -545,11 +579,11 @@ runs:
         echo "-----------------------"
 
     - name: Fork GHCR visibility notice
-      if: always() && steps.vars.outputs.can_push == 'true' && github.event.repository.fork == 'true' && inputs.repository == github.repository
+      if: success() && github.event.repository.fork && steps.final_outputs.outputs.pushed == 'true'
       shell: bash
       env:
         IMAGE_PATH: ${{ steps.vars.outputs.image_path }}
-        SOURCE_SHA: ${{ steps.vars.outputs.source_sha }}
+        SOURCE_SHA: ${{ steps.resolved_sha.outputs.source_sha || steps.vars.outputs.source_sha }}
       run: |
         set -euo pipefail
         # shellcheck source=context.sh

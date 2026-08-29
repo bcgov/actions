@@ -77,11 +77,28 @@ assert_empty "$(refuse_reason workflow_dispatch bcgov/actions '')" "workflow_dis
 
 fork_prt="$(refuse_reason pull_request_target bcgov/actions fork/actions)"
 assert_contains "$fork_prt" "refuses pull_request_target" "fork pull_request_target is refused"
+assert_contains "$fork_prt" "checks out PR head" "pull_request_target message uses correct verb"
 assert_contains "$fork_prt" "pull_request workflow instead" "pull_request_target message steers to pull_request"
 assert_contains "$fork_prt" "builder-ghcr/README.md#fork-builds" "pull_request_target message links to docs"
 
 assert_empty "$(refuse_reason pull_request_target bcgov/actions bcgov/actions)" \
   "same-repo pull_request_target is allowed"
+
+if is_external_repository bcgov/quickstart-openshift bcgov/actions; then
+  echo "ok  external repository detected"
+  passed=$((passed + 1))
+else
+  echo "FAIL  external repository detected"
+  failed=$((failed + 1))
+fi
+
+if is_external_repository bcgov/actions bcgov/actions; then
+  echo "FAIL  same repository not external"
+  failed=$((failed + 1))
+else
+  echo "ok  same repository not external"
+  passed=$((passed + 1))
+fi
 
 msg="$(fork_visibility_message)"
 assert_contains "$msg" "Images built from forks require" "visibility message states the requirement"

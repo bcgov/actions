@@ -46,6 +46,11 @@ EOF
   fi
 }
 
+# is_external_repository INPUT_REPOSITORY GH_REPOSITORY
+# True when building from a different repo than the workflow context.
+is_external_repository() {
+  [ "${1,,}" != "${2,,}" ]
+}
 # is_fork_pr GH_REPOSITORY HEAD_REPO
 # True when a pull_request originates from a different repository (fork).
 is_fork_pr() {
@@ -120,5 +125,5 @@ refuse_reason() {
     return 0
   fi
 
-  printf '%s\n' "builder-ghcr refuses pull_request_target from a fork. That event has write access to ghcr.io/${gh_repo} and this action checkouts PR head, which would publish an untrusted image to the base registry. Use the same pull_request workflow instead; images publish on push to the fork. See ${BUILDER_GHCR_FORK_DOCS_URL}"
+  printf '%s\n' "builder-ghcr refuses pull_request_target from a fork. That event has write access to ghcr.io/${gh_repo} and this action checks out PR head, which would publish an untrusted image to the base registry. Use the same pull_request workflow instead; images publish on push to the fork. See ${BUILDER_GHCR_FORK_DOCS_URL}"
 }
