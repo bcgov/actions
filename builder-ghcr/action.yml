@@ -117,10 +117,6 @@ outputs:
     description: "Git commit SHA tagged on the image (PR head SHA, or github.sha on push). Deploy workflows can pull ghcr.io/<owner>/<repo>/<package>:<source_sha>."
     value: ${{ steps.resolved_sha.outputs.source_sha || steps.vars.outputs.source_sha }}
 
-  pushed:
-    description: "Whether the image was pushed (or retagged) in GHCR this run. False on fork pull_request (validates/builds locally; publish happens on fork push)."
-    value: ${{ steps.final_outputs.outputs.pushed }}
-
 runs:
   using: composite
   steps:
@@ -520,11 +516,6 @@ runs:
       id: final_outputs
       shell: bash
       run: |
-        pushed=false
-        if [ "${{ steps.vars.outputs.can_push }}" == "true" ]; then
-          pushed=true
-        fi
-
         if [ "${{ steps.build.outputs.triggered }}" == "true" ]; then
           echo "digest=${{ steps.build_and_push.outputs.digest }}" >> $GITHUB_OUTPUT
           # Derive image_path from the actual tags generated/pushed
@@ -540,7 +531,6 @@ runs:
           image_path="/${{ steps.vars.outputs.image_path }}:${tag}"
         fi
         echo "image_path=${image_path}" >> $GITHUB_OUTPUT
-        echo "pushed=${pushed}" >> $GITHUB_OUTPUT
 
     - name: Print summary outputs
       if: always()
@@ -562,7 +552,6 @@ runs:
         echo "| **registry_host** | \`${{ steps.vars.outputs.registry_host }}\` |" >> $GITHUB_STEP_SUMMARY
         echo "| **image_path** | \`${{ steps.final_outputs.outputs.image_path }}\` |" >> $GITHUB_STEP_SUMMARY
         echo "| **source_sha** | \`${{ steps.resolved_sha.outputs.source_sha || steps.vars.outputs.source_sha }}\` |" >> $GITHUB_STEP_SUMMARY
-        echo "| **pushed** | \`${{ steps.final_outputs.outputs.pushed }}\` |" >> $GITHUB_STEP_SUMMARY
 
         if [ "${{ steps.build.outputs.triggered }}" == "true" ]; then
           echo "tags: ${{ steps.tags.outputs.final_tags }}"
@@ -579,7 +568,7 @@ runs:
         echo "-----------------------"
 
     - name: Fork GHCR visibility notice
-      if: success() && github.event.repository.fork && steps.final_outputs.outputs.pushed == 'true'
+      if: success() && github.event.repository.fork && steps.vars.outputs.can_push == 'true'
       shell: bash
       env:
         IMAGE_PATH: ${{ steps.vars.outputs.image_path }}

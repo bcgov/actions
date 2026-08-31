@@ -375,7 +375,6 @@ Two SBOM formats are generated and uploaded as workflow artifacts:
 | `registry_host` | The registry host name, always `ghcr.io` |
 | `image_path` | The full image path including the tag, always with a leading slash, in the format `/owner/repo/image:tag` (or `/owner/repo:tag` when the package matches the repository name) |
 | `source_sha` | Git commit SHA tagged on the image (PR head SHA, or `github.sha` on push) |
-| `pushed` | Summary telemetry for the job log — not for workflow `if:` conditions. Gate deploy on image-tracker `digest` (`if: steps.tracker.outputs.digest != ''`). |
 
 New image digest (SHA).  This applies to build and retags.
 
