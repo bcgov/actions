@@ -93,6 +93,13 @@ External repository:
     dir: target
 ```
 
+Fork pull requests: a shallow checkout of `refs/pull/N/merge` often does not
+contain `head.sha`. The action fetches that SHA from **origin** (the base repo)
+first, then `pull/<N>/head` for the workflow PR, and only then the GitHub API —
+always against `GITHUB_REPOSITORY`, never the image `repository` input (that
+input may be a fork). If the revision still cannot be resolved on a fork PR,
+the action exits 0 with an empty `digest` so deploy can skip.
+
 ## Inputs
 
 | Input        | Required | Default              | Description                                                                    |

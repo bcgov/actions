@@ -419,3 +419,113 @@ test('imageResolveMissIsExpected - fork PR only', () => {
   );
   assert.strictEqual(imageResolveMissIsExpected('push', 'fork/foo', ''), false, 'push miss is an error');
 });
+
+const SHA = '7ba8a2cac4f6debe314be035a1ad4781bbc3df0d';
+
+test('workflowPrFetchRef uses the workflow PR, not an API guess', () => {
+  const { workflowPrFetchRef } = require('../index.js');
+  assert.strictEqual(
+    workflowPrFetchRef(SHA, {
+      pull_request: { number: 379, head: { sha: SHA } }
+    }),
+    'pull/379/head'
+  );
+  assert.strictEqual(
+    workflowPrFetchRef(SHA, {
+      pull_request: { number: 1, head: { sha: 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef' } }
+    }),
+    '',
+    'different head SHA is not the workflow PR'
+  );
+});
+
+test('prLookupUrl queries GITHUB_REPOSITORY, not the image repository input', () => {
+  const { prLookupUrl } = require('../index.js');
+  assert.strictEqual(
+    prLookupUrl('bcgov/nr-hydrometric-rating-curve', SHA),
+    `https://api.github.com/repos/bcgov/nr-hydrometric-rating-curve/commits/${SHA}/pulls`
+  );
+});
+
+test('resolvePivotSha fetches the SHA from origin before calling the API', async () => {
+  const { resolvePivotSha } = require('../index.js');
+  const originRefs = [];
+  let apiCalled = false;
+  let haveSha = false;
+  const result = await resolvePivotSha({
+    revision: SHA,
+    token: 'token',
+    ghRepository: 'bcgov/nr-hydrometric-rating-curve',
+    event: {},
+    maxDepth: 1,
+    revParse: () => (haveSha ? SHA : ''),
+    fetchOrigin: (ref) => {
+      originRefs.push(ref);
+      if (ref === SHA) haveSha = true;
+      return true;
+    },
+    githubFetch: async () => {
+      apiCalled = true;
+      return { ok: true, json: async () => [{ number: 1 }] };
+    }
+  });
+  assert.deepStrictEqual(originRefs, [SHA]);
+  assert.strictEqual(apiCalled, false, 'API must not run once origin SHA fetch succeeds');
+  assert.strictEqual(result.pivotSha, SHA);
+});
+
+test('resolvePivotSha prefers workflow PR ref over API-derived PR number', async () => {
+  const { resolvePivotSha } = require('../index.js');
+  const originRefs = [];
+  let haveSha = false;
+  const result = await resolvePivotSha({
+    revision: SHA,
+    token: 'token',
+    ghRepository: 'bcgov/nr-hydrometric-rating-curve',
+    event: {
+      pull_request: { number: 379, title: 'playwright', head: { sha: SHA } }
+    },
+    maxDepth: 1,
+    revParse: () => (haveSha ? SHA : ''),
+    fetchOrigin: (ref) => {
+      originRefs.push(ref);
+      if (ref === 'pull/379/head') haveSha = true;
+      return true;
+    },
+    githubFetch: async () => {
+      throw new Error('API should not run when workflow PR fetch succeeds');
+    }
+  });
+  assert.deepStrictEqual(originRefs, [SHA, 'pull/379/head']);
+  assert.strictEqual(result.pivotSha, SHA);
+});
+
+test('resolvePivotSha API fallback uses ghRepository', async () => {
+  const { resolvePivotSha } = require('../index.js');
+  const urls = [];
+  let haveSha = false;
+  await resolvePivotSha({
+    revision: SHA,
+    token: 'token',
+    ghRepository: 'bcgov/nr-hydrometric-rating-curve',
+    event: {},
+    maxDepth: 1,
+    revParse: () => (haveSha ? SHA : ''),
+    fetchOrigin: (ref) => {
+      if (ref === 'pull/379/head') haveSha = true;
+      return true;
+    },
+    githubFetch: async (url) => {
+      urls.push(url);
+      return {
+        ok: true,
+        json: async () => [{ number: 379, title: 'x', head: { sha: SHA } }]
+      };
+    }
+  });
+  assert.ok(
+    urls[0].includes('repos/bcgov/nr-hydrometric-rating-curve/commits/'),
+    'API must query origin repo, not fork'
+  );
+  assert.ok(!urls[0].includes('miniontech'));
+});
