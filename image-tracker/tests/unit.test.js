@@ -425,26 +425,57 @@ const SHA = '7ba8a2cac4f6debe314be035a1ad4781bbc3df0d';
 test('workflowPrFetchRef uses the workflow PR, not an API guess', () => {
   const { workflowPrFetchRef } = require('../index.js');
   assert.strictEqual(
-    workflowPrFetchRef(SHA, {
-      pull_request: { number: 379, head: { sha: SHA } }
-    }),
+    workflowPrFetchRef(SHA, { pull_request: { number: 379, head: { sha: SHA } } }, 'bcgov/foo', 'bcgov/foo'),
     'pull/379/head'
   );
   assert.strictEqual(
-    workflowPrFetchRef(SHA, {
-      pull_request: { number: 1, head: { sha: 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef' } }
-    }),
+    workflowPrFetchRef(SHA, { pull_request: { number: 1, head: { sha: 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef' } } }, 'bcgov/foo', 'bcgov/foo'),
     '',
     'different head SHA is not the workflow PR'
   );
+  assert.strictEqual(
+    workflowPrFetchRef(SHA, { pull_request: { number: 379, head: { sha: SHA } } }, 'bcgov/other', 'bcgov/actions'),
+    '',
+    'external checkout does not use the workflow PR number'
+  );
 });
 
-test('prLookupUrl queries GITHUB_REPOSITORY, not the image repository input', () => {
+test('prLookupUrl queries the source (checkout) repository', () => {
   const { prLookupUrl } = require('../index.js');
   assert.strictEqual(
-    prLookupUrl('bcgov/nr-hydrometric-rating-curve', SHA),
-    `https://api.github.com/repos/bcgov/nr-hydrometric-rating-curve/commits/${SHA}/pulls`
+    prLookupUrl('bcgov/some-other-repo', SHA),
+    `https://api.github.com/repos/bcgov/some-other-repo/commits/${SHA}/pulls`
   );
+});
+
+test('repositoryFromRemoteUrl parses origin', () => {
+  const { repositoryFromRemoteUrl } = require('../index.js');
+  assert.strictEqual(
+    repositoryFromRemoteUrl('git@github.com:bcgov/nr-hydrometric-rating-curve.git'),
+    'bcgov/nr-hydrometric-rating-curve'
+  );
+});
+
+test('emptyTrackerOutputLines covers the five consumer outputs', () => {
+  const { emptyTrackerOutputLines } = require('../index.js');
+  const lines = emptyTrackerOutputLines();
+  assert.deepStrictEqual(lines, ['images={}', 'image=', 'digest=', 'digests={}', 'pr=']);
+});
+
+test('writeEmptyGithubOutputs writes all five outputs', () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const { writeEmptyGithubOutputs } = require('../index.js');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tracker-out-'));
+  const out = path.join(dir, 'github_output');
+  writeEmptyGithubOutputs({ GITHUB_ACTIONS: 'true', GITHUB_OUTPUT: out });
+  const text = fs.readFileSync(out, 'utf8');
+  assert.match(text, /^images=\{\}$/m);
+  assert.match(text, /^image=$/m);
+  assert.match(text, /^digest=$/m);
+  assert.match(text, /^digests=\{\}$/m);
+  assert.match(text, /^pr=$/m);
 });
 
 test('resolvePivotSha fetches the SHA from origin before calling the API', async () => {
@@ -455,6 +486,7 @@ test('resolvePivotSha fetches the SHA from origin before calling the API', async
   const result = await resolvePivotSha({
     revision: SHA,
     token: 'token',
+    sourceRepository: 'bcgov/nr-hydrometric-rating-curve',
     ghRepository: 'bcgov/nr-hydrometric-rating-curve',
     event: {},
     maxDepth: 1,
@@ -481,6 +513,7 @@ test('resolvePivotSha prefers workflow PR ref over API-derived PR number', async
   const result = await resolvePivotSha({
     revision: SHA,
     token: 'token',
+    sourceRepository: 'bcgov/nr-hydrometric-rating-curve',
     ghRepository: 'bcgov/nr-hydrometric-rating-curve',
     event: {
       pull_request: { number: 379, title: 'playwright', head: { sha: SHA } }
@@ -500,32 +533,171 @@ test('resolvePivotSha prefers workflow PR ref over API-derived PR number', async
   assert.strictEqual(result.pivotSha, SHA);
 });
 
-test('resolvePivotSha API fallback uses ghRepository', async () => {
+test('resolvePivotSha API fallback uses source repository, not workflow or image repo', async () => {
   const { resolvePivotSha } = require('../index.js');
   const urls = [];
   let haveSha = false;
   await resolvePivotSha({
     revision: SHA,
     token: 'token',
-    ghRepository: 'bcgov/nr-hydrometric-rating-curve',
-    event: {},
+    sourceRepository: 'bcgov/some-other-repo',
+    ghRepository: 'bcgov/actions',
+    event: {
+      pull_request: { number: 99, head: { sha: SHA } }
+    },
     maxDepth: 1,
     revParse: () => (haveSha ? SHA : ''),
     fetchOrigin: (ref) => {
-      if (ref === 'pull/379/head') haveSha = true;
+      if (ref === 'pull/12/head') haveSha = true;
       return true;
     },
     githubFetch: async (url) => {
       urls.push(url);
       return {
         ok: true,
-        json: async () => [{ number: 379, title: 'x', head: { sha: SHA } }]
+        json: async () => [{ number: 12, title: 'x', head: { sha: SHA } }]
       };
     }
   });
-  assert.ok(
-    urls[0].includes('repos/bcgov/nr-hydrometric-rating-curve/commits/'),
-    'API must query origin repo, not fork'
-  );
-  assert.ok(!urls[0].includes('miniontech'));
+  assert.equal(urls.length, 1);
+  assert.ok(urls[0].includes('repos/bcgov/some-other-repo/commits/'));
+  assert.ok(!urls[0].includes('bcgov/actions'));
+});
+
+const ENV_KEYS = [
+  'GITHUB_ACTIONS',
+  'GITHUB_OUTPUT',
+  'GITHUB_EVENT_PATH',
+  'GITHUB_REPOSITORY',
+  'GITHUB_EVENT_NAME',
+  'INPUT_PACKAGE',
+  'PACKAGE',
+  'INPUT_REPOSITORY',
+  'REPOSITORY',
+  'INPUT_REVISION',
+  'REVISION',
+  'DIR',
+  'INPUT_DIR',
+  'GITHUB_TOKEN',
+  'INPUT_GITHUB_TOKEN',
+  'TOKEN'
+];
+
+function snapshotEnv() {
+  const saved = {};
+  for (const k of ENV_KEYS) saved[k] = process.env[k];
+  return saved;
+}
+
+function restoreEnv(saved) {
+  for (const [k, v] of Object.entries(saved)) {
+    if (v === undefined) delete process.env[k];
+    else process.env[k] = v;
+  }
+}
+
+async function withTempGitOrigin(originUrl, fn) {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tracker-git-'));
+  execFileSync('git', ['init'], { cwd: dir, stdio: 'ignore' });
+  execFileSync('git', ['remote', 'add', 'origin', originUrl], { cwd: dir, stdio: 'ignore' });
+  const cwd = process.cwd();
+  try {
+    return await fn(dir);
+  } finally {
+    process.chdir(cwd);
+  }
+}
+
+test('runMain fork unresolvable revision exits 0 with empty outputs', async () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const { runMain } = require('../index.js');
+  const saved = snapshotEnv();
+  const cwd = process.cwd();
+  await withTempGitOrigin('file:///nonexistent-image-tracker-origin.git', async (dir) => {
+    const out = path.join(dir, 'github_output');
+    const eventPath = path.join(dir, 'event.json');
+    fs.writeFileSync(
+      eventPath,
+      JSON.stringify({
+        pull_request: { number: 379, head: { sha: SHA, repo: { full_name: 'fork/foo' } } }
+      })
+    );
+    process.env.GITHUB_ACTIONS = 'true';
+    process.env.GITHUB_OUTPUT = out;
+    process.env.GITHUB_EVENT_PATH = eventPath;
+    process.env.GITHUB_REPOSITORY = 'bcgov/foo';
+    process.env.GITHUB_EVENT_NAME = 'pull_request';
+    process.env.INPUT_PACKAGE = 'frontend';
+    process.env.PACKAGE = 'frontend';
+    process.env.INPUT_REPOSITORY = 'fork/foo';
+    process.env.REPOSITORY = 'fork/foo';
+    process.env.INPUT_REVISION = SHA;
+    process.env.REVISION = SHA;
+    process.env.DIR = dir;
+    process.env.INPUT_DIR = dir;
+    delete process.env.GITHUB_TOKEN;
+    delete process.env.INPUT_GITHUB_TOKEN;
+    delete process.env.TOKEN;
+    await runMain();
+    const text = fs.readFileSync(out, 'utf8');
+    assert.match(text, /^images=\{\}$/m);
+    assert.match(text, /^image=$/m);
+    assert.match(text, /^digest=$/m);
+    assert.match(text, /^digests=\{\}$/m);
+    assert.match(text, /^pr=$/m);
+  });
+  process.chdir(cwd);
+  restoreEnv(saved);
+});
+
+test('runMain same-repo unresolvable revision still exits 1', async () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const { runMain } = require('../index.js');
+  const saved = snapshotEnv();
+  const cwd = process.cwd();
+  const origExit = process.exit;
+  let exitCode;
+  process.exit = (code) => {
+    exitCode = code;
+    throw new Error('__exit__');
+  };
+  try {
+    await withTempGitOrigin('file:///nonexistent-image-tracker-origin.git', async (dir) => {
+      const eventPath = path.join(dir, 'event.json');
+      fs.writeFileSync(
+        eventPath,
+        JSON.stringify({
+          pull_request: { number: 10, head: { sha: SHA, repo: { full_name: 'bcgov/foo' } } }
+        })
+      );
+      process.env.GITHUB_ACTIONS = 'true';
+      process.env.GITHUB_OUTPUT = path.join(dir, 'github_output');
+      process.env.GITHUB_EVENT_PATH = eventPath;
+      process.env.GITHUB_REPOSITORY = 'bcgov/foo';
+      process.env.GITHUB_EVENT_NAME = 'pull_request';
+      process.env.INPUT_PACKAGE = 'frontend';
+      process.env.PACKAGE = 'frontend';
+      process.env.INPUT_REVISION = SHA;
+      process.env.REVISION = SHA;
+      process.env.DIR = dir;
+      process.env.INPUT_DIR = dir;
+      delete process.env.INPUT_REPOSITORY;
+      delete process.env.REPOSITORY;
+      delete process.env.GITHUB_TOKEN;
+      delete process.env.INPUT_GITHUB_TOKEN;
+      delete process.env.TOKEN;
+      await assert.rejects(() => runMain(), /__exit__/);
+      assert.strictEqual(exitCode, 1);
+    });
+  } finally {
+    process.exit = origExit;
+    process.chdir(cwd);
+    restoreEnv(saved);
+  }
 });

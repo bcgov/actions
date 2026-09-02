@@ -133,20 +133,14 @@ function gitFetchOrigin(ref, maxDepth) {
   }
 }
 
-function writeEmptyGithubOutputs(env) {
-  if (env.GITHUB_ACTIONS === 'true' && env.GITHUB_OUTPUT) {
-    fs.appendFileSync(
-      env.GITHUB_OUTPUT,
-      ['images={}', 'image=', 'digest=', 'digests={}', 'pr='].join('\n') + '\n'
-    );
-  }
-}
-
-function workflowPrFetchRef(revision, event) {
+function workflowPrFetchRef(revision, event, sourceRepository, ghRepository) {
   const pr = event?.pull_request;
   const headSha = pr?.head?.sha || '';
   const number = pr?.number;
   if (!number || !headSha || !revision) {
+    return '';
+  }
+  if (normalizeRepo(sourceRepository) !== normalizeRepo(ghRepository)) {
     return '';
   }
   if (revision.toLowerCase() !== headSha.toLowerCase()) {
@@ -155,13 +149,41 @@ function workflowPrFetchRef(revision, event) {
   return `pull/${number}/head`;
 }
 
-function prLookupUrl(ghRepository, revision) {
-  return `https://api.github.com/repos/${ghRepository}/commits/${revision}/pulls`;
+function prLookupUrl(sourceRepository, revision) {
+  return `https://api.github.com/repos/${sourceRepository}/commits/${revision}/pulls`;
+}
+
+function repositoryFromRemoteUrl(remoteUrl) {
+  const match = (remoteUrl || '').match(/github\.com[:/]([^/]+\/[^/.]+)/);
+  return match ? match[1] : '';
+}
+
+function sourceRepositoryFromOrigin() {
+  try {
+    const remoteUrl = execFileSync('git', ['remote', 'get-url', 'origin'], {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore']
+    }).trim();
+    return repositoryFromRemoteUrl(remoteUrl);
+  } catch {
+    return '';
+  }
+}
+
+function emptyTrackerOutputLines() {
+  return ['images={}', 'image=', 'digest=', 'digests={}', 'pr='];
+}
+
+function writeEmptyGithubOutputs(env) {
+  if (env.GITHUB_ACTIONS === 'true' && env.GITHUB_OUTPUT) {
+    fs.appendFileSync(env.GITHUB_OUTPUT, emptyTrackerOutputLines().join('\n') + '\n');
+  }
 }
 
 async function resolvePivotSha({
   revision,
   token,
+  sourceRepository,
   ghRepository,
   event,
   maxDepth,
@@ -185,7 +207,7 @@ async function resolvePivotSha({
     }
   }
 
-  const eventRef = workflowPrFetchRef(revision, event);
+  const eventRef = workflowPrFetchRef(revision, event, sourceRepository, ghRepository);
   if (eventRef) {
     logInfo(`Fetching ${eventRef} from origin (workflow PR)...`);
     fetchOrigin(eventRef, maxDepth);
@@ -199,13 +221,14 @@ async function resolvePivotSha({
     }
   }
 
-  if (!isSha || !token || !ghRepository) {
+  const lookupRepo = sourceRepository || ghRepository;
+  if (!isSha || !token || !lookupRepo) {
     return { pivotSha: '', prTitle: '', headSha: '' };
   }
 
   logInfo(`Revision ${revision} not found locally. Checking for PR metadata...`);
   try {
-    const prRes = await githubFetch(prLookupUrl(ghRepository, revision), {
+    const prRes = await githubFetch(prLookupUrl(lookupRepo, revision), {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: 'application/vnd.github+json',
@@ -807,6 +830,8 @@ async function runMain() {
 
   process.chdir(dir);
 
+  const sourceRepository = normalizeRepo(sourceRepositoryFromOrigin() || ghRepository);
+
   // ---- State -----------------------------------------------------------------
   const prMap = {};
   const prNumMap = {};
@@ -820,6 +845,7 @@ async function runMain() {
   const resolved = await resolvePivotSha({
     revision,
     token,
+    sourceRepository,
     ghRepository,
     event,
     maxDepth
@@ -892,7 +918,7 @@ async function runMain() {
         };
 
         for (const checkSha of apiShas) {
-          const prRes = await fetch(`https://api.github.com/repos/${repository}/commits/${checkSha}/pulls`, {
+          const prRes = await fetch(prLookupUrl(sourceRepository, checkSha), {
             headers: ghHeaders
           }).catch(() => null);
 
@@ -931,7 +957,8 @@ async function runMain() {
   // ---- Execution -------------------------------------------------------------
   logGroup(`Image Tracker — resolving ancestry for ${revision}`);
   logInfo(`Registry: ${registry}`);
-  logInfo(`Repository: ${repository}`);
+  logInfo(`Image repository: ${repository}`);
+  logInfo(`Source repository: ${sourceRepository}`);
   logInfo(`Starting SHA: ${pivotSha}`);
 
   const imagesJson = {};
@@ -1097,5 +1124,8 @@ module.exports = {
   resolvePivotSha,
   workflowPrFetchRef,
   prLookupUrl,
+  repositoryFromRemoteUrl,
+  emptyTrackerOutputLines,
+  writeEmptyGithubOutputs,
   runMain
 };

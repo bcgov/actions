@@ -94,11 +94,20 @@ External repository:
 ```
 
 Fork pull requests: a shallow checkout of `refs/pull/N/merge` often does not
-contain `head.sha`. The action fetches that SHA from **origin** (the base repo)
-first, then `pull/<N>/head` for the workflow PR, and only then the GitHub API —
-always against `GITHUB_REPOSITORY`, never the image `repository` input (that
-input may be a fork). If the revision still cannot be resolved on a fork PR,
-the action exits 0 with an empty `digest` so deploy can skip.
+contain `head.sha`. Three repositories are distinct:
+
+- **Image repository** — GHCR owner/repo (`repository` input; fork GHCR on a
+  fork PR). Used only to pull manifests.
+- **Source repository** — `git remote origin` of `dir` (the checkout). Commit
+  SHAs and `/commits/{sha}/pulls` lookups always use this repo.
+- **Workflow repository** — `GITHUB_REPOSITORY`. Used only to fetch
+  `pull/<N>/head` when origin is that repo and `revision` is the workflow PR's
+  head SHA.
+
+The action fetches the SHA from origin first, then the workflow PR ref when it
+applies, then the GitHub API against the **source** repo. If the revision still
+cannot be resolved on a fork PR, the action exits 0 with an empty `digest` so
+deploy can skip.
 
 ## Inputs
 
