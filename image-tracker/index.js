@@ -109,6 +109,156 @@ function imageResolveMissIsExpected(eventName, ghRepo, headRepo) {
   return eventName === 'pull_request' && isForkPr(ghRepo, headRepo);
 }
 
+function revParseQuiet(revision) {
+  try {
+    return execFileSync('git', ['rev-parse', '--verify', '--quiet', `${revision}^{commit}`], {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore']
+    }).trim();
+  } catch {
+    return '';
+  }
+}
+
+function gitFetchOrigin(ref, maxDepth) {
+  try {
+    execFileSync(
+      'git',
+      ['fetch', '--no-tags', `--depth=${maxDepth}`, 'origin', ref, '--quiet'],
+      { stdio: 'ignore' }
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function workflowPrFetchRef(revision, event, sourceRepository, ghRepository) {
+  const pr = event?.pull_request;
+  const headSha = pr?.head?.sha || '';
+  const number = pr?.number;
+  if (!number || !headSha || !revision) {
+    return '';
+  }
+  if (normalizeRepo(sourceRepository) !== normalizeRepo(ghRepository)) {
+    return '';
+  }
+  if (revision.toLowerCase() !== headSha.toLowerCase()) {
+    return '';
+  }
+  return `pull/${number}/head`;
+}
+
+function prLookupUrl(sourceRepository, revision) {
+  return `https://api.github.com/repos/${sourceRepository}/commits/${revision}/pulls`;
+}
+
+function repositoryFromRemoteUrl(remoteUrl) {
+  const match = (remoteUrl || '').match(/github\.com[:/]([^/]+\/[^/.]+)/);
+  return match ? match[1] : '';
+}
+
+function sourceRepositoryFromOrigin() {
+  try {
+    const remoteUrl = execFileSync('git', ['remote', 'get-url', 'origin'], {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore']
+    }).trim();
+    return repositoryFromRemoteUrl(remoteUrl);
+  } catch {
+    return '';
+  }
+}
+
+function emptyTrackerOutputLines() {
+  return ['images={}', 'image=', 'digest=', 'digests={}', 'pr='];
+}
+
+function writeEmptyGithubOutputs(env) {
+  if (env.GITHUB_ACTIONS === 'true' && env.GITHUB_OUTPUT) {
+    fs.appendFileSync(env.GITHUB_OUTPUT, emptyTrackerOutputLines().join('\n') + '\n');
+  }
+}
+
+async function resolvePivotSha({
+  revision,
+  token,
+  sourceRepository,
+  ghRepository,
+  event,
+  maxDepth,
+  revParse = revParseQuiet,
+  fetchOrigin = gitFetchOrigin,
+  githubFetch = fetch
+}) {
+  let pivotSha = revParse(revision);
+  if (pivotSha) {
+    return { pivotSha, prTitle: '', headSha: '' };
+  }
+
+  const isSha = /^[0-9a-f]{7,40}$/i.test(revision);
+
+  if (isSha) {
+    logInfo(`Revision ${revision} not found locally. Fetching from origin...`);
+    fetchOrigin(revision, maxDepth);
+    pivotSha = revParse(revision);
+    if (pivotSha) {
+      return { pivotSha, prTitle: '', headSha: '' };
+    }
+  }
+
+  const eventRef = workflowPrFetchRef(revision, event, sourceRepository, ghRepository);
+  if (eventRef) {
+    logInfo(`Fetching ${eventRef} from origin (workflow PR)...`);
+    fetchOrigin(eventRef, maxDepth);
+    pivotSha = revParse(revision);
+    if (pivotSha) {
+      return {
+        pivotSha,
+        prTitle: event.pull_request.title || '',
+        headSha: event.pull_request.head.sha || ''
+      };
+    }
+  }
+
+  const lookupRepo = sourceRepository || ghRepository;
+  if (!isSha || !token || !lookupRepo) {
+    return { pivotSha: '', prTitle: '', headSha: '' };
+  }
+
+  logInfo(`Revision ${revision} not found locally. Checking for PR metadata...`);
+  try {
+    const prRes = await githubFetch(prLookupUrl(lookupRepo, revision), {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'image-tracker'
+      }
+    });
+    if (!prRes?.ok) {
+      return { pivotSha: '', prTitle: '', headSha: '' };
+    }
+    const prData = await prRes.json();
+    if (!Array.isArray(prData) || prData.length === 0) {
+      return { pivotSha: '', prTitle: '', headSha: '' };
+    }
+    const pr = prData[0];
+    const prNum = pr.number;
+    const headSha = pr.head?.sha || '';
+    const prTitle = pr.title || '';
+    logInfo(`Revision matches PR #${prNum}. Fetching ref...`);
+    fetchOrigin(`pull/${prNum}/head`, maxDepth);
+    pivotSha = revParse(revision);
+    if (pivotSha) {
+      return { pivotSha, prTitle, headSha };
+    }
+  } catch {
+    return { pivotSha: '', prTitle: '', headSha: '' };
+  }
+
+  return { pivotSha: '', prTitle: '', headSha: '' };
+}
+
 // ---- Package Mapping -------------------------------------------------------
 function mapPackages(packageInput, repository) {
   const imagePaths = {};
@@ -680,6 +830,8 @@ async function runMain() {
 
   process.chdir(dir);
 
+  const sourceRepository = normalizeRepo(sourceRepositoryFromOrigin() || ghRepository);
+
   // ---- State -----------------------------------------------------------------
   const prMap = {};
   const prNumMap = {};
@@ -690,53 +842,29 @@ async function runMain() {
   const missing = [];
 
   // ---- Git Ancestry Resolution -----------------------------------------------
-  let pivotSha = '';
-  try {
-    pivotSha = execFileSync('git', ['rev-parse', '--verify', '--quiet', `${revision}^{commit}`], {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'ignore']
-    }).trim();
-  } catch (err) {}
-
-  if (!pivotSha && /^[0-9a-f]{7,40}$/i.test(revision) && token) {
-    logInfo(`Revision ${revision} not found locally. Checking for PR metadata...`);
-    try {
-      const ghHeaders = {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/vnd.github+json',
-        'User-Agent': 'image-tracker'
-      };
-      const prRes = await fetch(`https://api.github.com/repos/${repository}/commits/${revision}/pulls`, {
-        headers: ghHeaders
-      });
-      if (prRes.ok) {
-        const prData = await prRes.json();
-        if (Array.isArray(prData) && prData.length > 0) {
-          const pr = prData[0];
-          const headSha = pr.head?.sha;
-          const prNum = pr.number;
-          const prTitle = pr.title;
-
-          logInfo(`Revision matches PR #${prNum}. Fetching ref...`);
-          try {
-            execFileSync('git', ['fetch', 'origin', `pull/${prNum}/head:refs/remotes/origin/pr/${prNum}`, '--quiet'], {
-              stdio: 'ignore'
-            });
-            pivotSha = execFileSync('git', ['rev-parse', '--verify', '--quiet', `${revision}^{commit}`], {
-              encoding: 'utf8',
-              stdio: ['pipe', 'pipe', 'ignore']
-            }).trim();
-            if (pivotSha) {
-              prTitleMap[pivotSha] = prTitle;
-              if (headSha) prTitleMap[headSha] = prTitle;
-            }
-          } catch (fetchErr) {}
-        }
-      }
-    } catch (err) {}
+  const resolved = await resolvePivotSha({
+    revision,
+    token,
+    sourceRepository,
+    ghRepository,
+    event,
+    maxDepth
+  });
+  let pivotSha = resolved.pivotSha;
+  if (resolved.prTitle && pivotSha) {
+    prTitleMap[pivotSha] = resolved.prTitle;
+    if (resolved.headSha) prTitleMap[resolved.headSha] = resolved.prTitle;
   }
 
   if (!pivotSha) {
+    if (imageResolveMissIsExpected(eventName, ghRepository, headRepository)) {
+      logWarn(
+        `Fork pull_request: could not resolve revision '${revision}'. ` +
+          `Downstream deploy should no-op on an empty digest. See ${ACTIONS_FORK_DOCS_URL}`
+      );
+      writeEmptyGithubOutputs(env);
+      return;
+    }
     logError(`Could not resolve git revision '${revision}'.`);
     process.exit(1);
   }
@@ -790,7 +918,7 @@ async function runMain() {
         };
 
         for (const checkSha of apiShas) {
-          const prRes = await fetch(`https://api.github.com/repos/${repository}/commits/${checkSha}/pulls`, {
+          const prRes = await fetch(prLookupUrl(sourceRepository, checkSha), {
             headers: ghHeaders
           }).catch(() => null);
 
@@ -829,7 +957,8 @@ async function runMain() {
   // ---- Execution -------------------------------------------------------------
   logGroup(`Image Tracker — resolving ancestry for ${revision}`);
   logInfo(`Registry: ${registry}`);
-  logInfo(`Repository: ${repository}`);
+  logInfo(`Image repository: ${repository}`);
+  logInfo(`Source repository: ${sourceRepository}`);
   logInfo(`Starting SHA: ${pivotSha}`);
 
   const imagesJson = {};
@@ -992,5 +1121,11 @@ module.exports = {
   resolveImageRepository,
   imageResolveMissIsExpected,
   headRepositoryFromEvent,
+  resolvePivotSha,
+  workflowPrFetchRef,
+  prLookupUrl,
+  repositoryFromRemoteUrl,
+  emptyTrackerOutputLines,
+  writeEmptyGithubOutputs,
   runMain
 };
