@@ -84,6 +84,11 @@ permissions:
     # Knip dependency analysis (Node only). Options: off, warn (default), error
     dep_scan: warn
 
+    # Package manager caching. Optional; auto-detected from project lockfiles
+    # (npm/yarn/pnpm for Node, maven/gradle/sbt for Java, pip/poetry/pipenv for Python).
+    # Set to 'none' to manually disable caching.
+    cache: ""
+
     ### Usually a bad idea / not recommended
 
     # Overrides the default reference/branch to diff against

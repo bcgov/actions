@@ -36,8 +36,8 @@ inputs:
 
   ### Typical / recommended
   cache:
-    description: Package manager for caching; e.g. npm, yarn, pnpm. Set to 'none' to disable caching.
-    default: npm
+    description: Package manager for caching (npm, yarn, pnpm, maven, gradle, sbt, pip, poetry, pipenv). If omitted, automatically detected from project lockfiles/build files. Set to 'none' to disable caching.
+    default: ""
 
   sonar_args:
     # https://docs.sonarcloud.io/advanced-setup/analysis-parameters/
@@ -152,25 +152,6 @@ runs:
       run: |
         npx -y @aikidosec/safe-chain setup-ci
 
-    - name: Determine Cache Type
-      id: cache_logic
-      shell: bash
-      run: |
-        CACHE_VAL="${{ inputs.cache }}"
-        LANG="${{ inputs.language }}"
-        RESULT=""
-        
-        if [ "${CACHE_VAL,,}" == "none" ]; then
-           RESULT=""
-        elif [ "$LANG" == "node" ]; then
-           if [[ "$CACHE_VAL" == "yarn" || "$CACHE_VAL" == "pnpm" ]]; then RESULT="$CACHE_VAL"; else RESULT="npm"; fi
-        elif [ "$LANG" == "java" ]; then
-           if [[ "$CACHE_VAL" == "gradle" || "$CACHE_VAL" == "sbt" ]]; then RESULT="$CACHE_VAL"; else RESULT="maven"; fi
-        elif [ "$LANG" == "python" ]; then
-           if [[ "$CACHE_VAL" == "pipenv" || "$CACHE_VAL" == "poetry" ]]; then RESULT="$CACHE_VAL"; else RESULT="pip"; fi
-        fi
-        echo "cache=$RESULT" >> $GITHUB_OUTPUT
-        echo "Determined cache type: '$RESULT' for language: $LANG (original input: '$CACHE_VAL')"
 
     # Clone when the caller asked for a repository other than this one, or when
     # checkout_path holds none. A bare .git probe cannot decide: Check Triggers
@@ -206,6 +187,82 @@ runs:
           git fetch --unshallow
         fi
 
+    - name: Determine Cache Type
+      id: cache_logic
+      if: steps.final_triggered.outputs.triggered == 'true'
+      shell: bash
+      run: |
+        CACHE_VAL="${{ inputs.cache }}"
+        LANG="${{ inputs.language }}"
+        DIR="${{ inputs.dir }}"
+        ROOT="${{ inputs.checkout_path }}"
+        VAL="${CACHE_VAL,,}"
+        RESULT=""
+
+        if [ "$VAL" == "none" ]; then
+          RESULT=""
+        elif [ -n "$VAL" ]; then
+          # Explicit value provided: validate strictly per language
+          case "$LANG" in
+            node)
+              case "$VAL" in
+                npm|yarn|pnpm) RESULT="$VAL" ;;
+                *) echo "::error::Invalid cache value '${CACHE_VAL}' for language '${LANG}'. Allowed values: npm, yarn, pnpm, none."; exit 1 ;;
+              esac
+              ;;
+            java)
+              case "$VAL" in
+                maven|gradle|sbt) RESULT="$VAL" ;;
+                *) echo "::error::Invalid cache value '${CACHE_VAL}' for language '${LANG}'. Allowed values: maven, gradle, sbt, none."; exit 1 ;;
+              esac
+              ;;
+            python)
+              case "$VAL" in
+                pip|poetry|pipenv) RESULT="$VAL" ;;
+                *) echo "::error::Invalid cache value '${CACHE_VAL}' for language '${LANG}'. Allowed values: pip, poetry, pipenv, none."; exit 1 ;;
+              esac
+              ;;
+            *)
+              echo "::error::Unsupported language: $LANG"; exit 1 ;;
+          esac
+        else
+          # Auto-detect when cache input is omitted
+          case "$LANG" in
+            node)
+              if [ -f "$DIR/pnpm-lock.yaml" ] || [ -f "$ROOT/pnpm-lock.yaml" ]; then
+                RESULT="pnpm"
+              elif [ -f "$DIR/yarn.lock" ] || [ -f "$ROOT/yarn.lock" ]; then
+                RESULT="yarn"
+              else
+                RESULT="npm"
+              fi
+              ;;
+            java)
+              if [ -f "$DIR/build.gradle" ] || [ -f "$DIR/build.gradle.kts" ] || [ -f "$DIR/gradlew" ] || \
+                 [ -f "$ROOT/build.gradle" ] || [ -f "$ROOT/build.gradle.kts" ] || [ -f "$ROOT/gradlew" ]; then
+                RESULT="gradle"
+              elif [ -f "$DIR/build.sbt" ] || [ -f "$ROOT/build.sbt" ]; then
+                RESULT="sbt"
+              else
+                RESULT="maven"
+              fi
+              ;;
+            python)
+              if [ -f "$DIR/poetry.lock" ] || [ -f "$ROOT/poetry.lock" ]; then
+                RESULT="poetry"
+              elif [ -f "$DIR/Pipfile" ] || [ -f "$DIR/Pipfile.lock" ] || [ -f "$ROOT/Pipfile" ] || [ -f "$ROOT/Pipfile.lock" ]; then
+                RESULT="pipenv"
+              else
+                RESULT="pip"
+              fi
+              ;;
+            *)
+              echo "::error::Unsupported language: $LANG"; exit 1 ;;
+          esac
+        fi
+
+        echo "cache=$RESULT" >> $GITHUB_OUTPUT
+        echo "Determined cache type: '$RESULT' for language: $LANG (input: '$CACHE_VAL')"
 
     - name: Setup Node.js
       uses: actions/setup-node@v7
