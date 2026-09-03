@@ -36,7 +36,7 @@ inputs:
 
   ### Typical / recommended
   cache:
-    description: Package manager for caching; e.g. npm, yarn, pnpm
+    description: Package manager for caching; e.g. npm, yarn, pnpm. Set to 'none' to disable caching.
     default: npm
 
   sonar_args:
@@ -160,7 +160,7 @@ runs:
         LANG="${{ inputs.language }}"
         RESULT=""
         
-        if [ "$CACHE_VAL" == "none" ]; then
+        if [ "${CACHE_VAL,,}" == "none" ]; then
            RESULT=""
         elif [ "$LANG" == "node" ]; then
            if [[ "$CACHE_VAL" == "yarn" || "$CACHE_VAL" == "pnpm" ]]; then RESULT="$CACHE_VAL"; else RESULT="npm"; fi
@@ -213,7 +213,10 @@ runs:
       with:
         node-version: ${{ inputs.node_version }}
         cache: ${{ steps.cache_logic.outputs.cache }}
-        cache-dependency-path: ${{ inputs.dir }}/${{ steps.cache_logic.outputs.cache == 'yarn' && 'yarn.lock' || (steps.cache_logic.outputs.cache == 'pnpm' && 'pnpm-lock.yaml' || 'package-lock.json') }}
+        cache-dependency-path: |
+          ${{ inputs.dir }}/${{ steps.cache_logic.outputs.cache == 'yarn' && 'yarn.lock' || (steps.cache_logic.outputs.cache == 'pnpm' && 'pnpm-lock.yaml' || 'package-lock.json') }}
+          ${{ inputs.checkout_path }}/${{ steps.cache_logic.outputs.cache == 'yarn' && 'yarn.lock' || (steps.cache_logic.outputs.cache == 'pnpm' && 'pnpm-lock.yaml' || 'package-lock.json') }}
+          ${{ steps.cache_logic.outputs.cache == 'yarn' && 'yarn.lock' || (steps.cache_logic.outputs.cache == 'pnpm' && 'pnpm-lock.yaml' || 'package-lock.json') }}
 
     # Condition 2: Java Project Setup
     - name: Setup Java
