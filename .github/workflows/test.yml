@@ -198,6 +198,7 @@ jobs:
             diff-triggers/
             action.yml
             .github/
+            .tool-versions
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Test No Match
@@ -222,6 +223,7 @@ jobs:
             diff-triggers/
             action.yml
             .github/
+            .tool-versions
           ref: ${{ github.event.pull_request.base.sha || 'HEAD~1' }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -229,7 +231,7 @@ jobs:
         id: formats
         uses: $/diff-triggers
         with:
-          triggers: '["diff-triggers/", "action.yml", ".github/"]'
+          triggers: '["diff-triggers/", "action.yml", ".github/", ".tool-versions"]'
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Test Dynamic Filters
@@ -241,6 +243,7 @@ jobs:
               - 'diff-triggers/**'
               - 'action.yml'
               - '.github/'
+              - '.tool-versions'
             non-existent:
               - 'non-existent-path/**'
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -275,6 +278,7 @@ jobs:
           triggers: |
             diff-triggers/
             .github/
+            .tool-versions
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Assert Existing Checkout Survived
