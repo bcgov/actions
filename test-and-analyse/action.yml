@@ -36,7 +36,7 @@ inputs:
 
   ### Typical / recommended
   cache:
-    description: Package manager for caching; e.g. npm, yarn, pnpm
+    description: Package manager for caching; e.g. npm, yarn, pnpm. Set to 'none', 'false', or empty to disable caching.
     default: npm
 
   sonar_args:
@@ -160,15 +160,20 @@ runs:
         LANG="${{ inputs.language }}"
         RESULT=""
         
-        if [ "$CACHE_VAL" == "none" ]; then
-           RESULT=""
-        elif [ "$LANG" == "node" ]; then
-           if [[ "$CACHE_VAL" == "yarn" || "$CACHE_VAL" == "pnpm" ]]; then RESULT="$CACHE_VAL"; else RESULT="npm"; fi
-        elif [ "$LANG" == "java" ]; then
-           if [[ "$CACHE_VAL" == "gradle" || "$CACHE_VAL" == "sbt" ]]; then RESULT="$CACHE_VAL"; else RESULT="maven"; fi
-        elif [ "$LANG" == "python" ]; then
-           if [[ "$CACHE_VAL" == "pipenv" || "$CACHE_VAL" == "poetry" ]]; then RESULT="$CACHE_VAL"; else RESULT="pip"; fi
-        fi
+        case "${CACHE_VAL,,}" in
+          ""|"none"|"false"|"off"|"0"|"no")
+            RESULT=""
+            ;;
+          *)
+            if [ "$LANG" == "node" ]; then
+               if [[ "$CACHE_VAL" == "yarn" || "$CACHE_VAL" == "pnpm" ]]; then RESULT="$CACHE_VAL"; else RESULT="npm"; fi
+            elif [ "$LANG" == "java" ]; then
+               if [[ "$CACHE_VAL" == "gradle" || "$CACHE_VAL" == "sbt" ]]; then RESULT="$CACHE_VAL"; else RESULT="maven"; fi
+            elif [ "$LANG" == "python" ]; then
+               if [[ "$CACHE_VAL" == "pipenv" || "$CACHE_VAL" == "poetry" ]]; then RESULT="$CACHE_VAL"; else RESULT="pip"; fi
+            fi
+            ;;
+        esac
         echo "cache=$RESULT" >> $GITHUB_OUTPUT
         echo "Determined cache type: '$RESULT' for language: $LANG (original input: '$CACHE_VAL')"
 
