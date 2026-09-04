@@ -692,7 +692,6 @@ jobs:
             repository: bcgov/nr-fom
             test_command: echo "Testing autodiscover on nr-fom"
             expected_config: ".github/knip.json"
-            cache: "none"
     steps:
       - id: action
         uses: $/test-and-analyse
@@ -708,7 +707,7 @@ jobs:
           triggers: ${{ matrix.triggers }}
           sonar_token: ${{ matrix.exercise_sonar == true && secrets.SONAR_TOKEN || '' }}
           require_sonar: 'false'
-          cache: ${{ matrix.cache || 'npm' }}
+          cache: ${{ matrix.cache }}
 
       - name: Verify trigger behavior
         run: |
@@ -743,6 +742,9 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
+
+      - name: Run Unit Tests
+        run: bash test-and-analyse/tests/unit.sh
 
       - run: echo sentinel >> README.md
 
