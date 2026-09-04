@@ -36,8 +36,8 @@ inputs:
 
   ### Typical / recommended
   cache:
-    description: Package manager for caching; e.g. npm, yarn, pnpm
-    default: npm
+    description: Package manager for caching (npm, yarn, pnpm, maven, gradle, sbt, pip, poetry, pipenv). If omitted, automatically detected from project lockfiles/build files. Set to 'none' to disable caching.
+    default: ""
 
   sonar_args:
     # https://docs.sonarcloud.io/advanced-setup/analysis-parameters/
@@ -152,25 +152,6 @@ runs:
       run: |
         npx -y @aikidosec/safe-chain setup-ci
 
-    - name: Determine Cache Type
-      id: cache_logic
-      shell: bash
-      run: |
-        CACHE_VAL="${{ inputs.cache }}"
-        LANG="${{ inputs.language }}"
-        RESULT=""
-        
-        if [ "$CACHE_VAL" == "none" ]; then
-           RESULT=""
-        elif [ "$LANG" == "node" ]; then
-           if [[ "$CACHE_VAL" == "yarn" || "$CACHE_VAL" == "pnpm" ]]; then RESULT="$CACHE_VAL"; else RESULT="npm"; fi
-        elif [ "$LANG" == "java" ]; then
-           if [[ "$CACHE_VAL" == "gradle" || "$CACHE_VAL" == "sbt" ]]; then RESULT="$CACHE_VAL"; else RESULT="maven"; fi
-        elif [ "$LANG" == "python" ]; then
-           if [[ "$CACHE_VAL" == "pipenv" || "$CACHE_VAL" == "poetry" ]]; then RESULT="$CACHE_VAL"; else RESULT="pip"; fi
-        fi
-        echo "cache=$RESULT" >> $GITHUB_OUTPUT
-        echo "Determined cache type: '$RESULT' for language: $LANG (original input: '$CACHE_VAL')"
 
     # Clone when the caller asked for a repository other than this one, or when
     # checkout_path holds none. A bare .git probe cannot decide: Check Triggers
@@ -206,6 +187,17 @@ runs:
           git fetch --unshallow
         fi
 
+    - name: Determine Cache Type
+      id: cache_logic
+      if: steps.final_triggered.outputs.triggered == 'true'
+      shell: bash
+      env:
+        INPUT_CACHE: ${{ inputs.cache }}
+        INPUT_LANGUAGE: ${{ inputs.language }}
+        INPUT_DIR: ${{ inputs.dir }}
+        INPUT_CHECKOUT_PATH: ${{ inputs.checkout_path }}
+      run: |
+        "${{ github.action_path }}/cache.sh"
 
     - name: Setup Node.js
       uses: actions/setup-node@v7
@@ -213,7 +205,9 @@ runs:
       with:
         node-version: ${{ inputs.node_version }}
         cache: ${{ steps.cache_logic.outputs.cache }}
-        cache-dependency-path: ${{ inputs.dir }}/${{ steps.cache_logic.outputs.cache == 'yarn' && 'yarn.lock' || (steps.cache_logic.outputs.cache == 'pnpm' && 'pnpm-lock.yaml' || 'package-lock.json') }}
+        cache-dependency-path: |
+          ${{ inputs.dir }}/${{ steps.cache_logic.outputs.cache == 'yarn' && 'yarn.lock' || (steps.cache_logic.outputs.cache == 'pnpm' && 'pnpm-lock.yaml' || 'package-lock.json') }}
+          ${{ inputs.checkout_path }}/${{ steps.cache_logic.outputs.cache == 'yarn' && 'yarn.lock' || (steps.cache_logic.outputs.cache == 'pnpm' && 'pnpm-lock.yaml' || 'package-lock.json') }}
 
     # Condition 2: Java Project Setup
     - name: Setup Java
