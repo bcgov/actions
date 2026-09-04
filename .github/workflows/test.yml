@@ -49,8 +49,11 @@ jobs:
               - 'sysdig-monitor/**'
             test-and-analyse:
               - 'test-and-analyse/**'
+            # Shared runner infrastructure and test harness changes trigger the full suite.
+            # Specific workflows map directly to their action filters (e.g. pr-validate)
+            # rather than triggering blanket integration runs across unrelated actions.
             workflows:
-              - '.github/workflows/**'
+              - '.github/workflows/test.yml'
               - '.tool-versions'
 
   # ─── BUILDER GHCR ───────────────────────────────────────────────────────────
