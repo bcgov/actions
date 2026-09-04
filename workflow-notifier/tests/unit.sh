@@ -179,6 +179,26 @@ test_author_dedup() {
   assert_not_contains "$out" "alice,alice" "no duplicate handle in assignees"
 }
 
+# Test 5b: Case-insensitive author deduplication (e.g. CODEOWNERS @Alice vs actor alice)
+test_author_dedup_case_insensitive() {
+  local case_fixture="${TMP_DIR}/case_fixture/.github"
+  mkdir -p "$case_fixture"
+  cat << 'EOF' > "${case_fixture}/CODEOWNERS"
+* @Alice @Bob
+EOF
+
+  local out
+  out=$(run_action "${TMP_DIR}/case_fixture" \
+    INPUT_TITLE="Test Case Insensitive Dedup" \
+    INPUT_NOTIFY_AUTHOR="true" \
+    INPUT_DRY_RUN="true" \
+    GITHUB_TRIGGERING_ACTOR="alice")
+
+  assert_contains "$out" "Author:    @alice" "identifies alice as author"
+  assert_contains "$out" "Assignees: alice,Bob" "deduplicates Alice case-insensitively"
+  assert_not_contains "$out" "Alice" "removes previous case variant from assignees list"
+}
+
 # Test 6: Fallback to PR lookup via gh api when actor is empty or bot
 test_pr_api_fallback() {
   local out
@@ -240,6 +260,7 @@ test_notify_author_actor_fallback
 test_notify_author_disabled
 test_bot_filter
 test_author_dedup
+test_author_dedup_case_insensitive
 test_pr_api_fallback
 test_no_codeowners
 test_ten_assignee_limit

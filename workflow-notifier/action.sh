@@ -57,7 +57,7 @@ if [ "${INPUT_NOTIFY_AUTHOR:-true}" == "true" ]; then
   if [ -n "$TRIGGERING_AUTHOR" ]; then
     log_debug "Triggering author resolved: ${TRIGGERING_AUTHOR}"
     if [ -n "$ASSIGNEES" ]; then
-      REMAINING_ASSIGNEES=$(echo "$ASSIGNEES" | tr ',' '\n' | grep -F -v -x "$TRIGGERING_AUTHOR" | tr '\n' ',' | sed 's/,$//' || true)
+      REMAINING_ASSIGNEES=$(echo "$ASSIGNEES" | tr ',' '\n' | grep -i -F -v -x "$TRIGGERING_AUTHOR" | tr '\n' ',' | sed 's/,$//' || true)
       if [ -n "$REMAINING_ASSIGNEES" ]; then
         ASSIGNEES="${TRIGGERING_AUTHOR},${REMAINING_ASSIGNEES}"
       else

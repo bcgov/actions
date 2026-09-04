@@ -8,8 +8,9 @@ To run this action, the calling workflow job must have the following minimum per
 
 ```yaml
 permissions:
-  contents: read  # Required to discover CODEOWNERS files in the repository
-  issues: write    # Required to create issues and assign owners
+  contents: read       # Required to discover CODEOWNERS files in the repository
+  issues: write        # Required to create issues and assign owners
+  pull-requests: read  # Optional: required to resolve author from pull request metadata on merge commits
 ```
 
 The action reads `CODEOWNERS` from the **job workspace**, not from the action bundle. A full `actions/checkout` is the usual approach; a sparse checkout of `.github/CODEOWNERS` is enough when you only need owner discovery.
