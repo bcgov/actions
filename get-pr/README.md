@@ -40,7 +40,7 @@ Private repositories may need to provide a GitHub token.
 - id: vars
   uses: bcgov/actions/get-pr@vX.Y.Z
   with:
-    github_token: ${{ secrets.GITHUB_TOKEN }}
+    token: ${{ secrets.GITHUB_TOKEN }}
 
 - name: Echo PR number
   run: echo "PR: ${{ steps.vars.outputs.pr }}"

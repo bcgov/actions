@@ -78,7 +78,7 @@ inputs:
       Setting this to anything but the current repository forces a clone,
       since the workspace cannot be assumed to hold it already.
     default: ${{ github.repository }}
-  github_token:
+  token:
     description: Specify token (GH or PAT), instead of inheriting one from the calling workflow
     default: ${{ github.token }}
 
@@ -131,7 +131,7 @@ runs:
       with:
         triggers: ${{ inputs.triggers }}
         ref: ${{ inputs.ref }}
-        github_token: ${{ inputs.github_token }}
+        token: ${{ inputs.token }}
 
     # Final triggered state
     - id: final_triggered
@@ -167,7 +167,7 @@ runs:
         clean: false
         repository: ${{ inputs.repository }}
         ref: ${{ inputs.branch }}
-        token: ${{ inputs.github_token }}
+        token: ${{ inputs.token }}
         path: ${{ inputs.checkout_path }}
         fetch-depth: 0
 

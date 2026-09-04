@@ -36376,7 +36376,7 @@ function getOctokit(token, options, ...additionalPlugins) {
 
 // Action input
 const markdown = getInput('add_markdown', { required: true });
-const token = getInput('github_token', { required: true });
+const token = getInput('token', { required: true });
 /**
  * Normalizes text for comparison by trimming and normalizing whitespace
  * This helps detect duplicates even with minor whitespace differences

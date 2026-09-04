@@ -29,7 +29,7 @@ inputs:
   dir:
     description: 'Working directory containing the git repository.'
     default: '.'
-  github_token:
+  token:
     description: 'GitHub token or registry token for auth (defaults to github.token).'
     default: ${{ github.token }}
   max_tags:

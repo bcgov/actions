@@ -76,7 +76,7 @@ if [ "${INPUT_DRY_RUN:-}" == "true" ]; then
   ISSUE_URL="https://github.com/${GITHUB_REPOSITORY}/issues/dry-run"
 else
   log_debug "Executing gh CLI to create issue"
-  ISSUE_URL=$(GH_TOKEN="${INPUT_TOKEN:?Missing required github_token (INPUT_TOKEN)}" gh "${GH_ARGS[@]}")
+  ISSUE_URL=$(GH_TOKEN="${INPUT_TOKEN:?Missing required token (INPUT_TOKEN)}" gh "${GH_ARGS[@]}")
   ISSUE_NUM=$(echo "$ISSUE_URL" | grep -oE '[0-9]+$' || echo "0")
 fi
 

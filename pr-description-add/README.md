@@ -11,7 +11,7 @@ This action adds to Pull Request descriptions using markdown.  It checks if the 
 
 #### Optional
 
-`github_token`: ${{ secrets.GITHUB_TOKEN }} or a Personal Access Token (PAT).  Default is to inherit a token from the calling workflow.
+`token`: ${{ secrets.GITHUB_TOKEN }} or a Personal Access Token (PAT).  Default is to inherit a token from the calling workflow.
 
 ## Permissions
 
@@ -69,7 +69,7 @@ jobs:
     steps:
       - uses: bcgov/actions/pr-description-add@vX.Y.Z
         with:
-          github_token: "${{ secrets.GITHUB_TOKEN }}"
+          token: "${{ secrets.GITHUB_TOKEN }}"
           add_markdown: |
             ---
 
