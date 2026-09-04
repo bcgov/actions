@@ -47,12 +47,9 @@ inputs:
   repository:
     description: Non-default repo to clone
     default: ${{ github.repository }}
-  github_token:
+  token:
     description: Specify token (GH or PAT), instead of inheriting one from the calling workflow
     default: ${{ github.token }}
-  token:
-    description: Alias for github_token (backwards-compatible; github_token is preferred)
-    required: false
   username:
     description: Username for registry login; defaults to github.actor
     default: ${{ github.actor }}
@@ -196,7 +193,7 @@ runs:
       with:
         triggers: ${{ inputs.triggers }}
         ref:  ${{ inputs.ref }}
-        github_token: ${{ inputs.token || inputs.github_token }}
+        token: ${{ inputs.token }}
 
 
     # Log in to GHCR (for both retag and build operations)
@@ -206,7 +203,7 @@ runs:
       with:
         registry: ghcr.io
         username: ${{ inputs.username }}
-        password: ${{ inputs.token || inputs.github_token }}
+        password: ${{ inputs.token }}
 
     # Check if a build is required (steps.build.outputs.triggered=true|false)
     - name: Check for builds
@@ -268,7 +265,7 @@ runs:
         target: ${{ inputs.tag_fallback }}
         tags: |
           ${{ steps.vars.outputs.tags }}
-        token: ${{ inputs.token || inputs.github_token }}
+        token: ${{ inputs.token }}
 
     # Checkout code for building - external repo (use default branch)
     - name: Checkout external repository
@@ -276,7 +273,7 @@ runs:
       uses: actions/checkout@v7
       with:
         repository: ${{ inputs.repository }}
-        token: ${{ inputs.token || inputs.github_token }}
+        token: ${{ inputs.token }}
         persist-credentials: false
         path: .builder-context
         clean: false
@@ -289,7 +286,7 @@ runs:
       with:
         repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
         ref: ${{ github.event.pull_request.head.sha || github.ref }}
-        token: ${{ inputs.token || inputs.github_token }}
+        token: ${{ inputs.token }}
         persist-credentials: false
         path: .builder-context
         clean: false

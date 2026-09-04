@@ -164,7 +164,7 @@ async function main() {
   const filtersStr = process.env.INPUT_FILTERS || '';
   const inputRef = process.env.INPUT_REF || '';
   const annotationsEnabled = (process.env.INPUT_ANNOTATIONS || 'true').toLowerCase() === 'true';
-  const token = process.env.INPUT_GITHUB_TOKEN || process.env.GITHUB_TOKEN || '';
+  const token = process.env.INPUT_TOKEN || process.env.GITHUB_TOKEN || '';
   const workflow = process.env.GITHUB_WORKFLOW || '';
   const job = process.env.GITHUB_JOB || '';
   const repo = process.env.GITHUB_REPOSITORY || '';

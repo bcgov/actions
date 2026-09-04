@@ -55,7 +55,7 @@ The action supports multiple formats for the `triggers` input:
       ref: main  # Branch, commit SHA, tag, or local ref (HEAD^, HEAD~2). Local refs work for non-PR events only
 
       # Specify token (GH or PAT), instead of inheriting one from the calling workflow
-      github_token: ${{ github.token }}
+      token: ${{ github.token }}
 
       # Emit workflow summary/annotations notices (default: true)
       # Set false to suppress notices while keeping step logs

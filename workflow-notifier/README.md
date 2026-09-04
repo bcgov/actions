@@ -18,7 +18,7 @@ The action reads `CODEOWNERS` from the **job workspace**, not from the action bu
 
 | Input | Description | Default | Required |
 |---|---|---|---|
-| `github_token` | GitHub token | `${{ github.token }}` | No |
+| `token` | GitHub token | `${{ github.token }}` | No |
 | `debug` | Enable debug logging | `"false"` | No |
 | `title` | Issue title | | **Yes** |
 | `body` | Issue body (pre-filled with workflow run URL if omitted) | | No |

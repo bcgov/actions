@@ -21,7 +21,7 @@ inputs:
       Local refs (HEAD^, HEAD~2) work for non-PR events;
       remote refs (branches, tags, SHAs) work for all events.
     required: false
-  github_token:
+  token:
     description: Specify token (GH or PAT), instead of inheriting one from the calling workflow
     default: ${{ github.token }}
   annotations:

@@ -199,7 +199,7 @@ jobs:
             action.yml
             .github/
             .tool-versions
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Test No Match
         id: no_match
@@ -207,13 +207,13 @@ jobs:
         with:
           triggers: |
             path/to/nowhere
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Test Omitted Triggers
         id: omitted
         uses: $/diff-triggers
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Test Custom Ref
         id: custom_ref
@@ -225,14 +225,14 @@ jobs:
             .github/
             .tool-versions
           ref: ${{ github.event.pull_request.base.sha || 'HEAD~1' }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Test Formats (Bash / Comma / Semi / JSON)
         id: formats
         uses: $/diff-triggers
         with:
           triggers: '["diff-triggers/", "action.yml", ".github/", ".tool-versions"]'
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Test Dynamic Filters
         id: dynamic_filters
@@ -246,7 +246,7 @@ jobs:
               - '.tool-versions'
             non-existent:
               - 'non-existent-path/**'
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Assert Outputs
         run: |
@@ -279,7 +279,7 @@ jobs:
             diff-triggers/
             .github/
             .tool-versions
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Assert Existing Checkout Survived
         run: |
@@ -302,7 +302,7 @@ jobs:
         id: vars
         uses: $/get-pr
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify PR Number
         run: |
@@ -486,7 +486,7 @@ jobs:
           revision: ${{ steps.discover.outputs.revision }}
           repository: ${{ matrix.repo }}
           dir: target
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify action outputs
         env:
@@ -546,7 +546,7 @@ jobs:
         id: dry_run
         uses: $/workflow-notifier
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           title: "[DRY RUN] Simulating a failure for testing"
           body: "This is a dry run test of the notifier action."
           dry_run: true
@@ -577,7 +577,7 @@ jobs:
     steps:
       - uses: $/pr-description-add
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           add_markdown: "Automated Integration Test Verification"
 
   # ─── PR VALIDATE ───────────────────────────────────────────────────────────

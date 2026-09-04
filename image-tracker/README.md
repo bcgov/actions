@@ -117,7 +117,7 @@ deploy can skip.
 | `revision`   |          | `HEAD`               | Git revision (SHA, branch, or tag) to resolve against.                         |
 | `repository` |          | current repo         | Repository owning the images.                                                  |
 | `dir`        |          | `.`                  | Working directory containing the git repository.                               |
-| `github_token` |        | `github.token`       | GitHub token used to mint a GHCR bearer token.                                 |
+| `token`        |          | `github.token`       | GitHub token used to mint a GHCR bearer token.                                 |
 | `max_tags`   |          | `500`                | Upper bound on tags inspected per package before failing.                      |
 | `max_depth`  |          | `1`                  | Max number of commits back in history to search for an image.                  |
 

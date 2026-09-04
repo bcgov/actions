@@ -129,8 +129,7 @@ Only GitHub Container Registry (ghcr.io) is supported so far.
     sbom: 'true'
 
     # Specify token (GH or PAT), instead of inheriting one from the calling workflow
-    # github_token is preferred; token is accepted as a backwards-compatible alias
-    github_token: ${{ secrets.GITHUB_TOKEN }}
+    token: ${{ secrets.GITHUB_TOKEN }}
 
     # Specify username for registry login; defaults to github.actor
     # Useful when using a PAT or service account
@@ -183,13 +182,13 @@ This action supports building from and pushing to private repositories.
 ### Authentication
 
 - **Same Repository/Organization**: By default, the action uses the automatic `GITHUB_TOKEN`. Ensure your workflow has `contents: read` and `packages: write` permissions.
-- **Cross-Organization**: To build from a private repository in a different organization, provide a **Personal Access Token (PAT)** with `repo` scope via the `github_token` input (or the backwards-compatible `token` alias; `github_token` is preferred) and specify the associated `username`.
+- **Cross-Organization**: To build from a private repository in a different organization, provide a **Personal Access Token (PAT)** with `repo` scope via the `token` input and specify the associated `username`.
 
 ### Security
 
 To prevent credential leakage, this action:
 - Uses `persist-credentials: false` during all checkout steps.
-- Performs a clean registry login using the provided `username` and `github_token` before any manifest or build operations.
+- Performs a clean registry login using the provided `username` and `token` before any manifest or build operations.
 - Follows the principle of least privilege by **not** automatically injecting `GITHUB_TOKEN` into the Docker build process. If your build needs a token (e.g., to pull private packages), you must explicitly provide it via the `secrets` input.
 
 
@@ -228,7 +227,7 @@ builds:
           ${{ github.sha }}
           latest
         tag_fallback: test
-        github_token: ${{ secrets.GITHUB_TOKEN }}
+        token: ${{ secrets.GITHUB_TOKEN }}
         triggers: ('frontend/')
 ```
 
@@ -256,7 +255,7 @@ builds:
         tags: ${{ github.event.number }}
         tag_fallback: test
         repository: bcgov/nr-quickstart-typescript
-        github_token: ${{ secrets.GITHUB_TOKEN }}
+        token: ${{ secrets.GITHUB_TOKEN }}
         triggers: ${{ matrix.triggers }}
 
 ```
@@ -413,11 +412,10 @@ Has an image been built?  [true|false]
 
 Single package naming is only triggered when package=repository.
 
-# Deprecations & Aliases
+# Deprecations
 
 > ⚠️ **Deprecated:** The `tag` input has been deprecated in favor of `tags`, a multiline string that can handle multiple values. The `tag` input will be removed in a future release.
 
-- The `token` input is accepted as a backwards-compatible alias for `github_token` (`github_token` is preferred).
 - The `digest_old` output has been deprecated due to non-use.
 - The `digest_new` output has been renamed to `digest`.
 

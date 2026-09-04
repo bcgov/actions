@@ -2,7 +2,7 @@ const fs = require('fs');
 
 async function main() {
   const debug = process.env.INPUT_DEBUG === 'true';
-  const token = process.env.INPUT_GITHUB_TOKEN || process.env.GITHUB_TOKEN;
+  const token = process.env.INPUT_TOKEN || process.env.GITHUB_TOKEN;
   const eventName = process.env.TEST_EVENT_NAME || process.env.GITHUB_EVENT_NAME;
   const repository = process.env.TEST_REPOSITORY || process.env.GITHUB_REPOSITORY;
   const sha = process.env.TEST_SHA || process.env.GITHUB_SHA;

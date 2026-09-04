@@ -9,7 +9,7 @@ inputs:
   add_markdown:
     description: "Markdown message to use in PR description"
     required: true
-  github_token:
+  token:
     description: "GitHub token or a Personal Access Token (PAT)"
     default: ${{ github.token }}
   debug:
