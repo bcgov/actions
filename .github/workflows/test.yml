@@ -542,8 +542,19 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          sparse-checkout: .github/CODEOWNERS
+          sparse-checkout: |
+            .github/CODEOWNERS
+            workflow-notifier
           sparse-checkout-cone-mode: false
+
+      - name: Run Unit Tests
+        run: bash workflow-notifier/tests/unit.sh
+
+      - name: Validate action.yml
+        run: |
+          test -f workflow-notifier/action.yml
+          pip install pyyaml -q
+          python3 -c "import yaml; yaml.safe_load(open('workflow-notifier/action.yml'))"
 
       - name: Dry Run - Simulate Failure Notification
         id: dry_run
@@ -554,15 +565,27 @@ jobs:
           body: "This is a dry run test of the notifier action."
           dry_run: true
 
+      - name: Dry Run - Simulate Failure with Author Disabled
+        id: dry_run_disabled
+        uses: $/workflow-notifier
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          title: "[DRY RUN] Simulating a failure without author"
+          body: "This is a dry run test without author."
+          notify_author: false
+          dry_run: true
+
       - name: Verify Outputs
         run: |
-          echo "Output: issue_number = ${{ steps.dry_run.outputs.issue_number }}"
-          echo "Output: assignees    = ${{ steps.dry_run.outputs.assignees }}"
-          if [ "${{ steps.dry_run.outputs.issue_number }}" != "0" ]; then
+          echo "Output (default):  issue_number = ${{ steps.dry_run.outputs.issue_number }}"
+          echo "Output (default):  assignees    = ${{ steps.dry_run.outputs.assignees }}"
+          echo "Output (disabled): issue_number = ${{ steps.dry_run_disabled.outputs.issue_number }}"
+          echo "Output (disabled): assignees    = ${{ steps.dry_run_disabled.outputs.assignees }}"
+          if [ "${{ steps.dry_run.outputs.issue_number }}" != "0" ] || [ "${{ steps.dry_run_disabled.outputs.issue_number }}" != "0" ]; then
             echo "::error::Dry run should have returned issue_number 0"
             exit 1
           fi
-          if [ -z "${{ steps.dry_run.outputs.assignees }}" ]; then
+          if [ -z "${{ steps.dry_run.outputs.assignees }}" ] || [ -z "${{ steps.dry_run_disabled.outputs.assignees }}" ]; then
             echo "::error::No assignees detected"
             exit 1
           fi

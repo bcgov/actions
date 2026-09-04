@@ -1,6 +1,6 @@
 # workflow-notifier
 
-Find CODEOWNERS and notify them via GitHub Issues on workflow/job failure.
+Find CODEOWNERS and triggering workflow/PR merge authors, notifying them via GitHub Issues on workflow/job failure.
 
 ## Permissions
 
@@ -24,6 +24,7 @@ The action reads `CODEOWNERS` from the **job workspace**, not from the action bu
 | `body` | Issue body (pre-filled with workflow run URL if omitted) | | No |
 | `labels` | Comma-separated list of labels to add to the issue | `"bug,failure"` | No |
 | `assign` | Whether to assign owners to the issue | `"true"` | No |
+| `notify_author` | Whether to notify the triggering author/merger on failure | `"true"` | No |
 | `dry_run` | If true, logs the issue creation without actually creating it | `"false"` | No |
 
 ## Outputs

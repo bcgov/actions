@@ -30,13 +30,58 @@ if [ -n "$CODEOWNERS_PATH" ]; then
   log_debug "Owners found: ${ASSIGNEES}"
 fi
 
-# 3. Build the Issue Body
-FINAL_BODY="${INPUT_BODY:-"Workflow failure detected at $(date)."}"
-RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-# Use printf to handle newlines correctly
-printf -v FINAL_BODY "%s\n\n[View Workflow Run](%s)" "$FINAL_BODY" "$RUN_URL"
+# 3. Discover Triggering Author / Merger
+TRIGGERING_AUTHOR=""
+if [ "${INPUT_NOTIFY_AUTHOR:-true}" == "true" ]; then
+  # Resolve author from triggering actor or actor
+  TRIGGERING_AUTHOR="${GITHUB_TRIGGERING_ACTOR:-${GITHUB_ACTOR:-}}"
 
-# 4. Create the Issue via gh CLI
+  # If empty or a bot, attempt lookup via PR associated with merge commit
+  if { [ -z "$TRIGGERING_AUTHOR" ] || [[ "$TRIGGERING_AUTHOR" == *"[bot]"* ]]; } && \
+     [ -n "${GITHUB_REPOSITORY:-}" ] && [ -n "${GITHUB_SHA:-}" ] && [ -n "${INPUT_TOKEN:-}" ]; then
+    log_debug "Attempting to resolve author from PR associated with ${GITHUB_SHA}..."
+    PR_USER=$(GH_TOKEN="${INPUT_TOKEN}" gh api "/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" --jq '.[0].merged_by.login // .[0].user.login // empty' 2>/dev/null || true)
+    if [ -n "$PR_USER" ] && [ "$PR_USER" != "null" ]; then
+      TRIGGERING_AUTHOR="$PR_USER"
+    fi
+  fi
+
+  # Filter out bot handles
+  if [[ "$TRIGGERING_AUTHOR" == *"[bot]"* ]] || [ "$TRIGGERING_AUTHOR" == "null" ]; then
+    TRIGGERING_AUTHOR=""
+  fi
+
+  # Strip leading @ if present
+  TRIGGERING_AUTHOR="${TRIGGERING_AUTHOR#@}"
+
+  if [ -n "$TRIGGERING_AUTHOR" ]; then
+    log_debug "Triggering author resolved: ${TRIGGERING_AUTHOR}"
+    if [ -n "$ASSIGNEES" ]; then
+      REMAINING_ASSIGNEES=$(echo "$ASSIGNEES" | tr ',' '\n' | grep -F -v -x "$TRIGGERING_AUTHOR" | tr '\n' ',' | sed 's/,$//' || true)
+      if [ -n "$REMAINING_ASSIGNEES" ]; then
+        ASSIGNEES="${TRIGGERING_AUTHOR},${REMAINING_ASSIGNEES}"
+      else
+        ASSIGNEES="${TRIGGERING_AUTHOR}"
+      fi
+    else
+      ASSIGNEES="${TRIGGERING_AUTHOR}"
+    fi
+  fi
+fi
+
+# 4. Build the Issue Body
+FINAL_BODY="${INPUT_BODY:-"Workflow failure detected at $(date)."}"
+RUN_URL="${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-local/repo}/actions/runs/${GITHUB_RUN_ID:-0}"
+
+if [ -n "$TRIGGERING_AUTHOR" ]; then
+  TRIGGER_NOTE="Triggered by @${TRIGGERING_AUTHOR}"
+  printf -v FINAL_BODY "%s\n\n%s\n\n[View Workflow Run](%s)" "$FINAL_BODY" "$TRIGGER_NOTE" "$RUN_URL"
+else
+  printf -v FINAL_BODY "%s\n\n[View Workflow Run](%s)" "$FINAL_BODY" "$RUN_URL"
+fi
+log_debug "Issue body: ${FINAL_BODY}"
+
+# 5. Create the Issue via gh CLI
 log_debug "Creating issue: $INPUT_TITLE"
 
 # Construct the command array
@@ -73,7 +118,7 @@ log_debug "Constructed gh arguments: gh ${REDACTED_GH_ARGS[*]}"
 if [ "${INPUT_DRY_RUN:-}" == "true" ]; then
   echo "::notice ::[DRY RUN] Would create issue: gh ${REDACTED_GH_ARGS[*]}"
   ISSUE_NUM="0"
-  ISSUE_URL="https://github.com/${GITHUB_REPOSITORY}/issues/dry-run"
+  ISSUE_URL="${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-local/repo}/issues/dry-run"
 else
   log_debug "Executing gh CLI to create issue"
   ISSUE_URL=$(GH_TOKEN="${INPUT_TOKEN:?Missing required token (INPUT_TOKEN)}" gh "${GH_ARGS[@]}")
@@ -81,11 +126,17 @@ else
 fi
 
 echo "Summary ---"
-printf "\tIssue: #%s\n" "${ISSUE_NUM}"
-printf "\tURL:   %s\n" "${ISSUE_URL}"
+printf "\tIssue:     #%s\n" "${ISSUE_NUM}"
+printf "\tURL:       %s\n" "${ISSUE_URL}"
+if [ -n "${TRIGGERING_AUTHOR}" ]; then
+  printf "\tAuthor:    @%s\n" "${TRIGGERING_AUTHOR}"
+fi
+printf "\tAssignees: %s\n" "${ASSIGNEES}"
 
 # Write outputs (useful even in dry runs)
-echo "issue_number=${ISSUE_NUM}" >> "${GITHUB_OUTPUT}"
-echo "assignees=${ASSIGNEES}" >> "${GITHUB_OUTPUT}"
+if [ -n "${GITHUB_OUTPUT:-}" ]; then
+  echo "issue_number=${ISSUE_NUM}" >> "${GITHUB_OUTPUT}"
+  echo "assignees=${ASSIGNEES}" >> "${GITHUB_OUTPUT}"
+fi
 
 log_debug "Action completed successfully."

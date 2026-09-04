@@ -23,6 +23,9 @@ inputs:
   assign:
     description: "Whether to assign owners to the issue"
     default: "true"
+  notify_author:
+    description: "Whether to notify the triggering author/merger on failure"
+    default: "true"
   dry_run:
     description: "If true, logs the issue creation without actually creating it"
     default: "false"
@@ -48,6 +51,7 @@ runs:
         INPUT_BODY: "${{ inputs.body }}"
         INPUT_LABELS: "${{ inputs.labels }}"
         INPUT_ASSIGN: "${{ inputs.assign }}"
+        INPUT_NOTIFY_AUTHOR: "${{ inputs.notify_author }}"
         INPUT_DRY_RUN: "${{ inputs.dry_run }}"
       run: |
         "${{ github.action_path }}/action.sh"
