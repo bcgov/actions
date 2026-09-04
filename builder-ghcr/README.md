@@ -129,6 +129,7 @@ Only GitHub Container Registry (ghcr.io) is supported so far.
     sbom: 'true'
 
     # Specify token (GH or PAT), instead of inheriting one from the calling workflow
+    # github_token is preferred; token is accepted as a backwards-compatible alias
     github_token: ${{ secrets.GITHUB_TOKEN }}
 
     # Specify username for registry login; defaults to github.actor
@@ -182,7 +183,7 @@ This action supports building from and pushing to private repositories.
 ### Authentication
 
 - **Same Repository/Organization**: By default, the action uses the automatic `GITHUB_TOKEN`. Ensure your workflow has `contents: read` and `packages: write` permissions.
-- **Cross-Organization**: To build from a private repository in a different organization, provide a **Personal Access Token (PAT)** with `repo` scope via the `github_token` input and specify the associated `username`.
+- **Cross-Organization**: To build from a private repository in a different organization, provide a **Personal Access Token (PAT)** with `repo` scope via the `github_token` input (or the backwards-compatible `token` alias; `github_token` is preferred) and specify the associated `username`.
 
 ### Security
 
@@ -412,10 +413,11 @@ Has an image been built?  [true|false]
 
 Single package naming is only triggered when package=repository.
 
-# Deprecations
+# Deprecations & Aliases
 
 > ⚠️ **Deprecated:** The `tag` input has been deprecated in favor of `tags`, a multiline string that can handle multiple values. The `tag` input will be removed in a future release.
 
+- The `token` input is accepted as a backwards-compatible alias for `github_token` (`github_token` is preferred).
 - The `digest_old` output has been deprecated due to non-use.
 - The `digest_new` output has been renamed to `digest`.
 
