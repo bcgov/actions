@@ -31,8 +31,8 @@ if [ "${INPUT_NOTIFY_AUTHOR:-true}" == "true" ]; then
     fi
   elif [ "$EVENT_NAME" == "schedule" ]; then
     TRIGGER_NOTE="Triggered by scheduled automation"
-  else
-    # push or other events: resolve PR metadata if commit SHA and repo are available
+  elif [ "$EVENT_NAME" == "push" ]; then
+    # push event: resolve PR metadata if commit SHA and repo are available (with bounded retry for indexing lag)
     PR_NUM=""
     PR_AUTHOR=""
     MERGER="${GITHUB_TRIGGERING_ACTOR:-${GITHUB_ACTOR:-}}"
@@ -43,7 +43,16 @@ if [ "${INPUT_NOTIFY_AUTHOR:-true}" == "true" ]; then
 
     if [ -n "${GITHUB_REPOSITORY:-}" ] && [ -n "${GITHUB_SHA:-}" ] && [ -n "${INPUT_TOKEN:-}" ]; then
       log_debug "Attempting to resolve PR metadata for ${GITHUB_SHA}..."
-      PR_INFO=$(GH_TOKEN="${INPUT_TOKEN}" gh api "/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" --jq '.[0] | "\(.number // "")|\(.merged_by.login // "")|\(.user.login // "")"' 2>/dev/null || true)
+      PR_INFO=""
+      for attempt in 1 2 3; do
+        PR_INFO=$(GH_TOKEN="${INPUT_TOKEN}" gh api "/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" --jq '[.[] | select(.merged_at != null)][0] | "\(.number // "")|\(.merged_by.login // "")|\(.user.login // "")"' 2>/dev/null || true)
+        if [ -n "$PR_INFO" ] && [ "$PR_INFO" != "||" ]; then
+          break
+        fi
+        if [ "$attempt" -lt 3 ]; then
+          sleep $((attempt * 2))
+        fi
+      done
       if [ -n "$PR_INFO" ] && [ "$PR_INFO" != "||" ]; then
         IFS='|' read -r PR_NUM RAW_MERGER PR_AUTHOR <<< "$PR_INFO" || true
         if [ -n "$RAW_MERGER" ] && [[ "$RAW_MERGER" != *"[bot]"* ]]; then
@@ -81,6 +90,17 @@ if [ "${INPUT_NOTIFY_AUTHOR:-true}" == "true" ]; then
       fi
     elif [ -n "$PR_AUTHOR" ]; then
       TRIGGER_NOTE="Authored by @${PR_AUTHOR}"
+    fi
+  else
+    # pull_request or other generic events: attribute to triggering actor with neutral wording
+    ACTOR="${GITHUB_TRIGGERING_ACTOR:-${GITHUB_ACTOR:-}}"
+    if [[ "$ACTOR" == *"[bot]"* ]] || [ "$ACTOR" == "null" ]; then
+      ACTOR=""
+    fi
+    ACTOR="${ACTOR#@}"
+    if [ -n "$ACTOR" ]; then
+      AUTHORS_LIST+=("$ACTOR")
+      TRIGGER_NOTE="Triggered by @${ACTOR}"
     fi
   fi
 fi
@@ -176,8 +196,12 @@ if [ -n "${INPUT_LABELS:-}" ]; then
 fi
 
 # Handle assignment (limit 10 for GitHub)
-if [ "${INPUT_ASSIGN:-}" == "true" ] && [ -n "$ASSIGNEES" ]; then
+CLEAN_ASSIGNEES=""
+if [ -n "$ASSIGNEES" ]; then
   CLEAN_ASSIGNEES=$(echo "$ASSIGNEES" | cut -d',' -f1-10)
+fi
+
+if [ "${INPUT_ASSIGN:-}" == "true" ] && [ -n "$CLEAN_ASSIGNEES" ]; then
   GH_ARGS+=(--assignee "$CLEAN_ASSIGNEES")
 fi
 
@@ -211,12 +235,12 @@ if [ -n "$TRIGGER_NOTE" ]; then
     printf "\tNote:      %s\n" "${line}"
   done <<< "$TRIGGER_NOTE"
 fi
-printf "\tAssignees: %s\n" "${ASSIGNEES}"
+printf "\tAssignees: %s\n" "${CLEAN_ASSIGNEES}"
 
 # Write outputs (useful even in dry runs)
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
   echo "issue_number=${ISSUE_NUM}" >> "${GITHUB_OUTPUT}"
-  echo "assignees=${ASSIGNEES}" >> "${GITHUB_OUTPUT}"
+  echo "assignees=${CLEAN_ASSIGNEES}" >> "${GITHUB_OUTPUT}"
 fi
 
 log_debug "Action completed successfully."
