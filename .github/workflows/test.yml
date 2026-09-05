@@ -555,7 +555,19 @@ jobs:
         run: |
           test -f workflow-notifier/action.yml
           pip install pyyaml -q
-          python3 -c "import yaml; yaml.safe_load(open('workflow-notifier/action.yml'))"
+          python3 -c "
+          import yaml
+          with open('workflow-notifier/action.yml') as f:
+              action = yaml.safe_load(f)
+          assert isinstance(action, dict), 'action.yml must be a mapping'
+          for key in ['name', 'description', 'inputs', 'outputs', 'runs']:
+              assert key in action and action[key], f'Missing required action field: {key}'
+          assert action['runs'].get('using') == 'composite', 'runs.using must be composite'
+          assert isinstance(action['runs'].get('steps'), list) and len(action['runs']['steps']) > 0, 'runs.steps must be a list'
+          assert 'notify_author' in action['inputs'], 'inputs must declare notify_author'
+          assert action['inputs']['notify_author'].get('default') == 'true', 'notify_author default must be true'
+          assert 'issue_number' in action['outputs'] and 'assignees' in action['outputs'], 'missing required outputs'
+          "
 
       - name: Dry Run - Simulate Failure Notification
         id: dry_run

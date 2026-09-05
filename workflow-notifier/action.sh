@@ -33,17 +33,18 @@ fi
 # 3. Discover Triggering Author / Merger
 TRIGGERING_AUTHOR=""
 if [ "${INPUT_NOTIFY_AUTHOR:-true}" == "true" ]; then
-  # Resolve author from triggering actor or actor
-  TRIGGERING_AUTHOR="${GITHUB_TRIGGERING_ACTOR:-${GITHUB_ACTOR:-}}"
-
-  # If empty or a bot, attempt lookup via PR associated with merge commit
-  if { [ -z "$TRIGGERING_AUTHOR" ] || [[ "$TRIGGERING_AUTHOR" == *"[bot]"* ]]; } && \
-     [ -n "${GITHUB_REPOSITORY:-}" ] && [ -n "${GITHUB_SHA:-}" ] && [ -n "${INPUT_TOKEN:-}" ]; then
+  # For commits associated with a PR, prioritize PR merger or author (filtering bots)
+  if [ -n "${GITHUB_REPOSITORY:-}" ] && [ -n "${GITHUB_SHA:-}" ] && [ -n "${INPUT_TOKEN:-}" ]; then
     log_debug "Attempting to resolve author from PR associated with ${GITHUB_SHA}..."
-    PR_USER=$(GH_TOKEN="${INPUT_TOKEN}" gh api "/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" --jq '.[0].merged_by.login // .[0].user.login // empty' 2>/dev/null || true)
+    PR_USER=$(GH_TOKEN="${INPUT_TOKEN}" gh api "/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" --jq '.[0] | [.merged_by.login, .user.login] | map(select(type == "string" and (contains("[bot]") | not))) | .[0] // empty' 2>/dev/null || true)
     if [ -n "$PR_USER" ] && [ "$PR_USER" != "null" ]; then
       TRIGGERING_AUTHOR="$PR_USER"
     fi
+  fi
+
+  # Fallback to workflow actor when no PR-associated author was found
+  if [ -z "$TRIGGERING_AUTHOR" ]; then
+    TRIGGERING_AUTHOR="${GITHUB_TRIGGERING_ACTOR:-${GITHUB_ACTOR:-}}"
   fi
 
   # Filter out bot handles

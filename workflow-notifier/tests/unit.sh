@@ -21,21 +21,40 @@ cat << 'EOF' > "${MOCK_BIN}/gh"
 set -euo pipefail
 
 if [[ "$*" == *"commits/"*"/pulls"* ]]; then
-  if [[ "$*" == *"--jq"* ]]; then
+  json="[]"
+  if [ -n "${MOCK_PR_USER:-}" ] || [ -n "${MOCK_PR_MERGER:-}" ]; then
+    merger_val="null"
     if [ -n "${MOCK_PR_MERGER:-}" ]; then
-      echo "${MOCK_PR_MERGER}"
-    elif [ -n "${MOCK_PR_USER:-}" ]; then
-      echo "${MOCK_PR_USER}"
+      merger_val="\"${MOCK_PR_MERGER}\""
     fi
-    exit 0
+    user_val="null"
+    if [ -n "${MOCK_PR_USER:-}" ]; then
+      user_val="\"${MOCK_PR_USER}\""
+    fi
+    json="[{\"user\":{\"login\":${user_val}},\"merged_by\":{\"login\":${merger_val}}}]"
   fi
-  if [ -n "${MOCK_PR_USER:-}" ]; then
-    echo "[{\"user\":{\"login\":\"${MOCK_PR_USER}\"},\"merged_by\":{\"login\":\"${MOCK_PR_MERGER:-}\"}}]"
-    exit 0
-  else
-    echo "[]"
-    exit 0
-  fi
+
+  found_jq=false
+  for arg in "$@"; do
+    if [ "${found_jq}" = true ]; then
+      if command -v jq >/dev/null 2>&1; then
+        echo "$json" | jq -r "$arg"
+      else
+        if [ -n "${MOCK_PR_MERGER:-}" ] && [[ "${MOCK_PR_MERGER}" != *"[bot]"* ]]; then
+          echo "${MOCK_PR_MERGER}"
+        elif [ -n "${MOCK_PR_USER:-}" ] && [[ "${MOCK_PR_USER}" != *"[bot]"* ]]; then
+          echo "${MOCK_PR_USER}"
+        fi
+      fi
+      exit 0
+    fi
+    if [ "$arg" = "--jq" ]; then
+      found_jq=true
+    fi
+  done
+
+  echo "$json"
+  exit 0
 fi
 
 # Fallback for unexpected calls
@@ -219,6 +238,45 @@ test_pr_api_fallback() {
   assert_contains "$out" "Triggered by @pr-merger" "mentions PR merger in body"
 }
 
+# Test 6b: PR merger takes priority over workflow rerunner
+test_pr_merger_priority_over_rerunner() {
+  local out
+  out=$(run_action "$FIXTURE_DIR" \
+    INPUT_TITLE="Test PR Merger Priority" \
+    INPUT_NOTIFY_AUTHOR="true" \
+    INPUT_DEBUG="true" \
+    INPUT_DRY_RUN="true" \
+    INPUT_TOKEN="dummy-token" \
+    GITHUB_TRIGGERING_ACTOR="rerun-actor" \
+    GITHUB_REPOSITORY="bcgov/actions" \
+    GITHUB_SHA="1234567890abcdef" \
+    MOCK_PR_USER="pr-author" \
+    MOCK_PR_MERGER="original-merger")
+
+  assert_contains "$out" "Author:    @original-merger" "prioritizes original PR merger over workflow rerunner"
+  assert_contains "$out" "Assignees: original-merger,alice,bob" "assigns original PR merger"
+}
+
+# Test 6c: Bot merger falls back to human PR author
+test_pr_bot_merger_falls_back_to_pr_author() {
+  local out
+  out=$(run_action "$FIXTURE_DIR" \
+    INPUT_TITLE="Test Bot Merger Fallback" \
+    INPUT_NOTIFY_AUTHOR="true" \
+    INPUT_DEBUG="true" \
+    INPUT_DRY_RUN="true" \
+    INPUT_TOKEN="dummy-token" \
+    GITHUB_TRIGGERING_ACTOR="workflow-rerunner" \
+    GITHUB_REPOSITORY="bcgov/actions" \
+    GITHUB_SHA="1234567890abcdef" \
+    MOCK_PR_USER="human-author" \
+    MOCK_PR_MERGER="dependabot[bot]")
+
+  assert_contains "$out" "Author:    @human-author" "falls back to human PR author when PR merged by bot"
+  assert_contains "$out" "Assignees: human-author,alice,bob" "assigns human PR author"
+  assert_not_contains "$out" "dependabot[bot]" "excludes bot merger"
+}
+
 # Test 7: Assignees when no CODEOWNERS exists
 test_no_codeowners() {
   local empty_fixture="${TMP_DIR}/empty_fixture"
@@ -262,6 +320,8 @@ test_bot_filter
 test_author_dedup
 test_author_dedup_case_insensitive
 test_pr_api_fallback
+test_pr_merger_priority_over_rerunner
+test_pr_bot_merger_falls_back_to_pr_author
 test_no_codeowners
 test_ten_assignee_limit
 
