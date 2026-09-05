@@ -84,6 +84,7 @@ run_action() {
       PATH="${MOCK_BIN}:${PATH}" \
       TMP_DIR="${TMP_DIR}" \
       GITHUB_OUTPUT="$out_file" \
+      GITHUB_EVENT_NAME="push" \
       "$@" \
       bash "$ACTION_SH" 2>&1
   )
