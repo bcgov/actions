@@ -26,7 +26,7 @@ The action reads `CODEOWNERS` from the **job workspace**, not from the action bu
 | `labels` | Comma-separated list of labels to add to the issue | `"bug,failure"` | No |
 | `assign` | Whether to assign owners to the issue | `"true"` | No |
 | `notify_author` | Whether to notify the triggering author/merger on failure | `"true"` | No |
-| `notify_codeowners` | Whether to notify repository CODEOWNERS on failure | `"true"` | No |
+| `notify_codeowners` | Whether to notify repository CODEOWNERS on failure (`"fallback"`, `"true"`, `"false"`). By default (`"fallback"`), CODEOWNERS are only alerted if no human author/operator was resolved (e.g. scheduled cron runs). Set `"true"` to always include CODEOWNERS, or `"false"` to never include them. | `"fallback"` | No |
 | `dry_run` | If true, logs the issue creation without actually creating it | `"false"` | No |
 
 ## Outputs

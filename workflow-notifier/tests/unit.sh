@@ -125,18 +125,18 @@ cat << 'EOF' > "${FIXTURE_DIR}/.github/CODEOWNERS"
 * @alice @bob
 EOF
 
-# Test 1: notify_author default ("true") resolves GITHUB_TRIGGERING_ACTOR
+# Test 1: notify_author default ("true") on direct push resolves GITHUB_TRIGGERING_ACTOR
 test_notify_author_default() {
   local out
   out=$(run_action "$FIXTURE_DIR" \
     INPUT_TITLE="Test Default Author" \
-    INPUT_DEBUG="true" \
     INPUT_DRY_RUN="true" \
     GITHUB_TRIGGERING_ACTOR="charlie")
 
   assert_contains "$out" "Author:    @charlie" "default notify_author includes author in summary"
-  assert_contains "$out" "Assignees: charlie,alice,bob" "default notify_author prepends author to assignees"
-  assert_contains "$out" "Triggered by @charlie" "default notify_author adds mention to body"
+  assert_contains "$out" "Assignees: charlie" "default notify_author assigns only author when resolved"
+  assert_not_contains "$out" "alice" "excludes CODEOWNERS by default when author resolved"
+  assert_contains "$out" "Pushed by @charlie" "direct push sets pushed by note"
 }
 
 # Test 2: notify_author="true" with GITHUB_ACTOR fallback when TRIGGERING_ACTOR unset
@@ -150,10 +150,10 @@ test_notify_author_actor_fallback() {
     GITHUB_ACTOR="david")
 
   assert_contains "$out" "Author:    @david" "resolves author via GITHUB_ACTOR fallback"
-  assert_contains "$out" "Assignees: david,alice,bob" "prepends fallback author to assignees"
+  assert_contains "$out" "Assignees: david" "assigns fallback author"
 }
 
-# Test 3: notify_author="false" excludes author from assignees and body
+# Test 3: notify_author="false" falls back to CODEOWNERS
 test_notify_author_disabled() {
   local out
   out=$(run_action "$FIXTURE_DIR" \
@@ -163,11 +163,11 @@ test_notify_author_disabled() {
     GITHUB_TRIGGERING_ACTOR="charlie")
 
   assert_not_contains "$out" "Author:    @charlie" "disabled notify_author omits author from summary"
-  assert_contains "$out" "Assignees: alice,bob" "disabled notify_author preserves CODEOWNERS assignees only"
-  assert_not_contains "$out" "Triggered by @" "disabled notify_author does not add trigger mention"
+  assert_contains "$out" "Assignees: alice,bob" "disabled notify_author falls back to CODEOWNERS"
+  assert_not_contains "$out" "Pushed by @" "disabled notify_author does not add trigger mention"
 }
 
-# Test 4: Bot actors (e.g. dependabot[bot]) are filtered out
+# Test 4: Bot actors (e.g. dependabot[bot]) are filtered out, falling back to CODEOWNERS
 test_bot_filter() {
   local out
   out=$(run_action "$FIXTURE_DIR" \
@@ -177,16 +177,17 @@ test_bot_filter() {
     GITHUB_TRIGGERING_ACTOR="dependabot[bot]")
 
   assert_not_contains "$out" "dependabot[bot]" "filters out bot actor"
-  assert_contains "$out" "Assignees: alice,bob" "preserves CODEOWNERS without bot"
-  assert_not_contains "$out" "Triggered by @" "does not add trigger mention for bot"
+  assert_contains "$out" "Assignees: alice,bob" "falls back to CODEOWNERS when bot filtered"
+  assert_not_contains "$out" "Pushed by @" "does not add trigger mention for bot"
 }
 
-# Test 5: Author deduplication when author already exists in CODEOWNERS
+# Test 5: Author deduplication when notify_codeowners="true" and author is in CODEOWNERS
 test_author_dedup() {
   local out
   out=$(run_action "$FIXTURE_DIR" \
     INPUT_TITLE="Test Author Deduplication" \
     INPUT_NOTIFY_AUTHOR="true" \
+    INPUT_NOTIFY_CODEOWNERS="true" \
     INPUT_DRY_RUN="true" \
     GITHUB_TRIGGERING_ACTOR="alice")
 
@@ -195,7 +196,7 @@ test_author_dedup() {
   assert_not_contains "$out" "alice,alice" "no duplicate handle in assignees"
 }
 
-# Test 5b: Case-insensitive author deduplication (e.g. CODEOWNERS @Alice vs actor alice)
+# Test 5b: Case-insensitive author deduplication with notify_codeowners="true"
 test_author_dedup_case_insensitive() {
   local case_fixture="${TMP_DIR}/case_fixture/.github"
   mkdir -p "$case_fixture"
@@ -207,15 +208,16 @@ EOF
   out=$(run_action "${TMP_DIR}/case_fixture" \
     INPUT_TITLE="Test Case Insensitive Dedup" \
     INPUT_NOTIFY_AUTHOR="true" \
+    INPUT_NOTIFY_CODEOWNERS="true" \
     INPUT_DRY_RUN="true" \
     GITHUB_TRIGGERING_ACTOR="alice")
 
   assert_contains "$out" "Author:    @alice" "identifies alice as author"
   assert_contains "$out" "Assignees: alice,Bob" "deduplicates Alice case-insensitively"
-  assert_not_contains "$out" "Alice" "removes previous case variant from assignees list"
+  assert_not_contains "$out" "Alice," "removes previous uppercase case variant from assignees list"
 }
 
-# Test 6: Fallback to PR lookup via gh api when actor is empty or bot
+# Test 6: Fallback to PR lookup via gh api on merge commit
 test_pr_api_fallback() {
   local out
   out=$(run_action "$FIXTURE_DIR" \
@@ -232,8 +234,9 @@ test_pr_api_fallback() {
 
   assert_contains "$out" "Author:    @pr-merger" "resolves merger from PR lookup"
   assert_contains "$out" "Author:    @pr-creator" "resolves creator from PR lookup"
-  assert_contains "$out" "Assignees: pr-creator,pr-merger,alice,bob" "includes PR merger and creator in assignees"
-  assert_contains "$out" "Triggered by @pr-merger (PR #123 by @pr-creator)" "mentions PR merger and creator in body"
+  assert_contains "$out" "Assignees: pr-merger,pr-creator" "assigns PR merger and creator"
+  assert_contains "$out" "Merged by @pr-merger" "mentions PR merger in body"
+  assert_contains "$out" "Authored by @pr-creator" "mentions PR creator in body"
 }
 
 # Test 6b: PR merger and author included on rerun
@@ -253,7 +256,7 @@ test_pr_merger_priority_over_rerunner() {
 
   assert_contains "$out" "Author:    @original-merger" "prioritizes original PR merger"
   assert_contains "$out" "Author:    @pr-author" "includes PR author"
-  assert_contains "$out" "Assignees: pr-author,original-merger,alice,bob" "assigns both PR author and original merger"
+  assert_contains "$out" "Assignees: original-merger,pr-author" "assigns both original merger and PR author"
 }
 
 # Test 6c: Bot merger falls back to human PR author
@@ -271,8 +274,44 @@ test_pr_bot_merger_falls_back_to_pr_author() {
     MOCK_PR_MERGER="dependabot[bot]")
 
   assert_contains "$out" "Author:    @human-author" "falls back to human PR author when PR merged by bot"
-  assert_contains "$out" "Assignees: human-author,alice,bob" "assigns human PR author"
+  assert_contains "$out" "Assignees: human-author" "assigns human PR author"
   assert_not_contains "$out" "dependabot[bot]" "excludes bot merger"
+}
+
+# Test 6d: Same author and merger yields consolidated note
+test_pr_same_author_and_merger() {
+  local out
+  out=$(run_action "$FIXTURE_DIR" \
+    INPUT_TITLE="Test Same Author Merger" \
+    INPUT_NOTIFY_AUTHOR="true" \
+    INPUT_DRY_RUN="true" \
+    INPUT_TOKEN="dummy-token" \
+    GITHUB_TRIGGERING_ACTOR="solo-dev" \
+    GITHUB_REPOSITORY="bcgov/actions" \
+    GITHUB_SHA="1234567890abcdef" \
+    MOCK_PR_USER="solo-dev" \
+    MOCK_PR_MERGER="solo-dev")
+
+  assert_contains "$out" "Merged and authored by @solo-dev" "consolidates note when author and merger match"
+  assert_contains "$out" "Assignees: solo-dev" "assigns single handle when author matches merger"
+}
+
+# Test 6e: notify_codeowners="true" includes CODEOWNERS alongside PR author/merger
+test_notify_codeowners_always() {
+  local out
+  out=$(run_action "$FIXTURE_DIR" \
+    INPUT_TITLE="Test Codeowners Always" \
+    INPUT_NOTIFY_AUTHOR="true" \
+    INPUT_NOTIFY_CODEOWNERS="true" \
+    INPUT_DRY_RUN="true" \
+    INPUT_TOKEN="dummy-token" \
+    GITHUB_TRIGGERING_ACTOR="merger1" \
+    GITHUB_REPOSITORY="bcgov/actions" \
+    GITHUB_SHA="1234567890abcdef" \
+    MOCK_PR_USER="author1" \
+    MOCK_PR_MERGER="merger1")
+
+  assert_contains "$out" "Assignees: merger1,author1,alice,bob" "includes actors and CODEOWNERS when notify_codeowners is true"
 }
 
 # Test 7: Assignees when no CODEOWNERS exists
@@ -291,18 +330,17 @@ test_no_codeowners() {
   assert_contains "$out" "Assignees: solouser" "assignees contains only solouser when no CODEOWNERS"
 }
 
-# Test 7b: notify_codeowners="false" excludes CODEOWNERS while keeping author
+# Test 7b: notify_codeowners="false" excludes CODEOWNERS even on scheduled runs
 test_notify_codeowners_disabled() {
   local out
   out=$(run_action "$FIXTURE_DIR" \
     INPUT_TITLE="Test CODEOWNERS Disabled" \
+    INPUT_EVENT_NAME="schedule" \
     INPUT_NOTIFY_CODEOWNERS="false" \
     INPUT_NOTIFY_AUTHOR="true" \
-    INPUT_DRY_RUN="true" \
-    GITHUB_TRIGGERING_ACTOR="charlie")
+    INPUT_DRY_RUN="true")
 
-  assert_contains "$out" "Author:    @charlie" "identifies charlie as author"
-  assert_contains "$out" "Assignees: charlie" "assignees contains only author when CODEOWNERS disabled"
+  assert_contains "$out" "Assignees: " "assignees is empty when CODEOWNERS disabled on schedule"
   assert_not_contains "$out" "alice" "excludes CODEOWNERS handle alice"
   assert_not_contains "$out" "bob" "excludes CODEOWNERS handle bob"
 }
@@ -323,7 +361,36 @@ test_notify_all_disabled() {
   assert_not_contains "$out" "alice" "alice not assigned"
 }
 
-# Test 8: GitHub 10-assignee limit handling
+# Test 8: Event workflow_dispatch assigns operator and sets note
+test_workflow_dispatch_event() {
+  local out
+  out=$(run_action "$FIXTURE_DIR" \
+    INPUT_TITLE="Test Workflow Dispatch" \
+    INPUT_EVENT_NAME="workflow_dispatch" \
+    INPUT_DRY_RUN="true" \
+    GITHUB_TRIGGERING_ACTOR="operator1")
+
+  assert_contains "$out" "Author:    @operator1" "identifies operator"
+  assert_contains "$out" "Assignees: operator1" "assigns operator"
+  assert_contains "$out" "Dispatched by @operator1" "sets dispatched by note"
+  assert_not_contains "$out" "alice" "excludes CODEOWNERS on dispatch by default"
+}
+
+# Test 9: Event schedule sets scheduled automation note and falls back to CODEOWNERS
+test_schedule_event() {
+  local out
+  out=$(run_action "$FIXTURE_DIR" \
+    INPUT_TITLE="Test Schedule Event" \
+    INPUT_EVENT_NAME="schedule" \
+    INPUT_DRY_RUN="true" \
+    GITHUB_TRIGGERING_ACTOR="github-actions[bot]")
+
+  assert_contains "$out" "Triggered by scheduled automation" "sets scheduled automation note"
+  assert_contains "$out" "Assignees: alice,bob" "falls back to CODEOWNERS on schedule"
+  assert_not_contains "$out" "Author:    @" "no human author on schedule"
+}
+
+# Test 10: GitHub 10-assignee limit handling
 test_ten_assignee_limit() {
   local many_fixture="${TMP_DIR}/many_fixture/.github"
   mkdir -p "$many_fixture"
@@ -335,6 +402,7 @@ EOF
   out=$(run_action "${TMP_DIR}/many_fixture" \
     INPUT_TITLE="Test 10 Limit" \
     INPUT_NOTIFY_AUTHOR="true" \
+    INPUT_NOTIFY_CODEOWNERS="true" \
     INPUT_DRY_RUN="true" \
     INPUT_ASSIGN="true" \
     GITHUB_TRIGGERING_ACTOR="leadauthor")
@@ -352,9 +420,13 @@ test_author_dedup_case_insensitive
 test_pr_api_fallback
 test_pr_merger_priority_over_rerunner
 test_pr_bot_merger_falls_back_to_pr_author
+test_pr_same_author_and_merger
+test_notify_codeowners_always
 test_no_codeowners
 test_notify_codeowners_disabled
 test_notify_all_disabled
+test_workflow_dispatch_event
+test_schedule_event
 test_ten_assignee_limit
 
 echo ""
