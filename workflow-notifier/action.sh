@@ -45,12 +45,12 @@ if [ "${INPUT_NOTIFY_AUTHOR:-true}" == "true" ]; then
       log_debug "Attempting to resolve PR metadata for ${GITHUB_SHA}..."
       PR_INFO=""
       for attempt in 1 2 3; do
-        PR_INFO=$(GH_TOKEN="${INPUT_TOKEN}" gh api "/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" --jq '.[0] | "\(.number // "")|\(.merged_by.login // "")|\(.user.login // "")"' 2>/dev/null || true)
+        PR_INFO=$(GH_TOKEN="${INPUT_TOKEN}" gh api "/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" --jq '[.[] | select(.merged_at != null)][0] | "\(.number // "")|\(.merged_by.login // "")|\(.user.login // "")"' 2>/dev/null || true)
         if [ -n "$PR_INFO" ] && [ "$PR_INFO" != "||" ]; then
           break
         fi
         if [ "$attempt" -lt 3 ]; then
-          sleep $((attempt * ${INPUT_RETRY_DELAY:-2}))
+          sleep $((attempt * 2))
         fi
       done
       if [ -n "$PR_INFO" ] && [ "$PR_INFO" != "||" ]; then

@@ -16,6 +16,12 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 MOCK_BIN="${TMP_DIR}/bin"
 mkdir -p "$MOCK_BIN"
 
+cat << 'EOF' > "${MOCK_BIN}/sleep"
+#!/usr/bin/env bash
+exit 0
+EOF
+chmod +x "${MOCK_BIN}/sleep"
+
 cat << 'EOF' > "${MOCK_BIN}/gh"
 #!/usr/bin/env bash
 set -euo pipefail
@@ -32,7 +38,11 @@ if [[ "$*" == *"commits/"*"/pulls"* ]]; then
       user_val="\"${MOCK_PR_USER}\""
     fi
     pr_num="${MOCK_PR_NUM:-123}"
-    json="[{\"number\":${pr_num},\"user\":{\"login\":${user_val}},\"merged_by\":{\"login\":${merger_val}}}]"
+    merged_at_val="\"2026-09-05T12:00:00Z\""
+    if [ "${MOCK_PR_MERGED:-true}" = "false" ]; then
+      merged_at_val="null"
+    fi
+    json="[{\"number\":${pr_num},\"user\":{\"login\":${user_val}},\"merged_by\":{\"login\":${merger_val}},\"merged_at\":${merged_at_val}}]"
   fi
 
   found_jq=false
@@ -49,6 +59,10 @@ if [[ "$*" == *"commits/"*"/pulls"* ]]; then
           echo "||"
           exit 0
         fi
+      fi
+      if [ "${MOCK_PR_MERGED:-true}" = "false" ]; then
+        echo "||"
+        exit 0
       fi
       if [ -n "${MOCK_PR_USER:-}" ] || [ -n "${MOCK_PR_MERGER:-}" ]; then
         echo "${MOCK_PR_NUM:-123}|${MOCK_PR_MERGER:-}|${MOCK_PR_USER:-}"
@@ -442,7 +456,6 @@ test_pr_api_retry_success() {
     INPUT_DRY_RUN="true" \
     INPUT_TOKEN="dummy-token" \
     INPUT_EVENT_NAME="push" \
-    INPUT_RETRY_DELAY="0" \
     GITHUB_TRIGGERING_ACTOR="github-actions[bot]" \
     GITHUB_REPOSITORY="bcgov/actions" \
     GITHUB_SHA="1234567890abcdef" \
@@ -471,6 +484,28 @@ test_pull_request_event() {
   assert_not_contains "$out" "Merged by" "does not label pull_request as merged by"
 }
 
+# Test 13: Push to branch with an open, unmerged PR ignores unmerged PR and falls back to actor
+test_push_to_branch_with_open_unmerged_pr() {
+  local out
+  out=$(run_action "$FIXTURE_DIR" \
+    INPUT_TITLE="Test Unmerged PR Branch Push" \
+    INPUT_NOTIFY_AUTHOR="true" \
+    INPUT_DRY_RUN="true" \
+    INPUT_TOKEN="dummy-token" \
+    INPUT_EVENT_NAME="push" \
+    GITHUB_TRIGGERING_ACTOR="branch-pusher" \
+    GITHUB_REPOSITORY="bcgov/actions" \
+    GITHUB_SHA="1234567890abcdef" \
+    MOCK_PR_USER="pr-opener" \
+    MOCK_PR_MERGER="branch-pusher" \
+    MOCK_PR_MERGED="false")
+
+  assert_contains "$out" "Author:    @branch-pusher" "identifies branch pusher as author"
+  assert_not_contains "$out" "pr-opener" "does not include unmerged PR author"
+  assert_contains "$out" "Pushed by @branch-pusher" "uses Pushed by note instead of Merged by"
+  assert_not_contains "$out" "Merged by" "does not label unmerged PR as merged"
+}
+
 test_notify_author_default
 test_notify_author_actor_fallback
 test_notify_author_disabled
@@ -490,6 +525,7 @@ test_schedule_event
 test_ten_assignee_limit
 test_pr_api_retry_success
 test_pull_request_event
+test_push_to_branch_with_open_unmerged_pr
 
 echo ""
 echo "Unit tests finished: ${passed} passed, ${failed} failed."
