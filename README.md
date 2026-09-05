@@ -97,7 +97,7 @@ Refer to each action's directory for its exact minimum required permissions bloc
 - **[pr-description-add](./pr-description-add/)**: `pull-requests: write`
 - **[sysdig-monitor](./sysdig-monitor/)**: `contents: read` (alert templates are read from the consuming repo's checkout)
 - **[test-and-analyse](./test-and-analyse/)**: `contents: read`, `actions: write` (optional, for caching)
-- **[workflow-notifier](./workflow-notifier/)**: `contents: read`, `issues: write`
+- **[workflow-notifier](./workflow-notifier/)**: `contents: read`, `issues: write`, `pull-requests: read` (optional, for PR merge author resolution)
 
 ## Fork pull requests
 

@@ -1,6 +1,6 @@
 # workflow-notifier
 
-Find CODEOWNERS and notify them via GitHub Issues on workflow/job failure.
+Find CODEOWNERS and triggering workflow/PR merge authors, notifying them via GitHub Issues on workflow/job failure.
 
 ## Permissions
 
@@ -8,8 +8,9 @@ To run this action, the calling workflow job must have the following minimum per
 
 ```yaml
 permissions:
-  contents: read  # Required to discover CODEOWNERS files in the repository
-  issues: write    # Required to create issues and assign owners
+  contents: read       # Required to discover CODEOWNERS files in the repository
+  issues: write        # Required to create issues and assign owners
+  pull-requests: read  # Optional: required to resolve author from pull request metadata on merge commits
 ```
 
 The action reads `CODEOWNERS` from the **job workspace**, not from the action bundle. A full `actions/checkout` is the usual approach; a sparse checkout of `.github/CODEOWNERS` is enough when you only need owner discovery.
@@ -24,6 +25,8 @@ The action reads `CODEOWNERS` from the **job workspace**, not from the action bu
 | `body` | Issue body (pre-filled with workflow run URL if omitted) | | No |
 | `labels` | Comma-separated list of labels to add to the issue | `"bug,failure"` | No |
 | `assign` | Whether to assign owners to the issue | `"true"` | No |
+| `notify_author` | Whether to notify the triggering author/merger on failure | `"true"` | No |
+| `notify_codeowners` | Whether to notify repository CODEOWNERS on failure (`"fallback"`, `"true"`, `"false"`). By default (`"fallback"`), CODEOWNERS are only alerted if no human author/operator was resolved (e.g. scheduled cron runs). Set `"true"` to always include CODEOWNERS, or `"false"` to never include them. | `"fallback"` | No |
 | `dry_run` | If true, logs the issue creation without actually creating it | `"false"` | No |
 
 ## Outputs

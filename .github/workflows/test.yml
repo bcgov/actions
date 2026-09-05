@@ -539,11 +539,37 @@ jobs:
     permissions:
       contents: read
       issues: write
+      pull-requests: read
     steps:
       - uses: actions/checkout@v7
         with:
-          sparse-checkout: .github/CODEOWNERS
+          sparse-checkout: |
+            .github/CODEOWNERS
+            workflow-notifier
           sparse-checkout-cone-mode: false
+
+      - name: Run Unit Tests
+        run: bash workflow-notifier/tests/unit.sh
+
+      - name: Validate action.yml
+        run: |
+          test -f workflow-notifier/action.yml
+          pip install pyyaml -q
+          python3 -c "
+          import yaml
+          with open('workflow-notifier/action.yml') as f:
+              action = yaml.safe_load(f)
+          assert isinstance(action, dict), 'action.yml must be a mapping'
+          for key in ['name', 'description', 'inputs', 'outputs', 'runs']:
+              assert key in action and action[key], f'Missing required action field: {key}'
+          assert action['runs'].get('using') == 'composite', 'runs.using must be composite'
+          assert isinstance(action['runs'].get('steps'), list) and len(action['runs']['steps']) > 0, 'runs.steps must be a list'
+          assert 'notify_author' in action['inputs'], 'inputs must declare notify_author'
+          assert action['inputs']['notify_author'].get('default') == 'true', 'notify_author default must be true'
+          assert 'notify_codeowners' in action['inputs'], 'inputs must declare notify_codeowners'
+          assert action['inputs']['notify_codeowners'].get('default') == 'fallback', 'notify_codeowners default must be fallback'
+          assert 'issue_number' in action['outputs'] and 'assignees' in action['outputs'], 'missing required outputs'
+          "
 
       - name: Dry Run - Simulate Failure Notification
         id: dry_run
@@ -554,15 +580,54 @@ jobs:
           body: "This is a dry run test of the notifier action."
           dry_run: true
 
+      - name: Dry Run - Simulate Failure with Author Disabled
+        id: dry_run_disabled
+        uses: $/workflow-notifier
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          title: "[DRY RUN] Simulating a failure without author"
+          body: "This is a dry run test without author."
+          notify_author: false
+          dry_run: true
+
+      - name: Dry Run - Simulate Failure with CODEOWNERS Disabled
+        id: dry_run_no_codeowners
+        uses: $/workflow-notifier
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          title: "[DRY RUN] Simulating a failure without codeowners"
+          body: "This is a dry run test without codeowners."
+          notify_codeowners: false
+          dry_run: true
+
+      - name: Dry Run - Simulate Failure with CODEOWNERS Always Included
+        id: dry_run_codeowners_always
+        uses: $/workflow-notifier
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          title: "[DRY RUN] Simulating a failure with codeowners always"
+          body: "This is a dry run test with codeowners always."
+          notify_codeowners: "true"
+          dry_run: true
+
       - name: Verify Outputs
         run: |
-          echo "Output: issue_number = ${{ steps.dry_run.outputs.issue_number }}"
-          echo "Output: assignees    = ${{ steps.dry_run.outputs.assignees }}"
-          if [ "${{ steps.dry_run.outputs.issue_number }}" != "0" ]; then
+          echo "Output (default):         issue_number = ${{ steps.dry_run.outputs.issue_number }}"
+          echo "Output (default):         assignees    = ${{ steps.dry_run.outputs.assignees }}"
+          echo "Output (no author):       issue_number = ${{ steps.dry_run_disabled.outputs.issue_number }}"
+          echo "Output (no author):       assignees    = ${{ steps.dry_run_disabled.outputs.assignees }}"
+          echo "Output (no codeowners):   issue_number = ${{ steps.dry_run_no_codeowners.outputs.issue_number }}"
+          echo "Output (no codeowners):   assignees    = ${{ steps.dry_run_no_codeowners.outputs.assignees }}"
+          echo "Output (codeowners true): issue_number = ${{ steps.dry_run_codeowners_always.outputs.issue_number }}"
+          echo "Output (codeowners true): assignees    = ${{ steps.dry_run_codeowners_always.outputs.assignees }}"
+          if [ "${{ steps.dry_run.outputs.issue_number }}" != "0" ] || \
+             [ "${{ steps.dry_run_disabled.outputs.issue_number }}" != "0" ] || \
+             [ "${{ steps.dry_run_no_codeowners.outputs.issue_number }}" != "0" ] || \
+             [ "${{ steps.dry_run_codeowners_always.outputs.issue_number }}" != "0" ]; then
             echo "::error::Dry run should have returned issue_number 0"
             exit 1
           fi
-          if [ -z "${{ steps.dry_run.outputs.assignees }}" ]; then
+          if [ -z "${{ steps.dry_run.outputs.assignees }}" ] || [ -z "${{ steps.dry_run_disabled.outputs.assignees }}" ]; then
             echo "::error::No assignees detected"
             exit 1
           fi

@@ -23,6 +23,12 @@ inputs:
   assign:
     description: "Whether to assign owners to the issue"
     default: "true"
+  notify_author:
+    description: "Whether to notify the triggering author/merger on failure"
+    default: "true"
+  notify_codeowners:
+    description: "Whether to notify repository CODEOWNERS on failure ('fallback' only alerts when no actors found, 'true' always includes, 'false' never includes)"
+    default: "fallback"
   dry_run:
     description: "If true, logs the issue creation without actually creating it"
     default: "false"
@@ -48,6 +54,9 @@ runs:
         INPUT_BODY: "${{ inputs.body }}"
         INPUT_LABELS: "${{ inputs.labels }}"
         INPUT_ASSIGN: "${{ inputs.assign }}"
+        INPUT_NOTIFY_AUTHOR: "${{ inputs.notify_author }}"
+        INPUT_NOTIFY_CODEOWNERS: "${{ inputs.notify_codeowners }}"
+        INPUT_EVENT_NAME: "${{ github.event_name }}"
         INPUT_DRY_RUN: "${{ inputs.dry_run }}"
       run: |
         "${{ github.action_path }}/action.sh"
