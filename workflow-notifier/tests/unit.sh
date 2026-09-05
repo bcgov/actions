@@ -38,6 +38,18 @@ if [[ "$*" == *"commits/"*"/pulls"* ]]; then
   found_jq=false
   for arg in "$@"; do
     if [ "${found_jq}" = true ]; then
+      if [ -n "${MOCK_FAIL_ATTEMPTS:-}" ]; then
+        count=0
+        if [ -f "${TMP_DIR}/gh_attempts" ]; then
+          count=$(cat "${TMP_DIR}/gh_attempts")
+        fi
+        count=$((count + 1))
+        echo "$count" > "${TMP_DIR}/gh_attempts"
+        if [ "$count" -le "$MOCK_FAIL_ATTEMPTS" ]; then
+          echo "||"
+          exit 0
+        fi
+      fi
       if [ -n "${MOCK_PR_USER:-}" ] || [ -n "${MOCK_PR_MERGER:-}" ]; then
         echo "${MOCK_PR_NUM:-123}|${MOCK_PR_MERGER:-}|${MOCK_PR_USER:-}"
       else
@@ -70,6 +82,7 @@ run_action() {
     cd "$workdir"
     env \
       PATH="${MOCK_BIN}:${PATH}" \
+      TMP_DIR="${TMP_DIR}" \
       GITHUB_OUTPUT="$out_file" \
       "$@" \
       bash "$ACTION_SH" 2>&1
@@ -409,6 +422,52 @@ EOF
 
   assert_contains "$out" "--assignee leadauthor,u01,u02,u03,u04,u05,u06,u07,u08,u09" \
     "caps --assignee argument at 10 with author first"
+  assert_contains "$out" "Assignees: leadauthor,u01,u02,u03,u04,u05,u06,u07,u08,u09" \
+    "caps summary assignees output at 10"
+  local out_env
+  out_env=$(cat "${TMP_DIR}/output.env")
+  assert_contains "$out_env" "assignees=leadauthor,u01,u02,u03,u04,u05,u06,u07,u08,u09" \
+    "clamps step output assignees to 10"
+  assert_not_contains "$out_env" "u10" "excludes 11th owner from step output"
+}
+
+# Test 11: PR lookup retries on indexing lag and recovers
+test_pr_api_retry_success() {
+  rm -f "${TMP_DIR}/gh_attempts"
+  local out
+  out=$(run_action "$FIXTURE_DIR" \
+    INPUT_TITLE="Test PR API Retry" \
+    INPUT_NOTIFY_AUTHOR="true" \
+    INPUT_DRY_RUN="true" \
+    INPUT_TOKEN="dummy-token" \
+    INPUT_EVENT_NAME="push" \
+    INPUT_RETRY_DELAY="0" \
+    GITHUB_TRIGGERING_ACTOR="github-actions[bot]" \
+    GITHUB_REPOSITORY="bcgov/actions" \
+    GITHUB_SHA="1234567890abcdef" \
+    MOCK_FAIL_ATTEMPTS="1" \
+    MOCK_PR_USER="pr-creator" \
+    MOCK_PR_MERGER="pr-merger")
+
+  assert_contains "$out" "Author:    @pr-merger" "retries and resolves merger from PR lookup"
+  assert_contains "$out" "Author:    @pr-creator" "retries and resolves creator from PR lookup"
+  assert_contains "$out" "Merged by @pr-merger" "mentions PR merger in body after retry"
+}
+
+# Test 12: Event pull_request uses neutral Triggered by wording instead of Pushed by / Merged by
+test_pull_request_event() {
+  local out
+  out=$(run_action "$FIXTURE_DIR" \
+    INPUT_TITLE="Test Pull Request Event" \
+    INPUT_EVENT_NAME="pull_request" \
+    INPUT_DRY_RUN="true" \
+    GITHUB_TRIGGERING_ACTOR="pr-reviewer")
+
+  assert_contains "$out" "Author:    @pr-reviewer" "identifies PR triggering actor"
+  assert_contains "$out" "Assignees: pr-reviewer" "assigns PR triggering actor"
+  assert_contains "$out" "Triggered by @pr-reviewer" "sets neutral Triggered by note on pull_request"
+  assert_not_contains "$out" "Pushed by" "does not label pull_request as pushed by"
+  assert_not_contains "$out" "Merged by" "does not label pull_request as merged by"
 }
 
 test_notify_author_default
@@ -428,6 +487,8 @@ test_notify_all_disabled
 test_workflow_dispatch_event
 test_schedule_event
 test_ten_assignee_limit
+test_pr_api_retry_success
+test_pull_request_event
 
 echo ""
 echo "Unit tests finished: ${passed} passed, ${failed} failed."
