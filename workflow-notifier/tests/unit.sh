@@ -31,20 +31,17 @@ if [[ "$*" == *"commits/"*"/pulls"* ]]; then
     if [ -n "${MOCK_PR_USER:-}" ]; then
       user_val="\"${MOCK_PR_USER}\""
     fi
-    json="[{\"user\":{\"login\":${user_val}},\"merged_by\":{\"login\":${merger_val}}}]"
+    pr_num="${MOCK_PR_NUM:-123}"
+    json="[{\"number\":${pr_num},\"user\":{\"login\":${user_val}},\"merged_by\":{\"login\":${merger_val}}}]"
   fi
 
   found_jq=false
   for arg in "$@"; do
     if [ "${found_jq}" = true ]; then
-      if command -v jq >/dev/null 2>&1; then
-        echo "$json" | jq -r "$arg"
+      if [ -n "${MOCK_PR_USER:-}" ] || [ -n "${MOCK_PR_MERGER:-}" ]; then
+        echo "${MOCK_PR_NUM:-123}|${MOCK_PR_MERGER:-}|${MOCK_PR_USER:-}"
       else
-        if [ -n "${MOCK_PR_MERGER:-}" ] && [[ "${MOCK_PR_MERGER}" != *"[bot]"* ]]; then
-          echo "${MOCK_PR_MERGER}"
-        elif [ -n "${MOCK_PR_USER:-}" ] && [[ "${MOCK_PR_USER}" != *"[bot]"* ]]; then
-          echo "${MOCK_PR_USER}"
-        fi
+        echo "||"
       fi
       exit 0
     fi
@@ -234,11 +231,12 @@ test_pr_api_fallback() {
     MOCK_PR_MERGER="pr-merger")
 
   assert_contains "$out" "Author:    @pr-merger" "resolves merger from PR lookup"
-  assert_contains "$out" "Assignees: pr-merger,alice,bob" "includes PR merger in assignees"
-  assert_contains "$out" "Triggered by @pr-merger" "mentions PR merger in body"
+  assert_contains "$out" "Author:    @pr-creator" "resolves creator from PR lookup"
+  assert_contains "$out" "Assignees: pr-creator,pr-merger,alice,bob" "includes PR merger and creator in assignees"
+  assert_contains "$out" "Triggered by @pr-merger (PR #123 by @pr-creator)" "mentions PR merger and creator in body"
 }
 
-# Test 6b: PR merger takes priority over workflow rerunner
+# Test 6b: PR merger and author included on rerun
 test_pr_merger_priority_over_rerunner() {
   local out
   out=$(run_action "$FIXTURE_DIR" \
@@ -253,8 +251,9 @@ test_pr_merger_priority_over_rerunner() {
     MOCK_PR_USER="pr-author" \
     MOCK_PR_MERGER="original-merger")
 
-  assert_contains "$out" "Author:    @original-merger" "prioritizes original PR merger over workflow rerunner"
-  assert_contains "$out" "Assignees: original-merger,alice,bob" "assigns original PR merger"
+  assert_contains "$out" "Author:    @original-merger" "prioritizes original PR merger"
+  assert_contains "$out" "Author:    @pr-author" "includes PR author"
+  assert_contains "$out" "Assignees: pr-author,original-merger,alice,bob" "assigns both PR author and original merger"
 }
 
 # Test 6c: Bot merger falls back to human PR author
@@ -263,10 +262,9 @@ test_pr_bot_merger_falls_back_to_pr_author() {
   out=$(run_action "$FIXTURE_DIR" \
     INPUT_TITLE="Test Bot Merger Fallback" \
     INPUT_NOTIFY_AUTHOR="true" \
-    INPUT_DEBUG="true" \
     INPUT_DRY_RUN="true" \
     INPUT_TOKEN="dummy-token" \
-    GITHUB_TRIGGERING_ACTOR="workflow-rerunner" \
+    GITHUB_TRIGGERING_ACTOR="dependabot[bot]" \
     GITHUB_REPOSITORY="bcgov/actions" \
     GITHUB_SHA="1234567890abcdef" \
     MOCK_PR_USER="human-author" \
@@ -291,6 +289,38 @@ test_no_codeowners() {
 
   assert_contains "$out" "Author:    @solouser" "identifies solouser"
   assert_contains "$out" "Assignees: solouser" "assignees contains only solouser when no CODEOWNERS"
+}
+
+# Test 7b: notify_codeowners="false" excludes CODEOWNERS while keeping author
+test_notify_codeowners_disabled() {
+  local out
+  out=$(run_action "$FIXTURE_DIR" \
+    INPUT_TITLE="Test CODEOWNERS Disabled" \
+    INPUT_NOTIFY_CODEOWNERS="false" \
+    INPUT_NOTIFY_AUTHOR="true" \
+    INPUT_DRY_RUN="true" \
+    GITHUB_TRIGGERING_ACTOR="charlie")
+
+  assert_contains "$out" "Author:    @charlie" "identifies charlie as author"
+  assert_contains "$out" "Assignees: charlie" "assignees contains only author when CODEOWNERS disabled"
+  assert_not_contains "$out" "alice" "excludes CODEOWNERS handle alice"
+  assert_not_contains "$out" "bob" "excludes CODEOWNERS handle bob"
+}
+
+# Test 7c: notify_codeowners="false" and notify_author="false" yields empty assignees
+test_notify_all_disabled() {
+  local out
+  out=$(run_action "$FIXTURE_DIR" \
+    INPUT_TITLE="Test All Notifications Disabled" \
+    INPUT_NOTIFY_CODEOWNERS="false" \
+    INPUT_NOTIFY_AUTHOR="false" \
+    INPUT_DRY_RUN="true" \
+    GITHUB_TRIGGERING_ACTOR="charlie")
+
+  assert_not_contains "$out" "Author:    @" "no author in summary"
+  assert_contains "$out" "Assignees: " "assignees is empty"
+  assert_not_contains "$out" "charlie" "charlie not assigned"
+  assert_not_contains "$out" "alice" "alice not assigned"
 }
 
 # Test 8: GitHub 10-assignee limit handling
@@ -323,6 +353,8 @@ test_pr_api_fallback
 test_pr_merger_priority_over_rerunner
 test_pr_bot_merger_falls_back_to_pr_author
 test_no_codeowners
+test_notify_codeowners_disabled
+test_notify_all_disabled
 test_ten_assignee_limit
 
 echo ""

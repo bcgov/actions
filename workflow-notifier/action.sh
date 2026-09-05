@@ -15,13 +15,17 @@ function log_debug() {
 
 # 1. Discover CODEOWNERS (root, .github/, docs/)
 CODEOWNERS_PATH=""
-for path in "CODEOWNERS" ".github/CODEOWNERS" "docs/CODEOWNERS" ".github/codeowners"; do
-  if [ -f "$path" ]; then
-    CODEOWNERS_PATH="$path"
-    log_debug "Found CODEOWNERS at $path"
-    break
-  fi
-done
+if [ "${INPUT_NOTIFY_CODEOWNERS:-true}" == "true" ]; then
+  for path in "CODEOWNERS" ".github/CODEOWNERS" "docs/CODEOWNERS" ".github/codeowners"; do
+    if [ -f "$path" ]; then
+      CODEOWNERS_PATH="$path"
+      log_debug "Found CODEOWNERS at $path"
+      break
+    fi
+  done
+else
+  log_debug "CODEOWNERS notification disabled (notify_codeowners: false)"
+fi
 
 # 2. Extract Owners (Exclude teams)
 ASSIGNEES=""
@@ -31,51 +35,80 @@ if [ -n "$CODEOWNERS_PATH" ]; then
 fi
 
 # 3. Discover Triggering Author / Merger
-TRIGGERING_AUTHOR=""
+AUTHORS_LIST=()
+TRIGGER_NOTE=""
+
 if [ "${INPUT_NOTIFY_AUTHOR:-true}" == "true" ]; then
-  # For commits associated with a PR, prioritize PR merger or author (filtering bots)
+  PR_NUM=""
+  PR_AUTHOR=""
+  MERGER="${GITHUB_TRIGGERING_ACTOR:-${GITHUB_ACTOR:-}}"
+  if [[ "$MERGER" == *"[bot]"* ]] || [ "$MERGER" == "null" ]; then
+    MERGER=""
+  fi
+  MERGER="${MERGER#@}"
+
+  # For commits associated with a PR, resolve PR number, author, and merger
   if [ -n "${GITHUB_REPOSITORY:-}" ] && [ -n "${GITHUB_SHA:-}" ] && [ -n "${INPUT_TOKEN:-}" ]; then
-    log_debug "Attempting to resolve author from PR associated with ${GITHUB_SHA}..."
-    PR_USER=$(GH_TOKEN="${INPUT_TOKEN}" gh api "/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" --jq '.[0] | [.merged_by.login, .user.login] | map(select(type == "string" and (contains("[bot]") | not))) | .[0] // empty' 2>/dev/null || true)
-    if [ -n "$PR_USER" ] && [ "$PR_USER" != "null" ]; then
-      TRIGGERING_AUTHOR="$PR_USER"
+    log_debug "Attempting to resolve PR metadata for ${GITHUB_SHA}..."
+    PR_INFO=$(GH_TOKEN="${INPUT_TOKEN}" gh api "/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" --jq '.[0] | "\(.number // "")|\(.merged_by.login // "")|\(.user.login // "")"' 2>/dev/null || true)
+    if [ -n "$PR_INFO" ] && [ "$PR_INFO" != "||" ]; then
+      IFS='|' read -r PR_NUM RAW_MERGER PR_AUTHOR <<< "$PR_INFO" || true
+      if [ -n "$RAW_MERGER" ] && [[ "$RAW_MERGER" != *"[bot]"* ]]; then
+        MERGER="$RAW_MERGER"
+      fi
     fi
   fi
 
-  # Fallback to workflow actor when no PR-associated author was found
-  if [ -z "$TRIGGERING_AUTHOR" ]; then
-    TRIGGERING_AUTHOR="${GITHUB_TRIGGERING_ACTOR:-${GITHUB_ACTOR:-}}"
+  # Filter out bot PR author
+  if [[ "$PR_AUTHOR" == *"[bot]"* ]] || [ "$PR_AUTHOR" == "null" ]; then
+    PR_AUTHOR=""
+  fi
+  PR_AUTHOR="${PR_AUTHOR#@}"
+
+  lower_m=$(echo "$MERGER" | tr '[:upper:]' '[:lower:]')
+  lower_a=$(echo "$PR_AUTHOR" | tr '[:upper:]' '[:lower:]')
+
+  if [ -n "$MERGER" ]; then
+    AUTHORS_LIST+=("$MERGER")
+  fi
+  if [ -n "$PR_AUTHOR" ] && [ "$lower_a" != "$lower_m" ]; then
+    AUTHORS_LIST+=("$PR_AUTHOR")
   fi
 
-  # Filter out bot handles
-  if [[ "$TRIGGERING_AUTHOR" == *"[bot]"* ]] || [ "$TRIGGERING_AUTHOR" == "null" ]; then
-    TRIGGERING_AUTHOR=""
+  # Build trigger note for issue body
+  if [ -n "$MERGER" ] && [ -n "$PR_AUTHOR" ] && [ "$lower_a" != "$lower_m" ]; then
+    if [ -n "$PR_NUM" ]; then
+      TRIGGER_NOTE="Triggered by @${MERGER} (PR #${PR_NUM} by @${PR_AUTHOR})"
+    else
+      TRIGGER_NOTE="Triggered by @${MERGER} (authored by @${PR_AUTHOR})"
+    fi
+  elif [ -n "$MERGER" ]; then
+    TRIGGER_NOTE="Triggered by @${MERGER}"
+  elif [ -n "$PR_AUTHOR" ]; then
+    TRIGGER_NOTE="Triggered by @${PR_AUTHOR}"
   fi
 
-  # Strip leading @ if present
-  TRIGGERING_AUTHOR="${TRIGGERING_AUTHOR#@}"
-
-  if [ -n "$TRIGGERING_AUTHOR" ]; then
-    log_debug "Triggering author resolved: ${TRIGGERING_AUTHOR}"
+  # Prepend authors to ASSIGNEES (deduplicating case-insensitively)
+  for author in "${AUTHORS_LIST[@]}"; do
+    log_debug "Adding author to assignees: ${author}"
     if [ -n "$ASSIGNEES" ]; then
-      REMAINING_ASSIGNEES=$(echo "$ASSIGNEES" | tr ',' '\n' | grep -i -F -v -x "$TRIGGERING_AUTHOR" | tr '\n' ',' | sed 's/,$//' || true)
+      REMAINING_ASSIGNEES=$(echo "$ASSIGNEES" | tr ',' '\n' | grep -i -F -v -x "$author" | tr '\n' ',' | sed 's/,$//' || true)
       if [ -n "$REMAINING_ASSIGNEES" ]; then
-        ASSIGNEES="${TRIGGERING_AUTHOR},${REMAINING_ASSIGNEES}"
+        ASSIGNEES="${author},${REMAINING_ASSIGNEES}"
       else
-        ASSIGNEES="${TRIGGERING_AUTHOR}"
+        ASSIGNEES="${author}"
       fi
     else
-      ASSIGNEES="${TRIGGERING_AUTHOR}"
+      ASSIGNEES="${author}"
     fi
-  fi
+  done
 fi
 
 # 4. Build the Issue Body
 FINAL_BODY="${INPUT_BODY:-"Workflow failure detected at $(date)."}"
 RUN_URL="${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-local/repo}/actions/runs/${GITHUB_RUN_ID:-0}"
 
-if [ -n "$TRIGGERING_AUTHOR" ]; then
-  TRIGGER_NOTE="Triggered by @${TRIGGERING_AUTHOR}"
+if [ -n "$TRIGGER_NOTE" ]; then
   printf -v FINAL_BODY "%s\n\n%s\n\n[View Workflow Run](%s)" "$FINAL_BODY" "$TRIGGER_NOTE" "$RUN_URL"
 else
   printf -v FINAL_BODY "%s\n\n[View Workflow Run](%s)" "$FINAL_BODY" "$RUN_URL"
@@ -129,9 +162,9 @@ fi
 echo "Summary ---"
 printf "\tIssue:     #%s\n" "${ISSUE_NUM}"
 printf "\tURL:       %s\n" "${ISSUE_URL}"
-if [ -n "${TRIGGERING_AUTHOR}" ]; then
-  printf "\tAuthor:    @%s\n" "${TRIGGERING_AUTHOR}"
-fi
+for author in "${AUTHORS_LIST[@]}"; do
+  printf "\tAuthor:    @%s\n" "${author}"
+done
 printf "\tAssignees: %s\n" "${ASSIGNEES}"
 
 # Write outputs (useful even in dry runs)

@@ -26,6 +26,9 @@ inputs:
   notify_author:
     description: "Whether to notify the triggering author/merger on failure"
     default: "true"
+  notify_codeowners:
+    description: "Whether to notify repository CODEOWNERS on failure"
+    default: "true"
   dry_run:
     description: "If true, logs the issue creation without actually creating it"
     default: "false"
@@ -52,6 +55,7 @@ runs:
         INPUT_LABELS: "${{ inputs.labels }}"
         INPUT_ASSIGN: "${{ inputs.assign }}"
         INPUT_NOTIFY_AUTHOR: "${{ inputs.notify_author }}"
+        INPUT_NOTIFY_CODEOWNERS: "${{ inputs.notify_codeowners }}"
         INPUT_DRY_RUN: "${{ inputs.dry_run }}"
       run: |
         "${{ github.action_path }}/action.sh"
