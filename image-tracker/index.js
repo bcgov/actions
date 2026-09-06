@@ -133,6 +133,32 @@ function gitFetchOrigin(ref, maxDepth) {
   }
 }
 
+function isShallowRepository() {
+  try {
+    return (
+      execFileSync('git', ['rev-parse', '--is-shallow-repository'], {
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'ignore']
+      }).trim() === 'true'
+    );
+  } catch {
+    return false;
+  }
+}
+
+function gitFetchDeepen(ref, maxDepth) {
+  for (const target of [ref, null]) {
+    try {
+      const args = ['fetch', '--no-tags', `--deepen=${maxDepth}`, 'origin'];
+      if (target) args.push(target);
+      args.push('--quiet');
+      execFileSync('git', args, { stdio: 'ignore' });
+      return true;
+    } catch {}
+  }
+  return false;
+}
+
 function workflowPrFetchRef(revision, event, sourceRepository, ghRepository) {
   const pr = event?.pull_request;
   const headSha = pr?.head?.sha || '';
@@ -872,13 +898,26 @@ async function runMain() {
 
   let candidates = [];
   try {
-    const revListOut = execFileSync('git', ['rev-list', '--topo-order', '-n', String(maxDepth), '--', pivotSha], {
+    const revListOut = execFileSync('git', ['rev-list', '--topo-order', '-n', String(maxDepth), pivotSha], {
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'ignore']
     }).trim();
     candidates = revListOut.split(/\r?\n/).filter(Boolean);
   } catch (err) {
     candidates = [pivotSha];
+  }
+
+  if (candidates.length < maxDepth && isShallowRepository()) {
+    logInfo(`Repository is shallow (${candidates.length}/${maxDepth} commits). Deepening history...`);
+    if (gitFetchDeepen(revision || pivotSha, maxDepth)) {
+      try {
+        const revListOut = execFileSync('git', ['rev-list', '--topo-order', '-n', String(maxDepth), pivotSha], {
+          encoding: 'utf8',
+          stdio: ['pipe', 'pipe', 'ignore']
+        }).trim();
+        candidates = revListOut.split(/\r?\n/).filter(Boolean);
+      } catch (err) {}
+    }
   }
 
   for (const sha of candidates) {
@@ -1141,5 +1180,7 @@ module.exports = {
   repositoryFromRemoteUrl,
   emptyTrackerOutputLines,
   writeEmptyGithubOutputs,
+  isShallowRepository,
+  gitFetchDeepen,
   runMain
 };

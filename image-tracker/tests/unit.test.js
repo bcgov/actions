@@ -788,5 +788,46 @@ test('probeTag and matchesCandidate reject mutable PR tag when revision is unrel
   assert.strictEqual(validHit.sha, sha);
 });
 
+test('isShallowRepository and gitFetchDeepen auto-deepen shallow clones (Issue #41)', () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const { isShallowRepository, gitFetchDeepen } = require('../index.js');
+
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'base-repo-'));
+  const shallowDir = fs.mkdtempSync(path.join(os.tmpdir(), 'shallow-repo-'));
+  const cwd = process.cwd();
+
+  try {
+    execFileSync('git', ['init', '-b', 'main'], { cwd: baseDir, stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: baseDir, stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: baseDir, stdio: 'ignore' });
+    for (let i = 1; i <= 3; i++) {
+      fs.writeFileSync(path.join(baseDir, `file${i}.txt`), `commit ${i}\n`);
+      execFileSync('git', ['add', '.'], { cwd: baseDir, stdio: 'ignore' });
+      execFileSync('git', ['commit', '-m', `commit ${i}`], { cwd: baseDir, stdio: 'ignore' });
+    }
+
+    execFileSync('git', ['clone', '--depth', '1', `file://${baseDir}`, shallowDir], { stdio: 'ignore' });
+
+    process.chdir(shallowDir);
+    assert.strictEqual(isShallowRepository(), true, 'shallow clone is identified as shallow');
+
+    const initialCommits = execFileSync('git', ['rev-list', '--count', 'HEAD'], { encoding: 'utf8' }).trim();
+    assert.strictEqual(initialCommits, '1', 'initial shallow count is 1');
+
+    const deepened = gitFetchDeepen('HEAD', 3);
+    assert.strictEqual(deepened, true, 'gitFetchDeepen returns true');
+
+    const deepenedCommits = execFileSync('git', ['rev-list', '--count', 'HEAD'], { encoding: 'utf8' }).trim();
+    assert.strictEqual(deepenedCommits, '3', 'deepened count includes all 3 commits');
+  } finally {
+    process.chdir(cwd);
+    fs.rmSync(baseDir, { recursive: true, force: true });
+    fs.rmSync(shallowDir, { recursive: true, force: true });
+  }
+});
+
+
 
 
