@@ -410,6 +410,44 @@ function matchesCandidate(revision, tag = '', candidates = [], prMap = {}, prNum
   return false;
 }
 
+// ---- Candidate Tag Generation (Issue #143) --------------------------------
+function candidateTagsForSha({ sha, prHead, prNum }) {
+  const tags = [];
+  const add = (t) => {
+    if (t && typeof t === 'string' && !tags.includes(t)) {
+      tags.push(t);
+    }
+  };
+
+  // 1. Short SHA (standard builder-ghcr / docker/metadata-action default)
+  if (sha && sha.length >= 7) {
+    add(`sha-${sha.slice(0, 7)}`);
+  }
+
+  // 2. Full commit SHA (immutable SHA tag pattern per Issue #143)
+  if (sha) {
+    add(sha);
+    add(`sha-${sha}`);
+  }
+
+  // 3. PR head commit tags (if different from candidate)
+  if (prHead && prHead !== sha) {
+    if (prHead.length >= 7) {
+      add(`sha-${prHead.slice(0, 7)}`);
+    }
+    add(prHead);
+    add(`sha-${prHead}`);
+  }
+
+  // 4. PR number tags (if mapped)
+  if (prNum !== undefined && prNum !== null && prNum !== '') {
+    add(`pr-${prNum}`);
+    add(String(prNum));
+  }
+
+  return tags;
+}
+
 // ---- Tag Probing -----------------------------------------------------------
 async function probeTag(
   imagePath,
@@ -973,31 +1011,33 @@ async function runMain() {
     }
 
     let res = null;
-    // 1. Forensic Trace
+    // 1. Direct-hit Candidate Probing (Issue #143)
     for (const candidate of candidates) {
       const prHead = prMap[candidate];
       const prNum = prNumMap[candidate];
+      const tagsToProbe = candidateTagsForSha({ sha: candidate, prHead, prNum });
 
-      if (prNum) {
-        res = await probeTag(path, `pr-${prNum}`, bearer, registry, candidates, prMap, prNumMap, prTitleMap, digestPrMap, debug);
-        if (!res) {
-          res = await probeTag(path, String(prNum), bearer, registry, candidates, prMap, prNumMap, prTitleMap, digestPrMap, debug);
-        }
-      }
-
-      if (!res && prHead) {
-        res = await probeTag(path, `sha-${prHead.slice(0, 7)}`, bearer, registry, candidates, prMap, prNumMap, prTitleMap, digestPrMap, debug);
-      }
-
-      if (!res) {
-        res = await probeTag(path, `sha-${candidate.slice(0, 7)}`, bearer, registry, candidates, prMap, prNumMap, prTitleMap, debug);
+      for (const tag of tagsToProbe) {
+        res = await probeTag(
+          path,
+          tag,
+          bearer,
+          registry,
+          candidates,
+          prMap,
+          prNumMap,
+          prTitleMap,
+          digestPrMap,
+          debug
+        );
+        if (res) break;
       }
 
       if (res) break;
     }
 
     if (!res) {
-      logInfo('Forensic trace missed; falling back to iterative scan...');
+      logInfo('Direct candidate probes missed; falling back to iterative scan...');
       const iterRes = await resolveDigestIterative({
         imagePath: path,
         bearer,
@@ -1112,6 +1152,7 @@ module.exports = {
   parseAuthHeader,
   registryToken,
   matchesCandidate,
+  candidateTagsForSha,
   probeTag,
   resolveDigestIterative,
   renderStepSummary,

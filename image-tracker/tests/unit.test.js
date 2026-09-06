@@ -5,6 +5,7 @@ const {
   mapPackages,
   parseAuthHeader,
   matchesCandidate,
+  candidateTagsForSha,
   renderStepSummary,
   extractPrNumber
 } = require('../index.js');
@@ -701,3 +702,137 @@ test('runMain same-repo unresolvable revision still exits 1', async () => {
     restoreEnv(saved);
   }
 });
+
+test('candidateTagsForSha - priority order and full-SHA inclusion (Issue #143)', () => {
+  const sha = 'e261c9651c7df0e104e79124443fa48a0446411f';
+  const tags = candidateTagsForSha({ sha });
+  assert.deepStrictEqual(tags, [
+    'sha-e261c96',
+    'e261c9651c7df0e104e79124443fa48a0446411f',
+    'sha-e261c9651c7df0e104e79124443fa48a0446411f'
+  ]);
+});
+
+test('candidateTagsForSha - with prHead and prNum', () => {
+  const sha = 'e261c9651c7df0e104e79124443fa48a0446411f';
+  const prHead = 'f0c62c21349fd0b13cf10072b22bb8faaaae47bb';
+  const tags = candidateTagsForSha({ sha, prHead, prNum: 143 });
+  assert.deepStrictEqual(tags, [
+    'sha-e261c96',
+    'e261c9651c7df0e104e79124443fa48a0446411f',
+    'sha-e261c9651c7df0e104e79124443fa48a0446411f',
+    'sha-f0c62c2',
+    'f0c62c21349fd0b13cf10072b22bb8faaaae47bb',
+    'sha-f0c62c21349fd0b13cf10072b22bb8faaaae47bb',
+    'pr-143',
+    '143'
+  ]);
+});
+
+test('candidateTagsForSha - deduplicates identical sha and prHead', () => {
+  const sha = 'e261c9651c7df0e104e79124443fa48a0446411f';
+  const tags = candidateTagsForSha({ sha, prHead: sha });
+  assert.deepStrictEqual(tags, [
+    'sha-e261c96',
+    'e261c9651c7df0e104e79124443fa48a0446411f',
+    'sha-e261c9651c7df0e104e79124443fa48a0446411f'
+  ]);
+});
+
+test('probeTag returns hit when revision annotation matches candidate', async () => {
+  const { probeTag } = require('../index.js');
+  const origFetch = global.fetch;
+  const sha = 'e261c9651c7df0e104e79124443fa48a0446411f';
+  const tag = `sha-${sha.slice(0, 7)}`;
+  const expectedDigest = 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+
+  global.fetch = async (url) => {
+    if (url.includes(`/manifests/${tag}`)) {
+      return {
+        ok: true,
+        headers: {
+          get: (h) => (h.toLowerCase() === 'docker-content-digest' ? expectedDigest : null)
+        },
+        json: async () => ({
+          mediaType: 'application/vnd.oci.image.manifest.v1+json',
+          digest: expectedDigest,
+          annotations: {
+            'org.opencontainers.image.revision': sha,
+            'org.opencontainers.image.created': '2026-09-05T00:00:00Z'
+          }
+        })
+      };
+    }
+    return { ok: false };
+  };
+
+  try {
+    const res = await probeTag(
+      'bcgov/quickstart-openshift/frontend',
+      tag,
+      'fake-bearer',
+      'ghcr.io',
+      [sha],
+      {},
+      {},
+      {},
+      {},
+      false
+    );
+    assert.ok(res, 'probeTag should return hit');
+    assert.strictEqual(res.sha, sha);
+    assert.strictEqual(res.digest, expectedDigest);
+  } finally {
+    global.fetch = origFetch;
+  }
+});
+
+test('probeTag returns hit for full SHA tag (Issue #143 immutable pattern)', async () => {
+  const { probeTag } = require('../index.js');
+  const origFetch = global.fetch;
+  const sha = 'e261c9651c7df0e104e79124443fa48a0446411f';
+  const tag = sha;
+  const expectedDigest = 'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc';
+
+  global.fetch = async (url) => {
+    if (url.includes(`/manifests/${tag}`)) {
+      return {
+        ok: true,
+        headers: {
+          get: (h) => (h.toLowerCase() === 'docker-content-digest' ? expectedDigest : null)
+        },
+        json: async () => ({
+          mediaType: 'application/vnd.oci.image.manifest.v1+json',
+          digest: expectedDigest,
+          annotations: {
+            'org.opencontainers.image.revision': sha,
+            'org.opencontainers.image.created': '2026-09-05T00:00:00Z'
+          }
+        })
+      };
+    }
+    return { ok: false };
+  };
+
+  try {
+    const res = await probeTag(
+      'bcgov/quickstart-openshift/frontend',
+      tag,
+      'fake-bearer',
+      'ghcr.io',
+      [sha],
+      {},
+      {},
+      {},
+      {},
+      false
+    );
+    assert.ok(res, 'probeTag should return hit on full SHA tag');
+    assert.strictEqual(res.sha, sha);
+    assert.strictEqual(res.digest, expectedDigest);
+  } finally {
+    global.fetch = origFetch;
+  }
+});
+
+
