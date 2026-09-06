@@ -401,7 +401,7 @@ function matchesCandidate(revision, tag = '', candidates = [], prMap = {}, prNum
       if (revision && revision === `pr-${pn}`) {
         return true;
       }
-      if (tag && (tag === `pr-${pn}` || tag === String(pn))) {
+      if (!revision && tag && (tag === `pr-${pn}` || tag === String(pn))) {
         return true;
       }
     }
@@ -509,20 +509,21 @@ async function probeTag(
         const ph = prMap[cand];
         const pn = prNumMap[cand];
 
-        let patternMatch = false;
-        if (pn !== undefined && pn !== null && pn !== '' && (tag === `pr-${pn}` || tag === String(pn))) {
-          patternMatch = true;
-        } else if (tag === `sha-${cand.slice(0, 7)}` || (ph && tag === `sha-${ph.slice(0, 7)}`)) {
-          patternMatch = true;
-        }
+        const isPrTag =
+          pn !== undefined && pn !== null && pn !== '' && (tag === `pr-${pn}` || tag === String(pn));
+        const shaMatch =
+          tag === `sha-${cand.slice(0, 7)}` ||
+          tag === cand ||
+          tag === `sha-${cand}` ||
+          (ph && (tag === `sha-${ph.slice(0, 7)}` || tag === ph || tag === `sha-${ph}`));
 
-        const revMatch =
-          (revision && cand.startsWith(revision)) ||
-          (revision && revision.startsWith(cand)) ||
+        const revMatch = Boolean(
+          (revision && (cand.startsWith(revision) || revision.startsWith(cand))) ||
           (ph && revision && (ph.startsWith(revision) || revision.startsWith(ph))) ||
-          (pn && revision === `pr-${pn}`);
+          (pn && revision === `pr-${pn}`)
+        );
 
-        if (revMatch || patternMatch) {
+        if (isPrTag ? revMatch : (revision ? revMatch : shaMatch)) {
           let title = prTitleMap[cand] || '';
           if (!title) {
             try {
@@ -973,31 +974,44 @@ async function runMain() {
     }
 
     let res = null;
-    // 1. Forensic Trace
+    // 1. Direct candidate probes (Issue #143)
     for (const candidate of candidates) {
       const prHead = prMap[candidate];
       const prNum = prNumMap[candidate];
+      const tags = new Set(
+        [
+          `sha-${candidate.slice(0, 7)}`,
+          candidate,
+          `sha-${candidate}`,
+          prHead && `sha-${prHead.slice(0, 7)}`,
+          prHead,
+          prHead && `sha-${prHead}`,
+          prNum && `pr-${prNum}`,
+          prNum && String(prNum)
+        ].filter(Boolean)
+      );
 
-      if (prNum) {
-        res = await probeTag(path, `pr-${prNum}`, bearer, registry, candidates, prMap, prNumMap, prTitleMap, digestPrMap, debug);
-        if (!res) {
-          res = await probeTag(path, String(prNum), bearer, registry, candidates, prMap, prNumMap, prTitleMap, digestPrMap, debug);
-        }
-      }
-
-      if (!res && prHead) {
-        res = await probeTag(path, `sha-${prHead.slice(0, 7)}`, bearer, registry, candidates, prMap, prNumMap, prTitleMap, digestPrMap, debug);
-      }
-
-      if (!res) {
-        res = await probeTag(path, `sha-${candidate.slice(0, 7)}`, bearer, registry, candidates, prMap, prNumMap, prTitleMap, debug);
+      for (const tag of tags) {
+        res = await probeTag(
+          path,
+          tag,
+          bearer,
+          registry,
+          candidates,
+          prMap,
+          prNumMap,
+          prTitleMap,
+          digestPrMap,
+          debug
+        );
+        if (res) break;
       }
 
       if (res) break;
     }
 
     if (!res) {
-      logInfo('Forensic trace missed; falling back to iterative scan...');
+      logInfo('Direct candidate probes missed; falling back to iterative scan...');
       const iterRes = await resolveDigestIterative({
         imagePath: path,
         bearer,

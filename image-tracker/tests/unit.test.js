@@ -701,3 +701,92 @@ test('runMain same-repo unresolvable revision still exits 1', async () => {
     restoreEnv(saved);
   }
 });
+
+test('probeTag returns hit when revision annotation matches candidate tag (short and full SHA)', async () => {
+  const { probeTag } = require('../index.js');
+  const origFetch = global.fetch;
+  const sha = 'e261c9651c7df0e104e79124443fa48a0446411f';
+
+  for (const tag of [`sha-${sha.slice(0, 7)}`, sha]) {
+    const expectedDigest = `sha256:${tag.padEnd(64, '0')}`;
+    global.fetch = async (url) => {
+      if (url.includes(`/manifests/${tag}`)) {
+        return {
+          ok: true,
+          headers: {
+            get: (h) => (h.toLowerCase() === 'docker-content-digest' ? expectedDigest : null)
+          },
+          json: async () => ({
+            mediaType: 'application/vnd.oci.image.manifest.v1+json',
+            digest: expectedDigest,
+            annotations: {
+              'org.opencontainers.image.revision': sha,
+              'org.opencontainers.image.created': '2026-09-05T00:00:00Z'
+            }
+          })
+        };
+      }
+      return { ok: false };
+    };
+
+    try {
+      const res = await probeTag(
+        'bcgov/quickstart-openshift/frontend',
+        tag,
+        'fake-bearer',
+        'ghcr.io',
+        [sha],
+        {},
+        {},
+        {},
+        {},
+        false
+      );
+      assert.ok(res, `probeTag should return hit for ${tag}`);
+      assert.strictEqual(res.sha, sha);
+      assert.strictEqual(res.digest, expectedDigest);
+    } finally {
+      global.fetch = origFetch;
+    }
+  }
+});
+
+test('probeTag and matchesCandidate reject mutable PR tag when revision is unrelated or absent', async () => {
+  const { probeTag, matchesCandidate } = require('../index.js');
+  const origFetch = global.fetch;
+  const sha = 'e261c9651c7df0e104e79124443fa48a0446411f';
+  const prNumMap = { [sha]: '99' };
+
+  // matchesCandidate rejects PR tag if revision is given but does not match
+  assert.strictEqual(
+    matchesCandidate('deadbeefdeadbeefdeadbeefdeadbeefdeadbeef', 'pr-99', [sha], {}, prNumMap),
+    false,
+    'matchesCandidate rejects PR tag when revision is unrelated'
+  );
+
+  const mockProbeWithRevision = async (revision) => {
+    global.fetch = async () => ({
+      ok: true,
+      headers: { get: () => 'sha256:1111111111111111111111111111111111111111111111111111111111111111' },
+      json: async () => ({
+        mediaType: 'application/vnd.oci.image.manifest.v1+json',
+        digest: 'sha256:1111111111111111111111111111111111111111111111111111111111111111',
+        annotations: revision ? { 'org.opencontainers.image.revision': revision } : {}
+      })
+    });
+    try {
+      return await probeTag('bcgov/quickstart/frontend', 'pr-99', 'b', 'ghcr.io', [sha], {}, prNumMap, {}, {}, false);
+    } finally {
+      global.fetch = origFetch;
+    }
+  };
+
+  assert.strictEqual(await mockProbeWithRevision('deadbeef'), null, 'probeTag rejects PR tag with unrelated revision');
+  assert.strictEqual(await mockProbeWithRevision(''), null, 'probeTag rejects PR tag with absent revision');
+  const validHit = await mockProbeWithRevision(sha);
+  assert.ok(validHit, 'probeTag accepts PR tag when revision matches candidate');
+  assert.strictEqual(validHit.sha, sha);
+});
+
+
+
