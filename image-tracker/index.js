@@ -410,44 +410,6 @@ function matchesCandidate(revision, tag = '', candidates = [], prMap = {}, prNum
   return false;
 }
 
-// ---- Candidate Tag Generation (Issue #143) --------------------------------
-function candidateTagsForSha({ sha, prHead, prNum }) {
-  const tags = [];
-  const add = (t) => {
-    if (t && typeof t === 'string' && !tags.includes(t)) {
-      tags.push(t);
-    }
-  };
-
-  // 1. Short SHA (standard builder-ghcr / docker/metadata-action default)
-  if (sha && sha.length >= 7) {
-    add(`sha-${sha.slice(0, 7)}`);
-  }
-
-  // 2. Full commit SHA (immutable SHA tag pattern per Issue #143)
-  if (sha) {
-    add(sha);
-    add(`sha-${sha}`);
-  }
-
-  // 3. PR head commit tags (if different from candidate)
-  if (prHead && prHead !== sha) {
-    if (prHead.length >= 7) {
-      add(`sha-${prHead.slice(0, 7)}`);
-    }
-    add(prHead);
-    add(`sha-${prHead}`);
-  }
-
-  // 4. PR number tags (if mapped)
-  if (prNum !== undefined && prNum !== null && prNum !== '') {
-    add(`pr-${prNum}`);
-    add(String(prNum));
-  }
-
-  return tags;
-}
-
 // ---- Tag Probing -----------------------------------------------------------
 async function probeTag(
   imagePath,
@@ -1011,13 +973,24 @@ async function runMain() {
     }
 
     let res = null;
-    // 1. Direct-hit Candidate Probing (Issue #143)
+    // 1. Direct candidate probes (Issue #143)
     for (const candidate of candidates) {
       const prHead = prMap[candidate];
       const prNum = prNumMap[candidate];
-      const tagsToProbe = candidateTagsForSha({ sha: candidate, prHead, prNum });
+      const tags = new Set(
+        [
+          `sha-${candidate.slice(0, 7)}`,
+          candidate,
+          `sha-${candidate}`,
+          prHead && `sha-${prHead.slice(0, 7)}`,
+          prHead,
+          prHead && `sha-${prHead}`,
+          prNum && `pr-${prNum}`,
+          prNum && String(prNum)
+        ].filter(Boolean)
+      );
 
-      for (const tag of tagsToProbe) {
+      for (const tag of tags) {
         res = await probeTag(
           path,
           tag,
@@ -1152,7 +1125,6 @@ module.exports = {
   parseAuthHeader,
   registryToken,
   matchesCandidate,
-  candidateTagsForSha,
   probeTag,
   resolveDigestIterative,
   renderStepSummary,
