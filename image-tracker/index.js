@@ -909,7 +909,7 @@ async function runMain() {
 
   if (candidates.length < maxDepth && isShallowRepository()) {
     logInfo(`Repository is shallow (${candidates.length}/${maxDepth} commits). Deepening history...`);
-    if (gitFetchDeepen(revision || pivotSha, maxDepth)) {
+    if (gitFetchDeepen(pivotSha, maxDepth)) {
       try {
         const revListOut = execFileSync('git', ['rev-list', '--topo-order', '-n', String(maxDepth), pivotSha], {
           encoding: 'utf8',
