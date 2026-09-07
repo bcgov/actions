@@ -880,6 +880,94 @@ test('gitFetchDeepen deepens history from pivotSha on detached / non-default sha
   }
 });
 
+test('probeTag and matchesCandidate accept PR merge commit revision for PR and head SHA tags', async () => {
+  const { probeTag, matchesCandidate } = require('../index.js');
+  const origFetch = global.fetch;
+
+  const headSha = '637f189b2e0aed0a8d0b4af224f62af1ffd1bd50';
+  const mergeSha = '64a5a332364b27b8998f1af66926cda2cc667ddd';
+  const prNum = '383';
+
+  const candidates = [headSha];
+  const prMap = { [headSha]: headSha };
+  const prNumMap = { [headSha]: prNum };
+  const prMergeMap = { [headSha]: mergeSha };
+
+  // matchesCandidate verifies mergeSha against revision
+  assert.strictEqual(
+    matchesCandidate(mergeSha, 'pr-383', candidates, prMap, prNumMap, prMergeMap),
+    true,
+    'matchesCandidate accepts pr-383 when revision is mergeSha'
+  );
+  assert.strictEqual(
+    matchesCandidate(mergeSha, '383', candidates, prMap, prNumMap, prMergeMap),
+    true,
+    'matchesCandidate accepts 383 when revision is mergeSha'
+  );
+  assert.strictEqual(
+    matchesCandidate(mergeSha, headSha, candidates, prMap, prNumMap, prMergeMap),
+    true,
+    'matchesCandidate accepts headSha tag when revision is mergeSha'
+  );
+  assert.strictEqual(
+    matchesCandidate(mergeSha, `sha-${mergeSha.slice(0, 7)}`, candidates, prMap, prNumMap, prMergeMap),
+    true,
+    'matchesCandidate accepts short merge sha tag when revision is mergeSha'
+  );
+  assert.strictEqual(
+    matchesCandidate('deadbeefdeadbeefdeadbeefdeadbeefdeadbeef', 'pr-383', candidates, prMap, prNumMap, prMergeMap),
+    false,
+    'matchesCandidate rejects unrelated revision even with prMergeMap'
+  );
+
+  // probeTag mock returning mergeSha in revision label
+  const testTags = ['pr-383', '383', headSha, `sha-${mergeSha.slice(0, 7)}`];
+  for (const tag of testTags) {
+    const expectedDigest = `sha256:${tag.padEnd(64, '0')}`;
+    global.fetch = async (url) => {
+      if (url.includes(`/manifests/${tag}`)) {
+        return {
+          ok: true,
+          headers: {
+            get: (h) => (h.toLowerCase() === 'docker-content-digest' ? expectedDigest : null)
+          },
+          json: async () => ({
+            mediaType: 'application/vnd.oci.image.manifest.v1+json',
+            digest: expectedDigest,
+            annotations: {
+              'org.opencontainers.image.revision': mergeSha,
+              'org.opencontainers.image.created': '2026-09-07T10:16:57Z'
+            }
+          })
+        };
+      }
+      return { ok: false };
+    };
+
+    try {
+      const res = await probeTag(
+        'bcgov/nr-hydrometric-rating-curve/frontend',
+        tag,
+        'fake-bearer',
+        'ghcr.io',
+        candidates,
+        prMap,
+        prNumMap,
+        {},
+        {},
+        false,
+        prMergeMap
+      );
+      assert.ok(res, `probeTag should return hit for tag ${tag} when revision is mergeSha`);
+      assert.strictEqual(res.sha, headSha);
+      assert.strictEqual(res.digest, expectedDigest);
+    } finally {
+      global.fetch = origFetch;
+    }
+  }
+});
+
+
 
 
 

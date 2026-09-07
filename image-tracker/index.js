@@ -406,28 +406,55 @@ async function registryToken(repo, registry = 'ghcr.io', token = '') {
 }
 
 // ---- Candidate Matching ----------------------------------------------------
-function matchesCandidate(revision, tag = '', candidates = [], prMap = {}, prNumMap = {}) {
+function matchesCandidate(
+  revision,
+  tag = '',
+  candidates = [],
+  prMap = {},
+  prNumMap = {},
+  prMergeMap = {}
+) {
   if (!revision && !tag) return false;
 
   for (const cand of candidates) {
-    // 1. Direct SHA match
-    if (revision && (cand.startsWith(revision) || revision.startsWith(cand))) {
-      return true;
-    }
-
-    // 2. PR Head match
     const ph = prMap[cand];
-    if (ph && revision && (ph.startsWith(revision) || revision.startsWith(ph))) {
+    const pm = prMergeMap[cand];
+    const pn = prNumMap[cand];
+
+    // 1. Direct SHA, PR head, or PR merge commit match on revision
+    const revMatchesAny = Boolean(
+      (revision && (cand.startsWith(revision) || revision.startsWith(cand))) ||
+      (ph && revision && (ph.startsWith(revision) || revision.startsWith(ph))) ||
+      (pm && revision && (pm.startsWith(revision) || revision.startsWith(pm))) ||
+      (pn && revision === `pr-${pn}`)
+    );
+
+    if (revMatchesAny) {
       return true;
     }
 
-    // 3. PR Number match
-    const pn = prNumMap[cand];
-    if (pn !== undefined && pn !== null && pn !== '') {
-      if (revision && revision === `pr-${pn}`) {
+    // 2. Direct full 40-char SHA tag match
+    const fullShaTag =
+      (cand.length >= 40 && (tag.toLowerCase() === cand.toLowerCase() || tag.toLowerCase() === `sha-${cand.toLowerCase()}`)) ||
+      (ph && ph.length >= 40 && (tag.toLowerCase() === ph.toLowerCase() || tag.toLowerCase() === `sha-${ph.toLowerCase()}`)) ||
+      (pm && pm.length >= 40 && (tag.toLowerCase() === pm.toLowerCase() || tag.toLowerCase() === `sha-${pm.toLowerCase()}`));
+
+    if (fullShaTag && (!revision || revMatchesAny)) {
+      return true;
+    }
+
+    // 3. If revision is absent, allow tag match against PR number or commit SHA tags
+    if (!revision && tag) {
+      if (pn !== undefined && pn !== null && pn !== '' && (tag === `pr-${pn}` || tag === String(pn))) {
         return true;
       }
-      if (!revision && tag && (tag === `pr-${pn}` || tag === String(pn))) {
+      const shaTagMatch =
+        tag === `sha-${cand.slice(0, 7)}` ||
+        tag === cand ||
+        tag === `sha-${cand}` ||
+        (ph && (tag === `sha-${ph.slice(0, 7)}` || tag === ph || tag === `sha-${ph}`)) ||
+        (pm && (tag === `sha-${pm.slice(0, 7)}` || tag === pm || tag === `sha-${pm}`));
+      if (shaTagMatch) {
         return true;
       }
     }
@@ -447,7 +474,8 @@ async function probeTag(
   prNumMap = {},
   prTitleMap = {},
   digestPrMap = {},
-  debug = false
+  debug = false,
+  prMergeMap = {}
 ) {
   const base = `https://${registry}/v2/${imagePath}`;
   const accept =
@@ -530,10 +558,11 @@ async function probeTag(
       digestPrMap[finalDigest] = prMatch[1];
     }
 
-    if (matchesCandidate(revision, tag, candidates, prMap, prNumMap)) {
+    if (matchesCandidate(revision, tag, candidates, prMap, prNumMap, prMergeMap)) {
       for (const cand of candidates) {
         const ph = prMap[cand];
         const pn = prNumMap[cand];
+        const pm = prMergeMap[cand];
 
         const isPrTag =
           pn !== undefined && pn !== null && pn !== '' && (tag === `pr-${pn}` || tag === String(pn));
@@ -541,15 +570,22 @@ async function probeTag(
           tag === `sha-${cand.slice(0, 7)}` ||
           tag === cand ||
           tag === `sha-${cand}` ||
-          (ph && (tag === `sha-${ph.slice(0, 7)}` || tag === ph || tag === `sha-${ph}`));
+          (ph && (tag === `sha-${ph.slice(0, 7)}` || tag === ph || tag === `sha-${ph}`)) ||
+          (pm && (tag === `sha-${pm.slice(0, 7)}` || tag === pm || tag === `sha-${pm}`));
+
+        const fullShaTag =
+          (cand.length >= 40 && (tag.toLowerCase() === cand.toLowerCase() || tag.toLowerCase() === `sha-${cand.toLowerCase()}`)) ||
+          (ph && ph.length >= 40 && (tag.toLowerCase() === ph.toLowerCase() || tag.toLowerCase() === `sha-${ph.toLowerCase()}`)) ||
+          (pm && pm.length >= 40 && (tag.toLowerCase() === pm.toLowerCase() || tag.toLowerCase() === `sha-${pm.toLowerCase()}`));
 
         const revMatch = Boolean(
           (revision && (cand.startsWith(revision) || revision.startsWith(cand))) ||
           (ph && revision && (ph.startsWith(revision) || revision.startsWith(ph))) ||
+          (pm && revision && (pm.startsWith(revision) || revision.startsWith(pm))) ||
           (pn && revision === `pr-${pn}`)
         );
 
-        if (isPrTag ? revMatch : (revision ? revMatch : shaMatch)) {
+        if (isPrTag ? revMatch : (revision ? (revMatch || fullShaTag) : shaMatch)) {
           let title = prTitleMap[cand] || '';
           if (!title) {
             try {
@@ -599,7 +635,8 @@ async function resolveDigestIterative({
   prNumMap = {},
   prTitleMap = {},
   digestPrMap = {},
-  debug = false
+  debug = false,
+  prMergeMap = {}
 }) {
   const owner = repository.split('/')[0];
   const pkg = imagePath.split('/').slice(1).join('/') || imagePath;
@@ -660,7 +697,8 @@ async function resolveDigestIterative({
         prNumMap,
         prTitleMap,
         digestPrMap,
-        debug
+        debug,
+        prMergeMap
       );
       if (res) return { hit: res, code: 0 };
     }
@@ -691,7 +729,8 @@ async function resolveDigestIterative({
           prNumMap,
           prTitleMap,
           digestPrMap,
-          debug
+          debug,
+          prMergeMap
         );
         if (res) return { hit: res, code: 0 };
       }
@@ -863,10 +902,50 @@ async function runMain() {
   const prMap = {};
   const prNumMap = {};
   const prTitleMap = {};
+  const prMergeMap = {};
   const candidateMap = {};
   const images = {};
   const digestPrMap = {};
   const missing = [];
+
+  const eventPr = event?.pull_request;
+  if (eventPr) {
+    const epHead = eventPr.head?.sha || '';
+    const epNum = eventPr.number ? String(eventPr.number) : '';
+    const epTitle = eventPr.title || '';
+    const epMerge =
+      eventPr.merge_commit_sha ||
+      (env.GITHUB_SHA && env.GITHUB_SHA !== epHead ? env.GITHUB_SHA : '');
+    if (epHead) {
+      prMap[epHead] = epHead;
+      if (epNum) prNumMap[epHead] = epNum;
+      if (epTitle) prTitleMap[epHead] = epTitle;
+      if (epMerge) prMergeMap[epHead] = epMerge;
+    }
+    if (epMerge) {
+      if (epHead) prMap[epMerge] = epHead;
+      if (epNum) prNumMap[epMerge] = epNum;
+      if (epTitle) prTitleMap[epMerge] = epTitle;
+      prMergeMap[epMerge] = epMerge;
+    }
+  }
+
+  try {
+    const gitHead = execFileSync('git', ['rev-parse', 'HEAD'], {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore']
+    }).trim();
+    const gitParents = execFileSync('git', ['log', '-1', '--format=%P', 'HEAD'], {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore']
+    })
+      .trim()
+      .split(/\s+/);
+    if (gitParents.length >= 2 && gitParents[1]) {
+      prMergeMap[gitParents[1]] = gitHead;
+      prMap[gitHead] = gitParents[1];
+    }
+  } catch (err) {}
 
   // ---- Git Ancestry Resolution -----------------------------------------------
   const resolved = await resolvePivotSha({
@@ -967,6 +1046,7 @@ async function runMain() {
             if (Array.isArray(prs) && prs.length > 0) {
               const pr = prs[0];
               const headSha = pr.head?.sha;
+              const mergeSha = pr.merge_commit_sha;
               const prNumApi = pr.number;
               const prTitle = pr.title;
 
@@ -974,10 +1054,18 @@ async function runMain() {
                 logDebug(`Mapped ${sha.slice(0, 7)} to PR #${prNumApi} (from API)`, debug);
                 prNumMap[sha] = String(prNumApi);
                 prTitleMap[sha] = prTitle;
+                if (mergeSha) prMergeMap[sha] = mergeSha;
                 if (headSha) {
                   prMap[sha] = headSha;
                   prNumMap[headSha] = String(prNumApi);
                   prTitleMap[headSha] = prTitle;
+                  if (mergeSha) prMergeMap[headSha] = mergeSha;
+                }
+                if (mergeSha) {
+                  if (headSha) prMap[mergeSha] = headSha;
+                  prNumMap[mergeSha] = String(prNumApi);
+                  prTitleMap[mergeSha] = prTitle;
+                  prMergeMap[mergeSha] = mergeSha;
                 }
                 break;
               }
@@ -1017,6 +1105,7 @@ async function runMain() {
     for (const candidate of candidates) {
       const prHead = prMap[candidate];
       const prNum = prNumMap[candidate];
+      const prMerge = prMergeMap[candidate];
       const tags = new Set(
         [
           `sha-${candidate.slice(0, 7)}`,
@@ -1025,6 +1114,9 @@ async function runMain() {
           prHead && `sha-${prHead.slice(0, 7)}`,
           prHead,
           prHead && `sha-${prHead}`,
+          prMerge && `sha-${prMerge.slice(0, 7)}`,
+          prMerge,
+          prMerge && `sha-${prMerge}`,
           prNum && `pr-${prNum}`,
           prNum && String(prNum)
         ].filter(Boolean)
@@ -1041,7 +1133,8 @@ async function runMain() {
           prNumMap,
           prTitleMap,
           digestPrMap,
-          debug
+          debug,
+          prMergeMap
         );
         if (res) break;
       }
@@ -1063,7 +1156,8 @@ async function runMain() {
         prNumMap,
         prTitleMap,
         digestPrMap,
-        debug
+        debug,
+        prMergeMap
       });
 
       if (iterRes.code === 2) {
