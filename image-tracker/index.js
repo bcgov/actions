@@ -417,34 +417,30 @@ function matchesCandidate(
   if (!revision && !tag) return false;
 
   for (const cand of candidates) {
-    const ph = prMap[cand];
-    const pm = prMergeMap[cand];
-    const pn = prNumMap[cand];
-
-    // 1. Direct SHA, PR head, or PR merge commit match on revision
-    const revMatchesAny = Boolean(
-      (revision && (cand.startsWith(revision) || revision.startsWith(cand))) ||
-      (ph && revision && (ph.startsWith(revision) || revision.startsWith(ph))) ||
-      (pm && revision && (pm.startsWith(revision) || revision.startsWith(pm))) ||
-      (pn && revision === `pr-${pn}`)
-    );
-
-    if (revMatchesAny) {
+    // 1. Direct SHA match
+    if (revision && (cand.startsWith(revision) || revision.startsWith(cand))) {
       return true;
     }
 
-    // 2. If revision is absent, allow tag match against PR number or commit SHA tags
-    if (!revision && tag) {
-      if (pn !== undefined && pn !== null && pn !== '' && (tag === `pr-${pn}` || tag === String(pn))) {
+    // 2. PR Head match
+    const ph = prMap[cand];
+    if (ph && revision && (ph.startsWith(revision) || revision.startsWith(ph))) {
+      return true;
+    }
+
+    // 3. PR Merge match
+    const pm = prMergeMap[cand];
+    if (pm && revision && (pm.startsWith(revision) || revision.startsWith(pm))) {
+      return true;
+    }
+
+    // 4. PR Number match
+    const pn = prNumMap[cand];
+    if (pn !== undefined && pn !== null && pn !== '') {
+      if (revision && revision === `pr-${pn}`) {
         return true;
       }
-      const shaTagMatch =
-        tag === `sha-${cand.slice(0, 7)}` ||
-        tag === cand ||
-        tag === `sha-${cand}` ||
-        (ph && (tag === `sha-${ph.slice(0, 7)}` || tag === ph || tag === `sha-${ph}`)) ||
-        (pm && (tag === `sha-${pm.slice(0, 7)}` || tag === pm || tag === `sha-${pm}`));
-      if (shaTagMatch) {
+      if (!revision && tag && (tag === `pr-${pn}` || tag === String(pn))) {
         return true;
       }
     }
