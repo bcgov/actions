@@ -1062,9 +1062,24 @@ test('runMain resolves PR image when git HEAD is a synthetic merge commit', asyn
       };
     };
 
+    const eventPath = path.join(repoDir, 'event.json');
+    fs.writeFileSync(
+      eventPath,
+      JSON.stringify({
+        pull_request: {
+          number: 383,
+          head: { sha: headSha },
+          title: 'pr feature commit'
+        }
+      })
+    );
+
     const out = path.join(repoDir, 'github_output');
     process.env.GITHUB_ACTIONS = 'true';
     process.env.GITHUB_OUTPUT = out;
+    process.env.GITHUB_EVENT_PATH = eventPath;
+    process.env.GITHUB_EVENT_NAME = 'pull_request';
+    process.env.GITHUB_REF = 'refs/pull/383/merge';
     process.env.INPUT_PACKAGE = 'frontend';
     process.env.PACKAGE = 'frontend';
     process.env.INPUT_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
@@ -1076,7 +1091,6 @@ test('runMain resolves PR image when git HEAD is a synthetic merge commit', asyn
     delete process.env.GITHUB_TOKEN;
     delete process.env.INPUT_TOKEN;
     delete process.env.TOKEN;
-    delete process.env.GITHUB_EVENT_PATH;
 
     await runMain();
 
@@ -1226,8 +1240,241 @@ test('runMain resolves PR image using GITHUB_EVENT_PATH merge_commit_sha without
   }
 });
 
+test('runMain rejects two-parent merge commit on push event to prevent non-PR ancestry leaks', async () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const { runMain } = require('../index.js');
+  const origFetch = global.fetch;
+  const origExit = process.exit;
+  const saved = snapshotEnv();
+  const cwd = process.cwd();
 
+  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'git-merge-push-test-'));
 
+  try {
+    process.exit = (code) => {
+      throw new Error(`process.exit called with code ${code}`);
+    };
 
+    // Set up git repo with a merge commit having 2 parents: main and feature branch
+    execFileSync('git', ['init', '-b', 'main'], { cwd: repoDir, stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: repoDir, stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: repoDir, stdio: 'ignore' });
 
+    fs.writeFileSync(path.join(repoDir, 'base.txt'), 'base\n');
+    execFileSync('git', ['add', '.'], { cwd: repoDir, stdio: 'ignore' });
+    execFileSync('git', ['commit', '-m', 'initial commit'], { cwd: repoDir, stdio: 'ignore' });
 
+    execFileSync('git', ['checkout', '-b', 'feature'], { cwd: repoDir, stdio: 'ignore' });
+    fs.writeFileSync(path.join(repoDir, 'feat.txt'), 'feature\n');
+    execFileSync('git', ['add', '.'], { cwd: repoDir, stdio: 'ignore' });
+    execFileSync('git', ['commit', '-m', 'feature commit'], { cwd: repoDir, stdio: 'ignore' });
+    const headSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoDir, encoding: 'utf8' }).trim();
+
+    execFileSync('git', ['checkout', 'main'], { cwd: repoDir, stdio: 'ignore' });
+    fs.writeFileSync(path.join(repoDir, 'main.txt'), 'main advance\n');
+    execFileSync('git', ['add', '.'], { cwd: repoDir, stdio: 'ignore' });
+    execFileSync('git', ['commit', '-m', 'main advance'], { cwd: repoDir, stdio: 'ignore' });
+
+    execFileSync('git', ['merge', '--no-ff', 'feature', '-m', 'Merge feature into main'], {
+      cwd: repoDir,
+      stdio: 'ignore'
+    });
+    const mergeSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoDir, encoding: 'utf8' }).trim();
+
+    global.fetch = async (url) => {
+      if (url.endsWith('/manifests/latest')) {
+        return {
+          ok: false,
+          status: 401,
+          headers: {
+            get: (h) =>
+              h.toLowerCase() === 'www-authenticate'
+                ? 'Bearer realm="https://ghcr.io/token",service="ghcr.io"'
+                : null
+          },
+          json: async () => ({})
+        };
+      }
+      if (url.includes('/token?')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          json: async () => ({ token: 'mock-token' })
+        };
+      }
+      // Image was labeled with mergeSha (descendant HEAD), not feature headSha
+      if (url.includes('/manifests/')) {
+        if (url.includes(`/manifests/${headSha}`) || url.includes(`/manifests/sha-${mergeSha.slice(0, 7)}`)) {
+          return {
+            ok: true,
+            status: 200,
+            headers: {
+              get: (h) => (h.toLowerCase() === 'docker-content-digest' ? 'sha256:1111' : null)
+            },
+            json: async () => ({
+              mediaType: 'application/vnd.oci.image.manifest.v1+json',
+              digest: 'sha256:1111',
+              annotations: {
+                'org.opencontainers.image.revision': mergeSha
+              }
+            })
+          };
+        }
+      }
+      return {
+        ok: false,
+        status: 404,
+        headers: { get: () => null },
+        json: async () => ({})
+      };
+    };
+
+    const out = path.join(repoDir, 'github_output');
+    process.env.GITHUB_ACTIONS = 'true';
+    process.env.GITHUB_OUTPUT = out;
+    process.env.GITHUB_EVENT_NAME = 'push';
+    process.env.GITHUB_REF = 'refs/heads/main';
+    process.env.INPUT_PACKAGE = 'frontend';
+    process.env.PACKAGE = 'frontend';
+    process.env.INPUT_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
+    process.env.REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
+    process.env.INPUT_REVISION = headSha;
+    process.env.REVISION = headSha;
+    process.env.DIR = repoDir;
+    process.env.INPUT_DIR = repoDir;
+    delete process.env.GITHUB_TOKEN;
+    delete process.env.INPUT_TOKEN;
+    delete process.env.TOKEN;
+    delete process.env.GITHUB_EVENT_PATH;
+
+    // Must reject because on push, two-parent HEAD is not a synthetic PR merge
+    await assert.rejects(() => runMain(), /process\.exit called with code 1/);
+  } finally {
+    global.fetch = origFetch;
+    process.exit = origExit;
+    process.chdir(cwd);
+    restoreEnv(saved);
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+test('runMain ignores GITHUB_SHA fallback when GITHUB_REF is not synthetic merge ref (e.g. pull_request_target)', async () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const { runMain } = require('../index.js');
+  const origFetch = global.fetch;
+  const origExit = process.exit;
+  const saved = snapshotEnv();
+  const cwd = process.cwd();
+
+  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'git-pr-target-test-'));
+  const baseSha = '1111111111111111111111111111111111111111';
+
+  try {
+    process.exit = (code) => {
+      throw new Error(`process.exit called with code ${code}`);
+    };
+
+    execFileSync('git', ['init', '-b', 'main'], { cwd: repoDir, stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: repoDir, stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: repoDir, stdio: 'ignore' });
+    fs.writeFileSync(path.join(repoDir, 'file.txt'), 'content\n');
+    execFileSync('git', ['add', '.'], { cwd: repoDir, stdio: 'ignore' });
+    execFileSync('git', ['commit', '-m', 'initial commit'], { cwd: repoDir, stdio: 'ignore' });
+    const headSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoDir, encoding: 'utf8' }).trim();
+
+    const eventPath = path.join(repoDir, 'event.json');
+    fs.writeFileSync(
+      eventPath,
+      JSON.stringify({
+        pull_request: {
+          number: 383,
+          head: { sha: headSha },
+          title: 'test pr'
+          // Notice: no merge_commit_sha!
+        }
+      })
+    );
+
+    global.fetch = async (url) => {
+      if (url.endsWith('/manifests/latest')) {
+        return {
+          ok: false,
+          status: 401,
+          headers: {
+            get: (h) =>
+              h.toLowerCase() === 'www-authenticate'
+                ? 'Bearer realm="https://ghcr.io/token",service="ghcr.io"'
+                : null
+          },
+          json: async () => ({})
+        };
+      }
+      if (url.includes('/token?')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          json: async () => ({ token: 'mock-token' })
+        };
+      }
+      // Image was built from base-branch SHA (GITHUB_SHA in pull_request_target)
+      if (url.includes('/manifests/')) {
+        if (url.includes('/manifests/pr-383') || url.includes('/manifests/383')) {
+          return {
+            ok: true,
+            status: 200,
+            headers: {
+              get: (h) => (h.toLowerCase() === 'docker-content-digest' ? 'sha256:2222' : null)
+            },
+            json: async () => ({
+              mediaType: 'application/vnd.oci.image.manifest.v1+json',
+              digest: 'sha256:2222',
+              annotations: {
+                'org.opencontainers.image.revision': baseSha
+              }
+            })
+          };
+        }
+      }
+      return {
+        ok: false,
+        status: 404,
+        headers: { get: () => null },
+        json: async () => ({})
+      };
+    };
+
+    const out = path.join(repoDir, 'github_output');
+    process.env.GITHUB_ACTIONS = 'true';
+    process.env.GITHUB_OUTPUT = out;
+    process.env.GITHUB_EVENT_PATH = eventPath;
+    process.env.GITHUB_EVENT_NAME = 'pull_request_target';
+    process.env.GITHUB_REF = 'refs/heads/main'; // base branch ref
+    process.env.GITHUB_SHA = baseSha; // base branch commit
+    process.env.INPUT_PACKAGE = 'frontend';
+    process.env.PACKAGE = 'frontend';
+    process.env.INPUT_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
+    process.env.REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
+    process.env.INPUT_REVISION = headSha;
+    process.env.REVISION = headSha;
+    process.env.DIR = repoDir;
+    process.env.INPUT_DIR = repoDir;
+    delete process.env.GITHUB_TOKEN;
+    delete process.env.INPUT_TOKEN;
+    delete process.env.TOKEN;
+
+    // Must reject because GITHUB_REF is not refs/pull/<num>/merge, so baseSha is not accepted as merge SHA
+    await assert.rejects(() => runMain(), /process\.exit called with code 1/);
+  } finally {
+    global.fetch = origFetch;
+    process.exit = origExit;
+    process.chdir(cwd);
+    restoreEnv(saved);
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});

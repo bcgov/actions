@@ -433,17 +433,7 @@ function matchesCandidate(
       return true;
     }
 
-    // 2. Direct full 40-char SHA tag match
-    const fullShaTag =
-      (cand.length >= 40 && (tag.toLowerCase() === cand.toLowerCase() || tag.toLowerCase() === `sha-${cand.toLowerCase()}`)) ||
-      (ph && ph.length >= 40 && (tag.toLowerCase() === ph.toLowerCase() || tag.toLowerCase() === `sha-${ph.toLowerCase()}`)) ||
-      (pm && pm.length >= 40 && (tag.toLowerCase() === pm.toLowerCase() || tag.toLowerCase() === `sha-${pm.toLowerCase()}`));
-
-    if (fullShaTag && (!revision || revMatchesAny)) {
-      return true;
-    }
-
-    // 3. If revision is absent, allow tag match against PR number or commit SHA tags
+    // 2. If revision is absent, allow tag match against PR number or commit SHA tags
     if (!revision && tag) {
       if (pn !== undefined && pn !== null && pn !== '' && (tag === `pr-${pn}` || tag === String(pn))) {
         return true;
@@ -573,11 +563,6 @@ async function probeTag(
           (ph && (tag === `sha-${ph.slice(0, 7)}` || tag === ph || tag === `sha-${ph}`)) ||
           (pm && (tag === `sha-${pm.slice(0, 7)}` || tag === pm || tag === `sha-${pm}`));
 
-        const fullShaTag =
-          (cand.length >= 40 && (tag.toLowerCase() === cand.toLowerCase() || tag.toLowerCase() === `sha-${cand.toLowerCase()}`)) ||
-          (ph && ph.length >= 40 && (tag.toLowerCase() === ph.toLowerCase() || tag.toLowerCase() === `sha-${ph.toLowerCase()}`)) ||
-          (pm && pm.length >= 40 && (tag.toLowerCase() === pm.toLowerCase() || tag.toLowerCase() === `sha-${pm.toLowerCase()}`));
-
         const revMatch = Boolean(
           (revision && (cand.startsWith(revision) || revision.startsWith(cand))) ||
           (ph && revision && (ph.startsWith(revision) || revision.startsWith(ph))) ||
@@ -585,7 +570,7 @@ async function probeTag(
           (pn && revision === `pr-${pn}`)
         );
 
-        if (isPrTag ? revMatch : (revision ? (revMatch || fullShaTag) : shaMatch)) {
+        if (isPrTag ? revMatch : (revision ? revMatch : shaMatch)) {
           let title = prTitleMap[cand] || '';
           if (!title) {
             try {
@@ -913,9 +898,12 @@ async function runMain() {
     const epHead = eventPr.head?.sha || '';
     const epNum = eventPr.number ? String(eventPr.number) : '';
     const epTitle = eventPr.title || '';
+    const mergeRef = epNum ? `refs/pull/${epNum}/merge` : '';
     const epMerge =
       eventPr.merge_commit_sha ||
-      (env.GITHUB_SHA && env.GITHUB_SHA !== epHead ? env.GITHUB_SHA : '');
+      (mergeRef && env.GITHUB_REF === mergeRef && env.GITHUB_SHA && env.GITHUB_SHA !== epHead
+        ? env.GITHUB_SHA
+        : '');
     if (epHead) {
       prMap[epHead] = epHead;
       if (epNum) prNumMap[epHead] = epNum;
@@ -941,7 +929,13 @@ async function runMain() {
     })
       .trim()
       .split(/\s+/);
-    if (gitParents.length >= 2 && gitParents[1]) {
+    const isSyntheticPrMerge =
+      eventName === 'pull_request' &&
+      eventPr?.number &&
+      env.GITHUB_REF === `refs/pull/${eventPr.number}/merge` &&
+      eventPr.head?.sha &&
+      gitParents[1]?.toLowerCase() === eventPr.head.sha.toLowerCase();
+    if (gitParents.length >= 2 && gitParents[1] && isSyntheticPrMerge) {
       prMergeMap[gitParents[1]] = gitHead;
       prMap[gitHead] = gitParents[1];
     }
