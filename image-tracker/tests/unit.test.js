@@ -967,6 +967,266 @@ test('probeTag and matchesCandidate accept PR merge commit revision for PR and h
   }
 });
 
+test('runMain resolves PR image when git HEAD is a synthetic merge commit', async () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const { runMain } = require('../index.js');
+  const origFetch = global.fetch;
+  const origExit = process.exit;
+  const saved = snapshotEnv();
+  const cwd = process.cwd();
+
+  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'git-merge-test-'));
+
+  try {
+    process.exit = (code) => {
+      throw new Error(`process.exit called with code ${code}`);
+    };
+
+    // Set up git repo with a merge commit having 2 parents: main and PR branch
+    execFileSync('git', ['init', '-b', 'main'], { cwd: repoDir, stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: repoDir, stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: repoDir, stdio: 'ignore' });
+
+    fs.writeFileSync(path.join(repoDir, 'base.txt'), 'base\n');
+    execFileSync('git', ['add', '.'], { cwd: repoDir, stdio: 'ignore' });
+    execFileSync('git', ['commit', '-m', 'initial commit'], { cwd: repoDir, stdio: 'ignore' });
+
+    execFileSync('git', ['checkout', '-b', 'pr-branch'], { cwd: repoDir, stdio: 'ignore' });
+    fs.writeFileSync(path.join(repoDir, 'pr.txt'), 'pr feature\n');
+    execFileSync('git', ['add', '.'], { cwd: repoDir, stdio: 'ignore' });
+    execFileSync('git', ['commit', '-m', 'pr feature commit'], { cwd: repoDir, stdio: 'ignore' });
+    const headSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoDir, encoding: 'utf8' }).trim();
+
+    execFileSync('git', ['checkout', 'main'], { cwd: repoDir, stdio: 'ignore' });
+    fs.writeFileSync(path.join(repoDir, 'main.txt'), 'main advance\n');
+    execFileSync('git', ['add', '.'], { cwd: repoDir, stdio: 'ignore' });
+    execFileSync('git', ['commit', '-m', 'main advance'], { cwd: repoDir, stdio: 'ignore' });
+
+    execFileSync('git', ['merge', '--no-ff', 'pr-branch', '-m', 'Merge pr-branch into main'], {
+      cwd: repoDir,
+      stdio: 'ignore'
+    });
+    const mergeSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoDir, encoding: 'utf8' }).trim();
+
+    const expectedDigest = 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+    const calls = [];
+    global.fetch = async (url) => {
+      calls.push(url);
+      if (url.endsWith('/manifests/latest')) {
+        return {
+          ok: false,
+          status: 401,
+          headers: {
+            get: (h) =>
+              h.toLowerCase() === 'www-authenticate'
+                ? 'Bearer realm="https://ghcr.io/token",service="ghcr.io"'
+                : null
+          },
+          json: async () => ({})
+        };
+      }
+      if (url.includes('/token?')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          json: async () => ({ token: 'mock-token' })
+        };
+      }
+      if (url.includes('/manifests/')) {
+        if (url.includes(`/manifests/${headSha}`) || url.includes(`/manifests/sha-${mergeSha.slice(0, 7)}`)) {
+          return {
+            ok: true,
+            status: 200,
+            headers: {
+              get: (h) => (h.toLowerCase() === 'docker-content-digest' ? expectedDigest : null)
+            },
+            json: async () => ({
+              mediaType: 'application/vnd.oci.image.manifest.v1+json',
+              digest: expectedDigest,
+              annotations: {
+                'org.opencontainers.image.revision': mergeSha,
+                'org.opencontainers.image.created': '2026-09-07T10:16:57Z'
+              }
+            })
+          };
+        }
+      }
+      return {
+        ok: false,
+        status: 404,
+        headers: { get: () => null },
+        json: async () => ({})
+      };
+    };
+
+    const out = path.join(repoDir, 'github_output');
+    process.env.GITHUB_ACTIONS = 'true';
+    process.env.GITHUB_OUTPUT = out;
+    process.env.INPUT_PACKAGE = 'frontend';
+    process.env.PACKAGE = 'frontend';
+    process.env.INPUT_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
+    process.env.REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
+    process.env.INPUT_REVISION = headSha;
+    process.env.REVISION = headSha;
+    process.env.DIR = repoDir;
+    process.env.INPUT_DIR = repoDir;
+    delete process.env.GITHUB_TOKEN;
+    delete process.env.INPUT_TOKEN;
+    delete process.env.TOKEN;
+    delete process.env.GITHUB_EVENT_PATH;
+
+    await runMain();
+
+    const text = fs.readFileSync(out, 'utf8');
+    assert.match(
+      text,
+      new RegExp(`^image=ghcr\\.io/bcgov/nr-hydrometric-rating-curve/frontend@${expectedDigest}$`, 'm'),
+      'runMain outputs correct image ref'
+    );
+    assert.match(text, new RegExp(`^digest=${expectedDigest}$`, 'm'), 'runMain outputs correct digest');
+    assert.ok(
+      !calls.some((c) => c.includes('/tags/list') || c.includes('/packages/container/')),
+      'runMain resolved via direct probe without iterative scan'
+    );
+  } finally {
+    global.fetch = origFetch;
+    process.exit = origExit;
+    process.chdir(cwd);
+    restoreEnv(saved);
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+test('runMain resolves PR image using GITHUB_EVENT_PATH merge_commit_sha without token', async () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const { runMain } = require('../index.js');
+  const origFetch = global.fetch;
+  const origExit = process.exit;
+  const saved = snapshotEnv();
+  const cwd = process.cwd();
+
+  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'git-event-test-'));
+  const mergeSha = '64a5a332364b27b8998f1af66926cda2cc667ddd';
+
+  try {
+    process.exit = (code) => {
+      throw new Error(`process.exit called with code ${code}`);
+    };
+
+    execFileSync('git', ['init', '-b', 'main'], { cwd: repoDir, stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: repoDir, stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: repoDir, stdio: 'ignore' });
+    fs.writeFileSync(path.join(repoDir, 'file.txt'), 'content\n');
+    execFileSync('git', ['add', '.'], { cwd: repoDir, stdio: 'ignore' });
+    execFileSync('git', ['commit', '-m', 'initial commit'], { cwd: repoDir, stdio: 'ignore' });
+    const headSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoDir, encoding: 'utf8' }).trim();
+
+    const eventPath = path.join(repoDir, 'event.json');
+    fs.writeFileSync(
+      eventPath,
+      JSON.stringify({
+        pull_request: {
+          number: 383,
+          head: { sha: headSha },
+          merge_commit_sha: mergeSha,
+          title: 'chore(deps): lock file maintenance'
+        }
+      })
+    );
+
+    const expectedDigest = 'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc';
+    const calls = [];
+    global.fetch = async (url) => {
+      calls.push(url);
+      if (url.endsWith('/manifests/latest')) {
+        return {
+          ok: false,
+          status: 401,
+          headers: {
+            get: (h) =>
+              h.toLowerCase() === 'www-authenticate'
+                ? 'Bearer realm="https://ghcr.io/token",service="ghcr.io"'
+                : null
+          },
+          json: async () => ({})
+        };
+      }
+      if (url.includes('/token?')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          json: async () => ({ token: 'mock-token' })
+        };
+      }
+      if (url.includes('/manifests/')) {
+        if (url.includes('/manifests/pr-383') || url.includes('/manifests/383')) {
+          return {
+            ok: true,
+            status: 200,
+            headers: {
+              get: (h) => (h.toLowerCase() === 'docker-content-digest' ? expectedDigest : null)
+            },
+            json: async () => ({
+              mediaType: 'application/vnd.oci.image.manifest.v1+json',
+              digest: expectedDigest,
+              annotations: {
+                'org.opencontainers.image.revision': mergeSha,
+                'org.opencontainers.image.created': '2026-09-07T10:16:57Z'
+              }
+            })
+          };
+        }
+      }
+      return {
+        ok: false,
+        status: 404,
+        headers: { get: () => null },
+        json: async () => ({})
+      };
+    };
+
+    const out = path.join(repoDir, 'github_output');
+    process.env.GITHUB_ACTIONS = 'true';
+    process.env.GITHUB_OUTPUT = out;
+    process.env.GITHUB_EVENT_PATH = eventPath;
+    process.env.GITHUB_EVENT_NAME = 'pull_request';
+    process.env.INPUT_PACKAGE = 'frontend';
+    process.env.PACKAGE = 'frontend';
+    process.env.INPUT_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
+    process.env.REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
+    process.env.INPUT_REVISION = headSha;
+    process.env.REVISION = headSha;
+    process.env.DIR = repoDir;
+    process.env.INPUT_DIR = repoDir;
+    delete process.env.GITHUB_TOKEN;
+    delete process.env.INPUT_TOKEN;
+    delete process.env.TOKEN;
+
+    await runMain();
+
+    const text = fs.readFileSync(out, 'utf8');
+    assert.match(text, new RegExp(`^digest=${expectedDigest}$`, 'm'), 'runMain outputs resolved digest');
+    assert.match(text, /^pr=383$/m, 'runMain outputs resolved PR number');
+    assert.ok(
+      !calls.some((c) => c.includes('/tags/list') || c.includes('/packages/container/')),
+      'runMain resolved via direct candidate probe'
+    );
+  } finally {
+    global.fetch = origFetch;
+    process.exit = origExit;
+    process.chdir(cwd);
+    restoreEnv(saved);
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+
 
 
 
