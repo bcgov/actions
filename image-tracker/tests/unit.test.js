@@ -1493,10 +1493,14 @@ test('runMain resolves PR image for squash-merged commit on main when image revi
 
   const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'squash-test-'));
   try {
+    process.exit = (code) => {
+      throw new Error(`process.exit called with code ${code}`);
+    };
     process.chdir(repoDir);
     execFileSync('git', ['init', '-b', 'main'], { encoding: 'utf8' });
     execFileSync('git', ['config', 'user.name', 'test'], { encoding: 'utf8' });
     execFileSync('git', ['config', 'user.email', 'test@example.com'], { encoding: 'utf8' });
+    execFileSync('git', ['remote', 'add', 'origin', 'https://github.com/miniontech/vexilon.git'], { encoding: 'utf8' });
 
     fs.writeFileSync(path.join(repoDir, 'file.txt'), 'base');
     execFileSync('git', ['add', '.'], { encoding: 'utf8' });
@@ -1617,6 +1621,7 @@ test('runMain resolves PR image for squash-merged commit on main when image revi
 
     const out = path.join(repoDir, 'github_output');
     process.env.GITHUB_ACTIONS = 'true';
+    process.env.GITHUB_REPOSITORY = 'miniontech/vexilon';
     process.env.GITHUB_OUTPUT = out;
     process.env.GITHUB_EVENT_NAME = 'push';
     process.env.GITHUB_REF = 'refs/heads/main';
@@ -1801,10 +1806,14 @@ test('runMain resolves multiple packages (frontend, rctool) on squash-merged mai
 
   const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'multi-pkg-test-'));
   try {
+    process.exit = (code) => {
+      throw new Error(`process.exit called with code ${code}`);
+    };
     process.chdir(repoDir);
     execFileSync('git', ['init', '-b', 'main'], { encoding: 'utf8' });
     execFileSync('git', ['config', 'user.name', 'test'], { encoding: 'utf8' });
     execFileSync('git', ['config', 'user.email', 'test@example.com'], { encoding: 'utf8' });
+    execFileSync('git', ['remote', 'add', 'origin', 'https://github.com/bcgov/nr-hydrometric-rating-curve.git'], { encoding: 'utf8' });
 
     fs.writeFileSync(path.join(repoDir, 'file.txt'), 'base');
     execFileSync('git', ['add', '.'], { encoding: 'utf8' });
@@ -1914,6 +1923,7 @@ test('runMain resolves multiple packages (frontend, rctool) on squash-merged mai
 
     const out = path.join(repoDir, 'github_output');
     process.env.GITHUB_ACTIONS = 'true';
+    process.env.GITHUB_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
     process.env.GITHUB_OUTPUT = out;
     process.env.GITHUB_EVENT_NAME = 'push';
     process.env.GITHUB_REF = 'refs/heads/main';
@@ -1956,10 +1966,14 @@ test('runMain resolves PR image when running on PR head commit checkout', async 
 
   const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pr-head-test-'));
   try {
+    process.exit = (code) => {
+      throw new Error(`process.exit called with code ${code}`);
+    };
     process.chdir(repoDir);
     execFileSync('git', ['init', '-b', 'main'], { encoding: 'utf8' });
     execFileSync('git', ['config', 'user.name', 'test'], { encoding: 'utf8' });
     execFileSync('git', ['config', 'user.email', 'test@example.com'], { encoding: 'utf8' });
+    execFileSync('git', ['remote', 'add', 'origin', 'https://github.com/bcgov/nr-hydrometric-rating-curve.git'], { encoding: 'utf8' });
 
     fs.writeFileSync(path.join(repoDir, 'file.txt'), 'base');
     execFileSync('git', ['add', '.'], { encoding: 'utf8' });
@@ -2044,6 +2058,7 @@ test('runMain resolves PR image when running on PR head commit checkout', async 
 
     const out = path.join(repoDir, 'github_output');
     process.env.GITHUB_ACTIONS = 'true';
+    process.env.GITHUB_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
     process.env.GITHUB_OUTPUT = out;
     process.env.GITHUB_EVENT_NAME = 'pull_request';
     process.env.GITHUB_REF = 'refs/pull/400/head';
@@ -2085,10 +2100,14 @@ test('runMain resolves PR image when squash commit is walked back via max_depth'
 
   const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'walkback-test-'));
   try {
+    process.exit = (code) => {
+      throw new Error(`process.exit called with code ${code}`);
+    };
     process.chdir(repoDir);
     execFileSync('git', ['init', '-b', 'main'], { encoding: 'utf8' });
     execFileSync('git', ['config', 'user.name', 'test'], { encoding: 'utf8' });
     execFileSync('git', ['config', 'user.email', 'test@example.com'], { encoding: 'utf8' });
+    execFileSync('git', ['remote', 'add', 'origin', 'https://github.com/bcgov/nr-hydrometric-rating-curve.git'], { encoding: 'utf8' });
 
     fs.writeFileSync(path.join(repoDir, 'file.txt'), 'base');
     execFileSync('git', ['add', '.'], { encoding: 'utf8' });
@@ -2186,6 +2205,7 @@ test('runMain resolves PR image when squash commit is walked back via max_depth'
 
     const out = path.join(repoDir, 'github_output');
     process.env.GITHUB_ACTIONS = 'true';
+    process.env.GITHUB_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
     process.env.GITHUB_OUTPUT = out;
     process.env.GITHUB_EVENT_NAME = 'push';
     process.env.GITHUB_REF = 'refs/heads/main';

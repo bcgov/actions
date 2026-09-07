@@ -531,13 +531,15 @@ async function probeTag(
           if (!source) {
             source = childBody.annotations?.['org.opencontainers.image.source'] || '';
           }
-          if (!revision) {
+          if (!revision || !version || !source) {
             const childConfigDigest = childBody.config?.digest;
             if (childConfigDigest) {
               const childBlobRes = await fetch(`${base}/blobs/${childConfigDigest}`, { headers });
               if (childBlobRes.ok) {
                 const childConfigObj = await childBlobRes.json();
-                revision = childConfigObj.config?.Labels?.['org.opencontainers.image.revision'] || '';
+                if (!revision) {
+                  revision = childConfigObj.config?.Labels?.['org.opencontainers.image.revision'] || '';
+                }
                 if (!created) {
                   created = childConfigObj.config?.Labels?.['org.opencontainers.image.created'] || '';
                 }
@@ -555,13 +557,15 @@ async function probeTag(
     }
 
     // Config Blob Fallback
-    if (!revision) {
+    if (!revision || !version || !source) {
       const configDigest = body.config?.digest;
       if (configDigest) {
         const blobRes = await fetch(`${base}/blobs/${configDigest}`, { headers });
         if (blobRes.ok) {
           const configObj = await blobRes.json();
-          revision = configObj.config?.Labels?.['org.opencontainers.image.revision'] || '';
+          if (!revision) {
+            revision = configObj.config?.Labels?.['org.opencontainers.image.revision'] || '';
+          }
           if (!created) {
             created = configObj.config?.Labels?.['org.opencontainers.image.created'] || '';
           }
@@ -661,7 +665,7 @@ async function probeTag(
             ) {
               const normSource = normalizeRepo(repositoryFromRemoteUrl(source) || source);
               const normRepo = normalizeRepo(repositoryFromRemoteUrl(sourceRepository) || sourceRepository);
-              if (!normSource || !normRepo || normSource === normRepo) {
+              if (normSource && normRepo && normSource === normRepo) {
                 verified = true;
               }
             }
@@ -1022,7 +1026,7 @@ async function runMain() {
 
   process.chdir(dir);
 
-  const sourceRepository = normalizeRepo(sourceRepositoryFromOrigin() || ghRepository);
+  const sourceRepository = normalizeRepo(sourceRepositoryFromOrigin() || ghRepository || repository);
 
   // ---- State -----------------------------------------------------------------
   const prMap = {};
