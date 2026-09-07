@@ -180,7 +180,7 @@ function prLookupUrl(sourceRepository, revision) {
 }
 
 function repositoryFromRemoteUrl(remoteUrl) {
-  const match = (remoteUrl || '').match(/github\.com[:/]([^/]+\/[^/.]+)/);
+  const match = (remoteUrl || '').match(/github\.com[:/]([^/]+\/[^/]+?)(?:\.git)?(?:$|[/?#])/);
   return match ? match[1] : '';
 }
 
@@ -961,17 +961,7 @@ async function runMain() {
 
   // 1. Repository
   const rawInput = (env.REPOSITORY || env.INPUT_REPOSITORY || '').trim();
-  let fallbackRepository = rawInput || ghRepository;
-  if (!fallbackRepository) {
-    try {
-      const remoteUrl = execFileSync('git', ['remote', 'get-url', 'origin'], {
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'ignore']
-      }).trim();
-      const match = remoteUrl.match(/github\.com[:/]([^/]+\/[^/.]+)/);
-      if (match) fallbackRepository = match[1];
-    } catch (err) {}
-  }
+  let fallbackRepository = rawInput || ghRepository || sourceRepositoryFromOrigin();
 
   let repository = resolveImageRepository({
     inputRepository: rawInput,

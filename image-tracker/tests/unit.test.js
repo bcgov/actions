@@ -448,11 +448,27 @@ test('prLookupUrl queries the source (checkout) repository', () => {
   );
 });
 
-test('repositoryFromRemoteUrl parses origin', () => {
+test('repositoryFromRemoteUrl parses origin and retains dots while stripping terminal .git', () => {
   const { repositoryFromRemoteUrl } = require('../index.js');
   assert.strictEqual(
     repositoryFromRemoteUrl('git@github.com:bcgov/nr-hydrometric-rating-curve.git'),
     'bcgov/nr-hydrometric-rating-curve'
+  );
+  assert.strictEqual(
+    repositoryFromRemoteUrl('https://github.com/owner/app.one.git'),
+    'owner/app.one'
+  );
+  assert.strictEqual(
+    repositoryFromRemoteUrl('https://github.com/owner/app.one'),
+    'owner/app.one'
+  );
+  assert.strictEqual(
+    repositoryFromRemoteUrl('https://github.com/owner/app.two.git'),
+    'owner/app.two'
+  );
+  assert.notStrictEqual(
+    repositoryFromRemoteUrl('https://github.com/owner/app.one.git'),
+    repositoryFromRemoteUrl('https://github.com/owner/app.two.git')
   );
 });
 
