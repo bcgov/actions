@@ -1405,7 +1405,7 @@ async function runMain() {
   const dir = env.DIR || env.INPUT_DIR || '.';
   const token = env.INPUT_TOKEN || '';
   const maxTagsStr = env.MAX_TAGS || env.INPUT_MAX_TAGS || '500';
-  const maxDepthStr = env.MAX_DEPTH || env.INPUT_MAX_DEPTH || '1';
+  const maxDepthStr = env.MAX_DEPTH || env.INPUT_MAX_DEPTH || '100';
   const debug = env.DEBUG || env.INPUT_DEBUG || 'false';
 
   if (!/^\d+$/.test(maxTagsStr) || parseInt(maxTagsStr, 10) <= 0) {
@@ -1804,6 +1804,7 @@ async function runMain() {
           `Images publish on push to your fork (packages must be public for upstream CI to pull). ` +
           `See ${ACTIONS_FORK_DOCS_URL}`
       );
+      writeEmptyGithubOutputs(env);
       return;
     }
 

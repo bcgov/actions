@@ -127,7 +127,7 @@ deploy can skip.
 | `dir`        |          | `.`                  | Working directory containing the git repository.                               |
 | `token`        |          | `github.token`       | GitHub token used to mint a GHCR bearer token.                                 |
 | `max_tags`   |          | `500`                | Upper bound on tags inspected per package before failing.                      |
-| `max_depth`  |          | `1`                  | Max number of commits back in history to search for an image.                  |
+| `max_depth`  |          | `100`                | Max number of commits back in history to search for an image.                  |
 
 Package-to-image-path convention:
 - If package name == repository name → `ghcr.io/<owner>/<repo>`
