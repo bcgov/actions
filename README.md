@@ -126,7 +126,7 @@ Workflows and composite actions in **this** repo reference sibling actions with 
 
 ```yaml
 uses: $/diff-triggers          # action at the running commit — no checkout required
-uses: $/.github/workflows/.pr-validate.yml  # reusable workflow at the running commit
+uses: $/pr-validate             # action at the running commit — no checkout required
 ```
 
 **Consumers** outside this repo still pin published actions normally:

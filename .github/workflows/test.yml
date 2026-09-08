@@ -44,7 +44,6 @@ jobs:
             pr-validate:
               - 'pr-validate/**'
               - '.github/workflows/pr-validate.yml'
-              - '.github/workflows/.pr-validate.yml'
             sysdig-monitor:
               - 'sysdig-monitor/**'
             test-and-analyse:
