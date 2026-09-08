@@ -448,11 +448,27 @@ test('prLookupUrl queries the source (checkout) repository', () => {
   );
 });
 
-test('repositoryFromRemoteUrl parses origin', () => {
+test('repositoryFromRemoteUrl parses origin and retains dots while stripping terminal .git', () => {
   const { repositoryFromRemoteUrl } = require('../index.js');
   assert.strictEqual(
     repositoryFromRemoteUrl('git@github.com:bcgov/nr-hydrometric-rating-curve.git'),
     'bcgov/nr-hydrometric-rating-curve'
+  );
+  assert.strictEqual(
+    repositoryFromRemoteUrl('https://github.com/owner/app.one.git'),
+    'owner/app.one'
+  );
+  assert.strictEqual(
+    repositoryFromRemoteUrl('https://github.com/owner/app.one'),
+    'owner/app.one'
+  );
+  assert.strictEqual(
+    repositoryFromRemoteUrl('https://github.com/owner/app.two.git'),
+    'owner/app.two'
+  );
+  assert.notStrictEqual(
+    repositoryFromRemoteUrl('https://github.com/owner/app.one.git'),
+    repositoryFromRemoteUrl('https://github.com/owner/app.two.git')
   );
 });
 
@@ -1480,3 +1496,963 @@ test('runMain ignores GITHUB_SHA fallback when GITHUB_REF is not synthetic merge
     fs.rmSync(repoDir, { recursive: true, force: true });
   }
 });
+
+test('runMain resolves PR image for squash-merged commit on main when image revision is synthetic PR merge commit', async () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const os = require('node:os');
+  const { runMain } = require('../index.js');
+  const origFetch = global.fetch;
+  const origExit = process.exit;
+  const saved = snapshotEnv();
+  const cwd = process.cwd();
+
+  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'squash-test-'));
+  try {
+    process.exit = (code) => {
+      throw new Error(`process.exit called with code ${code}`);
+    };
+    process.chdir(repoDir);
+    execFileSync('git', ['init', '-b', 'main'], { encoding: 'utf8' });
+    execFileSync('git', ['config', 'user.name', 'test'], { encoding: 'utf8' });
+    execFileSync('git', ['config', 'user.email', 'test@example.com'], { encoding: 'utf8' });
+    execFileSync('git', ['remote', 'add', 'origin', 'https://github.com/miniontech/vexilon.git'], { encoding: 'utf8' });
+
+    fs.writeFileSync(path.join(repoDir, 'file.txt'), 'base');
+    execFileSync('git', ['add', '.'], { encoding: 'utf8' });
+    execFileSync('git', ['commit', '-m', 'initial base commit'], { encoding: 'utf8' });
+
+    fs.writeFileSync(path.join(repoDir, 'file.txt'), 'squash-change');
+    execFileSync('git', ['add', '.'], { encoding: 'utf8' });
+    execFileSync('git', ['commit', '-m', 'chore(deps): update dependency uv to v0.12.9 (#662)'], {
+      encoding: 'utf8'
+    });
+
+    const squashSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    const headSha = '746d271f4975c5d5572129d3ecd3bc92416b0f90';
+    const syntheticMergeSha = 'b48f3d437680b943cab0121ec5b043e2494a0d6e';
+    const expectedDigest = 'sha256:35ccf554ed49dd01b29cf7f3a879f869d2a06b2288bddd6acdee4613f24aed68';
+
+    global.fetch = async (url, opts) => {
+      // GitHub API commit pulls lookup
+      if (url.includes(`/commits/${squashSha}/pulls`)) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [
+            {
+              number: 662,
+              head: { sha: headSha },
+              merge_commit_sha: squashSha,
+              title: 'chore(deps): update dependency uv to v0.12.9'
+            }
+          ]
+        };
+      }
+      // GitHub API commit lookup for synthetic merge commit
+      if (url.includes(`/commits/${syntheticMergeSha}`)) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            sha: syntheticMergeSha,
+            parents: [{ sha: '831dc67b44b37bd8f4ffa928c7386c4e9be8838d' }, { sha: headSha }],
+            commit: {
+              message: `Merge ${headSha} into 831dc67b44b37bd8f4ffa928c7386c4e9be8838d`
+            }
+          })
+        };
+      }
+      // GHCR auth
+      if (url.endsWith('/manifests/latest')) {
+        return {
+          ok: false,
+          status: 401,
+          headers: {
+            get: (h) =>
+              h.toLowerCase() === 'www-authenticate'
+                ? 'Bearer realm="https://ghcr.io/token",service="ghcr.io"'
+                : null
+          },
+          json: async () => ({})
+        };
+      }
+      if (url.includes('/token?')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          json: async () => ({ token: 'mock-token' })
+        };
+      }
+      // GHCR manifest for pr-662
+      if (url.includes('/manifests/pr-662')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: {
+            get: (h) => (h.toLowerCase() === 'docker-content-digest' ? expectedDigest : null)
+          },
+          json: async () => ({
+            schemaVersion: 2,
+            mediaType: 'application/vnd.oci.image.index.v1+json',
+            manifests: [
+              {
+                mediaType: 'application/vnd.oci.image.manifest.v1+json',
+                digest: expectedDigest,
+                platform: { architecture: 'amd64', os: 'linux' }
+              }
+            ]
+          })
+        };
+      }
+      // GHCR child manifest
+      if (url.includes(`/manifests/${expectedDigest}`)) {
+        return {
+          ok: true,
+          status: 200,
+          headers: {
+            get: (h) => (h.toLowerCase() === 'docker-content-digest' ? expectedDigest : null)
+          },
+          json: async () => ({
+            schemaVersion: 2,
+            mediaType: 'application/vnd.oci.image.manifest.v1+json',
+            annotations: {
+              'org.opencontainers.image.revision': syntheticMergeSha,
+              'org.opencontainers.image.version': 'pr-662',
+              'org.opencontainers.image.source': 'https://github.com/MinionTech/vexilon',
+              'org.opencontainers.image.created': '2026-09-07T20:56:16Z'
+            }
+          })
+        };
+      }
+
+      return {
+        ok: false,
+        status: 404,
+        headers: { get: () => null },
+        json: async () => ({})
+      };
+    };
+
+    const out = path.join(repoDir, 'github_output');
+    process.env.GITHUB_ACTIONS = 'true';
+    process.env.GITHUB_REPOSITORY = 'miniontech/vexilon';
+    process.env.GITHUB_OUTPUT = out;
+    process.env.GITHUB_EVENT_NAME = 'push';
+    process.env.GITHUB_REF = 'refs/heads/main';
+    process.env.GITHUB_SHA = squashSha;
+    process.env.INPUT_PACKAGE = 'agnav';
+    process.env.PACKAGE = 'agnav';
+    process.env.INPUT_REPOSITORY = 'miniontech/vexilon';
+    process.env.REPOSITORY = 'miniontech/vexilon';
+    process.env.INPUT_REVISION = squashSha;
+    process.env.REVISION = squashSha;
+    process.env.DIR = repoDir;
+    process.env.INPUT_DIR = repoDir;
+    process.env.TOKEN = 'mock-token';
+    process.env.INPUT_TOKEN = 'mock-token';
+
+    await runMain();
+
+    const outputContent = fs.readFileSync(out, 'utf8');
+    assert.match(outputContent, new RegExp(expectedDigest), 'output must contain resolved image digest');
+    assert.match(outputContent, /pr=662/, 'output must contain resolved PR number 662');
+  } finally {
+    global.fetch = origFetch;
+    process.exit = origExit;
+    process.chdir(cwd);
+    restoreEnv(saved);
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+test('probeTag resolves synthetic PR merge revision via OCI version and source annotations when unauthenticated', async () => {
+  const { probeTag, matchesCandidate } = require('../index.js');
+  const origFetch = global.fetch;
+
+  const squashSha = '07ac254b246bcb9829d95827a17c92cba219bf92';
+  const headSha = '746d271f4975c5d5572129d3ecd3bc92416b0f90';
+  const syntheticMergeSha = 'b48f3d437680b943cab0121ec5b043e2494a0d6e';
+  const expectedDigest = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
+  global.fetch = async (url) => {
+    if (url.includes('/manifests/pr-662')) {
+      return {
+        ok: true,
+        status: 200,
+        headers: {
+          get: (h) => (h.toLowerCase() === 'docker-content-digest' ? expectedDigest : null)
+        },
+        json: async () => ({
+          mediaType: 'application/vnd.oci.image.manifest.v1+json',
+          digest: expectedDigest,
+          annotations: {
+            'org.opencontainers.image.revision': syntheticMergeSha,
+            'org.opencontainers.image.version': 'pr-662',
+            'org.opencontainers.image.source': 'https://github.com/MinionTech/vexilon',
+            'org.opencontainers.image.created': '2026-09-07T20:56:16Z'
+          }
+        })
+      };
+    }
+    return { ok: false, status: 404, headers: { get: () => null }, json: async () => ({}) };
+  };
+
+  try {
+    const candidates = [squashSha];
+    const prMap = { [squashSha]: headSha };
+    const prNumMap = { [squashSha]: '662' };
+    const prMergeMap = {};
+
+    const res = await probeTag(
+      'miniontech/vexilon/agnav',
+      'pr-662',
+      'mock-bearer',
+      'ghcr.io',
+      candidates,
+      prMap,
+      prNumMap,
+      {},
+      {},
+      false,
+      prMergeMap,
+      null, // No token (unauthenticated / offline)
+      'miniontech/vexilon'
+    );
+
+    assert.ok(res, 'probeTag should succeed via OCI version/source annotation match');
+    assert.strictEqual(res.sha, squashSha);
+    assert.strictEqual(res.digest, expectedDigest);
+    assert.strictEqual(
+      matchesCandidate(syntheticMergeSha, 'pr-662', candidates, prMap, prNumMap, prMergeMap),
+      true,
+      'matchesCandidate should accept verified synthetic merge sha'
+    );
+  } finally {
+    global.fetch = origFetch;
+  }
+});
+
+test('probeTag and matchesCandidate strictly reject unrelated revision even if tagged pr-99 and token present', async () => {
+  const { probeTag, matchesCandidate } = require('../index.js');
+  const origFetch = global.fetch;
+
+  const squashSha = '07ac254b246bcb9829d95827a17c92cba219bf92';
+  const headSha = '746d271f4975c5d5572129d3ecd3bc92416b0f90';
+  const unrelatedSha = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
+  const expectedDigest = 'sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
+
+  global.fetch = async (url) => {
+    // GitHub API commit lookup for unrelated commit
+    if (url.includes(`/commits/${unrelatedSha}`)) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          sha: unrelatedSha,
+          parents: [{ sha: '1111111111111111111111111111111111111111' }, { sha: '2222222222222222222222222222222222222222' }],
+          commit: { message: 'totally unrelated commit' }
+        })
+      };
+    }
+    if (url.includes('/manifests/pr-662')) {
+      return {
+        ok: true,
+        status: 200,
+        headers: {
+          get: (h) => (h.toLowerCase() === 'docker-content-digest' ? expectedDigest : null)
+        },
+        json: async () => ({
+          mediaType: 'application/vnd.oci.image.manifest.v1+json',
+          digest: expectedDigest,
+          annotations: {
+            'org.opencontainers.image.revision': unrelatedSha,
+            'org.opencontainers.image.version': 'pr-999', // mismatched PR version
+            'org.opencontainers.image.source': 'https://github.com/MinionTech/vexilon'
+          }
+        })
+      };
+    }
+    return { ok: false, status: 404, headers: { get: () => null }, json: async () => ({}) };
+  };
+
+  try {
+    const candidates = [squashSha];
+    const prMap = { [squashSha]: headSha };
+    const prNumMap = { [squashSha]: '662' };
+    const prMergeMap = {};
+
+    const res = await probeTag(
+      'miniontech/vexilon/agnav',
+      'pr-662',
+      'mock-bearer',
+      'ghcr.io',
+      candidates,
+      prMap,
+      prNumMap,
+      {},
+      {},
+      false,
+      prMergeMap,
+      'mock-token',
+      'miniontech/vexilon'
+    );
+
+    assert.strictEqual(res, null, 'probeTag must reject unrelated revision');
+    assert.strictEqual(
+      matchesCandidate(unrelatedSha, 'pr-662', candidates, prMap, prNumMap, prMergeMap),
+      false,
+      'matchesCandidate must reject unrelated revision'
+    );
+  } finally {
+    global.fetch = origFetch;
+  }
+});
+
+test('runMain resolves multiple packages (frontend, rctool) on squash-merged main branch', async () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const os = require('node:os');
+  const { runMain } = require('../index.js');
+  const origFetch = global.fetch;
+  const origExit = process.exit;
+  const saved = snapshotEnv();
+  const cwd = process.cwd();
+
+  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'multi-pkg-test-'));
+  try {
+    process.exit = (code) => {
+      throw new Error(`process.exit called with code ${code}`);
+    };
+    process.chdir(repoDir);
+    execFileSync('git', ['init', '-b', 'main'], { encoding: 'utf8' });
+    execFileSync('git', ['config', 'user.name', 'test'], { encoding: 'utf8' });
+    execFileSync('git', ['config', 'user.email', 'test@example.com'], { encoding: 'utf8' });
+    execFileSync('git', ['remote', 'add', 'origin', 'https://github.com/bcgov/nr-hydrometric-rating-curve.git'], { encoding: 'utf8' });
+
+    fs.writeFileSync(path.join(repoDir, 'file.txt'), 'base');
+    execFileSync('git', ['add', '.'], { encoding: 'utf8' });
+    execFileSync('git', ['commit', '-m', 'initial base commit'], { encoding: 'utf8' });
+
+    fs.writeFileSync(path.join(repoDir, 'file.txt'), 'squash');
+    execFileSync('git', ['add', '.'], { encoding: 'utf8' });
+    execFileSync('git', ['commit', '-m', 'chore(deps): lock file maintenance (#383)'], {
+      encoding: 'utf8'
+    });
+
+    const squashSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    const headSha = '637f189b2e0aed0a8d0b4af224f62af1ffd1bd50';
+    const syntheticMergeSha = '64a5a332364b27b8998f1af66926cda2cc667ddd';
+    const frontendDigest = 'sha256:1111111111111111111111111111111111111111111111111111111111111111';
+    const rctoolDigest = 'sha256:2222222222222222222222222222222222222222222222222222222222222222';
+
+    global.fetch = async (url) => {
+      if (url.includes(`/commits/${squashSha}/pulls`)) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [
+            {
+              number: 383,
+              head: { sha: headSha },
+              merge_commit_sha: squashSha,
+              title: 'chore(deps): lock file maintenance'
+            }
+          ]
+        };
+      }
+      if (url.includes(`/commits/${syntheticMergeSha}`)) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            sha: syntheticMergeSha,
+            parents: [{ sha: '8c8d1730b7e8b2ac0510d50036bcb528ac3ea2e6' }, { sha: headSha }],
+            commit: { message: `Merge ${headSha} into 8c8d1730b7e8b2ac0510d50036bcb528ac3ea2e6` }
+          })
+        };
+      }
+      if (url.endsWith('/manifests/latest')) {
+        return {
+          ok: false,
+          status: 401,
+          headers: {
+            get: (h) =>
+              h.toLowerCase() === 'www-authenticate'
+                ? 'Bearer realm="https://ghcr.io/token",service="ghcr.io"'
+                : null
+          },
+          json: async () => ({})
+        };
+      }
+      if (url.includes('/token?')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          json: async () => ({ token: 'mock-token' })
+        };
+      }
+      // Manifests for frontend
+      if (url.includes('/frontend/manifests/pr-383')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: {
+            get: (h) => (h.toLowerCase() === 'docker-content-digest' ? frontendDigest : null)
+          },
+          json: async () => ({
+            schemaVersion: 2,
+            mediaType: 'application/vnd.oci.image.manifest.v1+json',
+            digest: frontendDigest,
+            annotations: {
+              'org.opencontainers.image.revision': syntheticMergeSha,
+              'org.opencontainers.image.version': 'pr-383',
+              'org.opencontainers.image.source': 'https://github.com/bcgov/nr-hydrometric-rating-curve'
+            }
+          })
+        };
+      }
+      // Manifests for rctool
+      if (url.includes('/rctool/manifests/pr-383')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: {
+            get: (h) => (h.toLowerCase() === 'docker-content-digest' ? rctoolDigest : null)
+          },
+          json: async () => ({
+            schemaVersion: 2,
+            mediaType: 'application/vnd.oci.image.manifest.v1+json',
+            digest: rctoolDigest,
+            annotations: {
+              'org.opencontainers.image.revision': syntheticMergeSha,
+              'org.opencontainers.image.version': 'pr-383',
+              'org.opencontainers.image.source': 'https://github.com/bcgov/nr-hydrometric-rating-curve'
+            }
+          })
+        };
+      }
+      return { ok: false, status: 404, headers: { get: () => null }, json: async () => ({}) };
+    };
+
+    const out = path.join(repoDir, 'github_output');
+    process.env.GITHUB_ACTIONS = 'true';
+    process.env.GITHUB_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
+    process.env.GITHUB_OUTPUT = out;
+    process.env.GITHUB_EVENT_NAME = 'push';
+    process.env.GITHUB_REF = 'refs/heads/main';
+    process.env.GITHUB_SHA = squashSha;
+    process.env.INPUT_PACKAGE = 'frontend, rctool';
+    process.env.PACKAGE = 'frontend, rctool';
+    process.env.INPUT_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
+    process.env.REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
+    process.env.INPUT_REVISION = squashSha;
+    process.env.REVISION = squashSha;
+    process.env.DIR = repoDir;
+    process.env.INPUT_DIR = repoDir;
+    process.env.TOKEN = 'mock-token';
+    process.env.INPUT_TOKEN = 'mock-token';
+
+    await runMain();
+
+    const outputContent = fs.readFileSync(out, 'utf8');
+    assert.match(outputContent, new RegExp(frontendDigest), 'output must contain frontend digest');
+    assert.match(outputContent, new RegExp(rctoolDigest), 'output must contain rctool digest');
+    assert.match(outputContent, /pr=383/, 'output must contain resolved PR number 383');
+  } finally {
+    global.fetch = origFetch;
+    process.exit = origExit;
+    process.chdir(cwd);
+    restoreEnv(saved);
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+test('runMain resolves PR image when running on PR head commit checkout', async () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const os = require('node:os');
+  const { runMain } = require('../index.js');
+  const origFetch = global.fetch;
+  const origExit = process.exit;
+  const saved = snapshotEnv();
+  const cwd = process.cwd();
+
+  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pr-head-test-'));
+  try {
+    process.exit = (code) => {
+      throw new Error(`process.exit called with code ${code}`);
+    };
+    process.chdir(repoDir);
+    execFileSync('git', ['init', '-b', 'main'], { encoding: 'utf8' });
+    execFileSync('git', ['config', 'user.name', 'test'], { encoding: 'utf8' });
+    execFileSync('git', ['config', 'user.email', 'test@example.com'], { encoding: 'utf8' });
+    execFileSync('git', ['remote', 'add', 'origin', 'https://github.com/bcgov/nr-hydrometric-rating-curve.git'], { encoding: 'utf8' });
+
+    fs.writeFileSync(path.join(repoDir, 'file.txt'), 'base');
+    execFileSync('git', ['add', '.'], { encoding: 'utf8' });
+    execFileSync('git', ['commit', '-m', 'base commit'], { encoding: 'utf8' });
+
+    execFileSync('git', ['checkout', '-b', 'renovate/feature'], { encoding: 'utf8' });
+    fs.writeFileSync(path.join(repoDir, 'file.txt'), 'feature update');
+    execFileSync('git', ['add', '.'], { encoding: 'utf8' });
+    execFileSync('git', ['commit', '-m', 'feature commit'], { encoding: 'utf8' });
+
+    const headSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    const syntheticMergeSha = '7777777777777777777777777777777777777777';
+    const expectedDigest = 'sha256:3333333333333333333333333333333333333333333333333333333333333333';
+
+    global.fetch = async (url) => {
+      if (url.includes(`/commits/${headSha}/pulls`)) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [
+            {
+              number: 400,
+              head: { sha: headSha },
+              title: 'feature PR'
+            }
+          ]
+        };
+      }
+      if (url.includes(`/commits/${syntheticMergeSha}`)) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            sha: syntheticMergeSha,
+            parents: [{ sha: 'base-sha' }, { sha: headSha }],
+            commit: { message: `Merge ${headSha} into base-sha` }
+          })
+        };
+      }
+      if (url.endsWith('/manifests/latest')) {
+        return {
+          ok: false,
+          status: 401,
+          headers: {
+            get: (h) =>
+              h.toLowerCase() === 'www-authenticate'
+                ? 'Bearer realm="https://ghcr.io/token",service="ghcr.io"'
+                : null
+          },
+          json: async () => ({})
+        };
+      }
+      if (url.includes('/token?')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          json: async () => ({ token: 'mock-token' })
+        };
+      }
+      if (url.includes('/manifests/pr-400')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: {
+            get: (h) => (h.toLowerCase() === 'docker-content-digest' ? expectedDigest : null)
+          },
+          json: async () => ({
+            schemaVersion: 2,
+            mediaType: 'application/vnd.oci.image.manifest.v1+json',
+            digest: expectedDigest,
+            annotations: {
+              'org.opencontainers.image.revision': syntheticMergeSha,
+              'org.opencontainers.image.version': 'pr-400',
+              'org.opencontainers.image.source': 'https://github.com/bcgov/nr-hydrometric-rating-curve'
+            }
+          })
+        };
+      }
+      return { ok: false, status: 404, headers: { get: () => null }, json: async () => ({}) };
+    };
+
+    const out = path.join(repoDir, 'github_output');
+    process.env.GITHUB_ACTIONS = 'true';
+    process.env.GITHUB_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
+    process.env.GITHUB_OUTPUT = out;
+    process.env.GITHUB_EVENT_NAME = 'pull_request';
+    process.env.GITHUB_REF = 'refs/pull/400/head';
+    process.env.GITHUB_SHA = headSha;
+    process.env.INPUT_PACKAGE = 'frontend';
+    process.env.PACKAGE = 'frontend';
+    process.env.INPUT_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
+    process.env.REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
+    process.env.INPUT_REVISION = headSha;
+    process.env.REVISION = headSha;
+    process.env.DIR = repoDir;
+    process.env.INPUT_DIR = repoDir;
+    process.env.TOKEN = 'mock-token';
+    process.env.INPUT_TOKEN = 'mock-token';
+
+    await runMain();
+
+    const outputContent = fs.readFileSync(out, 'utf8');
+    assert.match(outputContent, new RegExp(expectedDigest), 'output must contain resolved image digest');
+    assert.match(outputContent, /pr=400/, 'output must contain resolved PR number 400');
+  } finally {
+    global.fetch = origFetch;
+    process.exit = origExit;
+    process.chdir(cwd);
+    restoreEnv(saved);
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+test('runMain resolves PR image when squash commit is walked back via max_depth', async () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const os = require('node:os');
+  const { runMain } = require('../index.js');
+  const origFetch = global.fetch;
+  const origExit = process.exit;
+  const saved = snapshotEnv();
+  const cwd = process.cwd();
+
+  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'walkback-test-'));
+  try {
+    process.exit = (code) => {
+      throw new Error(`process.exit called with code ${code}`);
+    };
+    process.chdir(repoDir);
+    execFileSync('git', ['init', '-b', 'main'], { encoding: 'utf8' });
+    execFileSync('git', ['config', 'user.name', 'test'], { encoding: 'utf8' });
+    execFileSync('git', ['config', 'user.email', 'test@example.com'], { encoding: 'utf8' });
+    execFileSync('git', ['remote', 'add', 'origin', 'https://github.com/bcgov/nr-hydrometric-rating-curve.git'], { encoding: 'utf8' });
+
+    fs.writeFileSync(path.join(repoDir, 'file.txt'), 'base');
+    execFileSync('git', ['add', '.'], { encoding: 'utf8' });
+    execFileSync('git', ['commit', '-m', 'initial commit'], { encoding: 'utf8' });
+
+    // Commit 1: squash merge commit of PR #500
+    fs.writeFileSync(path.join(repoDir, 'file.txt'), 'feature');
+    execFileSync('git', ['add', '.'], { encoding: 'utf8' });
+    execFileSync('git', ['commit', '-m', 'feat: cool feature (#500)'], { encoding: 'utf8' });
+    const squashSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+
+    // Commit 2: docs update (no image)
+    fs.writeFileSync(path.join(repoDir, 'README.md'), 'docs');
+    execFileSync('git', ['add', '.'], { encoding: 'utf8' });
+    execFileSync('git', ['commit', '-m', 'docs: update readme'], { encoding: 'utf8' });
+
+    // Commit 3: chore bump (no image)
+    fs.writeFileSync(path.join(repoDir, 'version.txt'), '1.0.1');
+    execFileSync('git', ['add', '.'], { encoding: 'utf8' });
+    execFileSync('git', ['commit', '-m', 'chore: bump version'], { encoding: 'utf8' });
+    const headCommit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+
+    const prHeadSha = '5555555555555555555555555555555555555555';
+    const syntheticMergeSha = '6666666666666666666666666666666666666666';
+    const expectedDigest = 'sha256:5555555555555555555555555555555555555555555555555555555555555555';
+
+    global.fetch = async (url) => {
+      if (url.includes(`/commits/${squashSha}/pulls`)) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [
+            {
+              number: 500,
+              head: { sha: prHeadSha },
+              merge_commit_sha: squashSha,
+              title: 'feat: cool feature'
+            }
+          ]
+        };
+      }
+      if (url.includes(`/commits/${syntheticMergeSha}`)) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            sha: syntheticMergeSha,
+            parents: [{ sha: 'base-sha' }, { sha: prHeadSha }],
+            commit: { message: `Merge ${prHeadSha} into base-sha` }
+          })
+        };
+      }
+      if (url.endsWith('/manifests/latest')) {
+        return {
+          ok: false,
+          status: 401,
+          headers: {
+            get: (h) =>
+              h.toLowerCase() === 'www-authenticate'
+                ? 'Bearer realm="https://ghcr.io/token",service="ghcr.io"'
+                : null
+          },
+          json: async () => ({})
+        };
+      }
+      if (url.includes('/token?')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          json: async () => ({ token: 'mock-token' })
+        };
+      }
+      if (url.includes('/manifests/pr-500')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: {
+            get: (h) => (h.toLowerCase() === 'docker-content-digest' ? expectedDigest : null)
+          },
+          json: async () => ({
+            schemaVersion: 2,
+            mediaType: 'application/vnd.oci.image.manifest.v1+json',
+            digest: expectedDigest,
+            annotations: {
+              'org.opencontainers.image.revision': syntheticMergeSha,
+              'org.opencontainers.image.version': 'pr-500',
+              'org.opencontainers.image.source': 'https://github.com/bcgov/nr-hydrometric-rating-curve'
+            }
+          })
+        };
+      }
+      return { ok: false, status: 404, headers: { get: () => null }, json: async () => ({}) };
+    };
+
+    const out = path.join(repoDir, 'github_output');
+    process.env.GITHUB_ACTIONS = 'true';
+    process.env.GITHUB_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
+    process.env.GITHUB_OUTPUT = out;
+    process.env.GITHUB_EVENT_NAME = 'push';
+    process.env.GITHUB_REF = 'refs/heads/main';
+    process.env.GITHUB_SHA = headCommit;
+    process.env.INPUT_PACKAGE = 'frontend';
+    process.env.PACKAGE = 'frontend';
+    process.env.INPUT_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
+    process.env.REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
+    process.env.INPUT_REVISION = headCommit;
+    process.env.REVISION = headCommit;
+    process.env.MAX_DEPTH = '5';
+    process.env.INPUT_MAX_DEPTH = '5';
+    process.env.DIR = repoDir;
+    process.env.INPUT_DIR = repoDir;
+    process.env.TOKEN = 'mock-token';
+    process.env.INPUT_TOKEN = 'mock-token';
+
+    await runMain();
+
+    const outputContent = fs.readFileSync(out, 'utf8');
+    assert.match(outputContent, new RegExp(expectedDigest), 'must walk back and find squash PR image');
+    assert.match(outputContent, /pr=500/, 'must set resolved PR number 500');
+  } finally {
+    global.fetch = origFetch;
+    process.exit = origExit;
+    process.chdir(cwd);
+    restoreEnv(saved);
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+test('probeTag rejects image when source repository is mismatched (security check)', async () => {
+  const { probeTag, matchesCandidate } = require('../index.js');
+  const origFetch = global.fetch;
+
+  const candSha = '07ac254b246bcb9829d95827a17c92cba219bf92';
+  const headSha = '746d271f4975c5d5572129d3ecd3bc92416b0f90';
+  const spoofedSha = '4444444444444444444444444444444444444444';
+  const expectedDigest = 'sha256:9999999999999999999999999999999999999999999999999999999999999999';
+
+  global.fetch = async (url) => {
+    if (url.includes('/manifests/pr-662')) {
+      return {
+        ok: true,
+        status: 200,
+        headers: {
+          get: (h) => (h.toLowerCase() === 'docker-content-digest' ? expectedDigest : null)
+        },
+        json: async () => ({
+          mediaType: 'application/vnd.oci.image.manifest.v1+json',
+          digest: expectedDigest,
+          annotations: {
+            'org.opencontainers.image.revision': spoofedSha,
+            'org.opencontainers.image.version': 'pr-662',
+            'org.opencontainers.image.source': 'https://github.com/attacker/malicious'
+          }
+        })
+      };
+    }
+    return { ok: false, status: 404, headers: { get: () => null }, json: async () => ({}) };
+  };
+
+  try {
+    const candidates = [candSha];
+    const prMap = { [candSha]: headSha };
+    const prNumMap = { [candSha]: '662' };
+    const prMergeMap = {};
+
+    const res = await probeTag(
+      'miniontech/vexilon/agnav',
+      'pr-662',
+      'mock-bearer',
+      'ghcr.io',
+      candidates,
+      prMap,
+      prNumMap,
+      {},
+      {},
+      false,
+      prMergeMap,
+      null, // unauthenticated
+      'miniontech/vexilon' // expected repo
+    );
+
+    assert.strictEqual(res, null, 'probeTag must reject mismatched source repository');
+  } finally {
+    global.fetch = origFetch;
+  }
+});
+
+test('probeTag rejects image with missing revision label even if tagged pr-662', async () => {
+  const { probeTag } = require('../index.js');
+  const origFetch = global.fetch;
+
+  const candSha = '07ac254b246bcb9829d95827a17c92cba219bf92';
+  const headSha = '746d271f4975c5d5572129d3ecd3bc92416b0f90';
+  const expectedDigest = 'sha256:8888888888888888888888888888888888888888888888888888888888888888';
+
+  global.fetch = async (url) => {
+    if (url.includes('/manifests/pr-662')) {
+      return {
+        ok: true,
+        status: 200,
+        headers: {
+          get: (h) => (h.toLowerCase() === 'docker-content-digest' ? expectedDigest : null)
+        },
+        json: async () => ({
+          mediaType: 'application/vnd.oci.image.manifest.v1+json',
+          digest: expectedDigest,
+          annotations: {
+            // Missing org.opencontainers.image.revision entirely!
+            'org.opencontainers.image.version': 'pr-662',
+            'org.opencontainers.image.source': 'https://github.com/MinionTech/vexilon'
+          }
+        })
+      };
+    }
+    return { ok: false, status: 404, headers: { get: () => null }, json: async () => ({}) };
+  };
+
+  try {
+    const candidates = [candSha];
+    const prMap = { [candSha]: headSha };
+    const prNumMap = { [candSha]: '662' };
+    const prMergeMap = {};
+
+    const res = await probeTag(
+      'miniontech/vexilon/agnav',
+      'pr-662',
+      'mock-bearer',
+      'ghcr.io',
+      candidates,
+      prMap,
+      prNumMap,
+      {},
+      {},
+      false,
+      prMergeMap,
+      'mock-token',
+      'miniontech/vexilon'
+    );
+
+    assert.strictEqual(res, null, 'probeTag must reject image without revision label');
+  } finally {
+    global.fetch = origFetch;
+  }
+});
+
+test('probeTag verifies synthetic PR merge revision via local git parentage without API token', async () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const os = require('node:os');
+  const { probeTag, matchesCandidate } = require('../index.js');
+  const origFetch = global.fetch;
+  const cwd = process.cwd();
+
+  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'git-parent-test-'));
+  try {
+    process.chdir(repoDir);
+    execFileSync('git', ['init', '-b', 'main'], { encoding: 'utf8' });
+    execFileSync('git', ['config', 'user.name', 'test'], { encoding: 'utf8' });
+    execFileSync('git', ['config', 'user.email', 'test@example.com'], { encoding: 'utf8' });
+
+    fs.writeFileSync(path.join(repoDir, 'file.txt'), 'base');
+    execFileSync('git', ['add', '.'], { encoding: 'utf8' });
+    execFileSync('git', ['commit', '-m', 'base commit'], { encoding: 'utf8' });
+
+    execFileSync('git', ['checkout', '-b', 'pr-branch'], { encoding: 'utf8' });
+    fs.writeFileSync(path.join(repoDir, 'pr.txt'), 'pr code');
+    execFileSync('git', ['add', '.'], { encoding: 'utf8' });
+    execFileSync('git', ['commit', '-m', 'pr head commit'], { encoding: 'utf8' });
+    const prHeadSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+
+    execFileSync('git', ['checkout', 'main'], { encoding: 'utf8' });
+    // Create a merge commit locally simulating synthetic merge ref
+    execFileSync('git', ['merge', '--no-ff', 'pr-branch', '-m', `Merge ${prHeadSha} into main`], {
+      encoding: 'utf8'
+    });
+    const mergeSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+
+    const expectedDigest = 'sha256:7777777777777777777777777777777777777777777777777777777777777777';
+
+    global.fetch = async (url) => {
+      if (url.includes('/manifests/pr-123')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: {
+            get: (h) => (h.toLowerCase() === 'docker-content-digest' ? expectedDigest : null)
+          },
+          json: async () => ({
+            mediaType: 'application/vnd.oci.image.manifest.v1+json',
+            digest: expectedDigest,
+            annotations: {
+              'org.opencontainers.image.revision': mergeSha
+            }
+          })
+        };
+      }
+      return { ok: false, status: 404, headers: { get: () => null }, json: async () => ({}) };
+    };
+
+    const candidates = [prHeadSha];
+    const prMap = { [prHeadSha]: prHeadSha };
+    const prNumMap = { [prHeadSha]: '123' };
+    const prMergeMap = {};
+
+    const res = await probeTag(
+      'bcgov/repo/pkg',
+      'pr-123',
+      'mock-bearer',
+      'ghcr.io',
+      candidates,
+      prMap,
+      prNumMap,
+      {},
+      {},
+      false,
+      prMergeMap,
+      null, // no API token
+      'bcgov/repo'
+    );
+
+    assert.ok(res, 'probeTag must verify via local git parentage');
+    assert.strictEqual(res.sha, prHeadSha);
+    assert.strictEqual(res.digest, expectedDigest);
+  } finally {
+    global.fetch = origFetch;
+    process.chdir(cwd);
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+

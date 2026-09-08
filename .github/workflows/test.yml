@@ -530,6 +530,31 @@ jobs:
           fi
           echo "✅ ${PACKAGE}: resolved correctly"
 
+      - id: track-head
+        name: Resolve HEAD commit on target main via image-tracker action
+        uses: $/image-tracker
+        with:
+          package: ${{ matrix.package }}
+          revision: HEAD
+          repository: ${{ matrix.repo }}
+          dir: target
+          max_depth: 20
+
+      - name: Verify HEAD action outputs
+        env:
+          PACKAGE: ${{ matrix.package }}
+          EXPECTED_DIGEST: ${{ steps.discover.outputs.digest }}
+          GOT_DIGEST: ${{ steps.track-head.outputs.digest }}
+        run: |
+          set -euo pipefail
+          echo "HEAD resolved digest: ${GOT_DIGEST}"
+          echo "Expected digest:      ${EXPECTED_DIGEST}"
+          if [[ "$GOT_DIGEST" != "$EXPECTED_DIGEST" ]]; then
+            echo "::error::${PACKAGE}: HEAD commit failed to resolve expected digest: got ${GOT_DIGEST} expected ${EXPECTED_DIGEST}"
+            exit 1
+          fi
+          echo "✅ ${PACKAGE}: HEAD commit resolved correctly"
+
   # ─── WORKFLOW NOTIFIER ──────────────────────────────────────────────────────
   test-notifier:
     name: Test Workflow Notifier
