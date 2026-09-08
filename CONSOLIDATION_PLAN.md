@@ -25,7 +25,6 @@ actions/
 ├── diff-triggers/
 ├── get-pr/
 ├── image-tracker/
-├── pr-description-add/
 ├── sysdig-monitor/
 ├── test-and-analyse/
 ├── workflow-notifier/  # (Formerly report-failures)
