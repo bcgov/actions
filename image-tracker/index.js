@@ -477,7 +477,8 @@ async function probeTag(
   debug = false,
   prMergeMap = {},
   token = null,
-  sourceRepository = ''
+  sourceRepository = '',
+  diagnostics = null
 ) {
   const base = `https://${registry}/v2/${imagePath}`;
   const accept =
@@ -489,13 +490,40 @@ async function probeTag(
 
   try {
     const res = await fetch(`${base}/manifests/${tag}`, { headers });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      if (diagnostics) {
+        diagnostics.set(tag, {
+          tag,
+          status: res.status,
+          statusText: res.statusText || (res.status === 404 ? 'Not Found' : 'Error'),
+          reason: res.status === 404 ? 'Tag not found' : `HTTP ${res.status}`,
+          details:
+            res.status === 404
+              ? 'Tag does not exist in registry'
+              : res.status === 401 || res.status === 403
+                ? 'Authentication or permission error'
+                : `HTTP ${res.status} ${res.statusText || ''}`.trim()
+        });
+      }
+      return null;
+    }
 
     const mdigest = res.headers.get('docker-content-digest') || '';
     const body = await res.json();
     let finalDigest = mdigest || body.digest || '';
 
-    if (!finalDigest) return null;
+    if (!finalDigest) {
+      if (diagnostics) {
+        diagnostics.set(tag, {
+          tag,
+          status: res.status || 200,
+          statusText: 'OK',
+          reason: 'Missing digest',
+          details: 'Manifest response contains no digest'
+        });
+      }
+      return null;
+    }
 
     const mtype = body.mediaType || '';
     let revision = body.annotations?.['org.opencontainers.image.revision'] || '';
@@ -730,6 +758,8 @@ async function probeTag(
           if (created) auditMsg += ` | Built: ${created}`;
           logInfo(auditMsg);
 
+          if (diagnostics) diagnostics.delete(tag);
+
           return {
             sha: cand,
             digest: finalDigest,
@@ -741,8 +771,52 @@ async function probeTag(
       }
     }
 
+    if (diagnostics) {
+      const isPrTag = tag.startsWith('pr-') || /^[0-9]+$/.test(tag);
+      if (!revision) {
+        diagnostics.set(tag, {
+          tag,
+          status: 200,
+          statusText: 'OK',
+          reason: 'Missing revision label',
+          details: isPrTag
+            ? 'Mutable PR tags require org.opencontainers.image.revision label'
+            : 'Image lacks org.opencontainers.image.revision label'
+        });
+      } else {
+        const normSource = normalizeRepo(repositoryFromRemoteUrl(source) || source);
+        const normRepo = normalizeRepo(repositoryFromRemoteUrl(sourceRepository) || sourceRepository);
+        if (normSource && normRepo && normSource !== normRepo) {
+          diagnostics.set(tag, {
+            tag,
+            status: 200,
+            statusText: 'OK',
+            reason: 'Source repository mismatch',
+            details: `Image source '${source}' does not match expected repository '${sourceRepository}'`
+          });
+        } else {
+          diagnostics.set(tag, {
+            tag,
+            status: 200,
+            statusText: 'OK',
+            reason: 'Revision mismatch',
+            details: `Image revision '${revision.slice(0, 7)}' does not match candidate commit(s)`
+          });
+        }
+      }
+    }
+
     return null;
   } catch (err) {
+    if (diagnostics) {
+      diagnostics.set(tag, {
+        tag,
+        status: 'Error',
+        statusText: 'Network Error',
+        reason: 'Network error',
+        details: err.message || String(err)
+      });
+    }
     return null;
   }
 }
@@ -762,7 +836,8 @@ async function resolveDigestIterative({
   digestPrMap = {},
   debug = false,
   prMergeMap = {},
-  sourceRepository = ''
+  sourceRepository = '',
+  diagnostics = null
 }) {
   const owner = repository.split('/')[0];
   const pkg = imagePath.split('/').slice(1).join('/') || imagePath;
@@ -867,6 +942,14 @@ async function resolveDigestIterative({
     }
   }
 
+  if (diagnostics) {
+    diagnostics.iterativeTagsScanned = tagsSeen;
+    diagnostics.iterativeStatus =
+      tagsSeen > 0
+        ? `Scanned ${tagsSeen} tag(s); no matching candidate revision found`
+        : 'Registry returned no tags';
+  }
+
   return { hit: null, code: 1 };
 }
 
@@ -931,6 +1014,336 @@ function renderStepSummary({
 
   lines.push('');
   return lines.join('\n');
+}
+
+// ---- Diagnostic Summary Renderer (Issue #187) -----------------------------
+function generateGuidance({
+  candidates = [],
+  missing = [],
+  packageDiagnostics = {},
+  maxDepth = 10,
+  sourceRepository = ''
+}) {
+  const items = [];
+  let has404 = false;
+  let all404 = true;
+  let hasRevisionMismatch = false;
+  let hasMissingLabel = false;
+  let hasSourceMismatch = false;
+  let hasAuthError = false;
+  let totalProbes = 0;
+
+  for (const pkg of missing) {
+    const diag = packageDiagnostics[pkg];
+    if (diag?.bearerFailed) {
+      hasAuthError = true;
+    }
+    const probedMap = diag?.probedTags;
+    if (probedMap && probedMap.size > 0) {
+      for (const info of probedMap.values()) {
+        totalProbes++;
+        if (info.status === 404) {
+          has404 = true;
+        } else {
+          all404 = false;
+        }
+        if (info.status === 401 || info.status === 403) {
+          hasAuthError = true;
+        }
+        if (info.reason === 'Revision mismatch') {
+          hasRevisionMismatch = true;
+        }
+        if (info.reason === 'Missing revision label') {
+          hasMissingLabel = true;
+        }
+        if (info.reason === 'Source repository mismatch') {
+          hasSourceMismatch = true;
+        }
+      }
+    }
+  }
+
+  if (hasAuthError) {
+    items.push({
+      title: 'Authentication / Permission Error',
+      message: 'Failed to authenticate with the container registry or access the container package.',
+      subItems: [
+        'Ensure the workflow provides a valid token with `packages: read` permissions.',
+        'If referencing an internal or private package, verify the caller or token has read access.'
+      ]
+    });
+  }
+
+  if (totalProbes > 0 && all404) {
+    items.push({
+      title: 'Missing Image Tags (All Probes Returned HTTP 404)',
+      message: 'None of the candidate tags exist in the container registry.',
+      subItems: [
+        'Verify that the image builder workflow (e.g. `builder-ghcr`) ran and completed successfully.',
+        'Verify that the `package` input matches the container image name published to the registry.',
+        'If the package was recently published, check for delays in registry replication or publishing step errors.'
+      ]
+    });
+  } else if (has404) {
+    items.push({
+      title: 'Some Tags Not Found (HTTP 404)',
+      message: 'One or more candidate tags do not exist in the registry.',
+      subItems: [
+        'Ensure your builder workflow publishes candidate tags like `sha-<commit>` and `pr-<number>`.'
+      ]
+    });
+  }
+
+  if (hasRevisionMismatch) {
+    items.push({
+      title: 'Revision Mismatch (Stale Image Tag)',
+      message: 'A candidate tag exists in the registry, but its `org.opencontainers.image.revision` label points to a different commit.',
+      subItems: [
+        'The tag (e.g. `pr-<number>`) may be stale from an earlier build that has not been overwritten yet.',
+        'Verify that the image builder workflow was triggered and completed for the latest push.'
+      ]
+    });
+  }
+
+  if (hasMissingLabel) {
+    items.push({
+      title: 'Missing OCI Revision Label',
+      message: 'The image exists in the registry but lacks the `org.opencontainers.image.revision` annotation.',
+      subItems: [
+        'Mutable tags like `pr-<number>` require `org.opencontainers.image.revision` to securely verify the commit.',
+        'Ensure your Docker build sets OCI labels (e.g. via `docker/metadata-action` with `type=ref,event=pr`).'
+      ]
+    });
+  }
+
+  if (hasSourceMismatch) {
+    items.push({
+      title: 'Source Repository Mismatch',
+      message: 'The image exists but its `org.opencontainers.image.source` annotation does not match the source repository.',
+      subItems: [
+        'Image-tracker strictly rejects images from mismatched source repositories to prevent cross-repository supply-chain attacks.',
+        `Verify that the image was built and published from the expected repository: '${sourceRepository}'.`
+      ]
+    });
+  }
+
+  if (candidates.length >= maxDepth) {
+    items.push({
+      title: 'Search Depth Reached',
+      message: `Inspected ${candidates.length} commit(s) reaching the configured 'max_depth' (${maxDepth}).`,
+      subItems: [
+        'If the image was built from an older commit in git history, increase the `max_depth` input (e.g. `max_depth: 25`).'
+      ]
+    });
+  }
+
+  if (items.length === 0) {
+    items.push({
+      title: 'General Troubleshooting',
+      message: 'No matching container images were found for the candidate commits.',
+      subItems: [
+        'Check that the container build action ran successfully before image-tracker in your pipeline.',
+        'Confirm the target package name matches between build and tracking workflows.'
+      ]
+    });
+  }
+
+  return items;
+}
+
+function renderDiagnosticMarkdown({
+  registry = 'ghcr.io',
+  candidates = [],
+  missing = [],
+  packageDiagnostics = {},
+  imagePaths = {},
+  prNumMap = {},
+  prMap = {},
+  candidateMessages = {},
+  maxDepth = 10,
+  sourceRepository = ''
+}) {
+  const lines = [
+    '### ❌ Image Tracker — Resolution Failure Diagnostics',
+    '',
+    `Failed to resolve container image for package(s): ${missing.map((p) => `**\`${p.replace(/\|/g, '\\|')}\`**`).join(', ')}`,
+    '',
+    `#### 📋 Candidate Commits Inspected (Search Depth: ${candidates.length})`,
+    ''
+  ];
+
+  if (candidates.length === 0) {
+    lines.push('*No candidate commits were found.*');
+  } else {
+    lines.push('| Commit | PR | Head Commit | Message |');
+    lines.push('| :--- | :--- | :--- | :--- |');
+    for (const cand of candidates) {
+      const shortSha = cand.slice(0, 7);
+      const prNum = prNumMap[cand];
+      const prStr = prNum ? `#${prNum}` : '—';
+      const headSha = prMap[cand];
+      const headStr = headSha ? `\`${headSha.slice(0, 7)}\`` : '—';
+      const rawMsg = candidateMessages[cand] || '';
+      const msgStr = rawMsg.replace(/\\/g, '\\\\').replace(/\|/g, '\\|') || '—';
+      lines.push(`| \`${shortSha}\` | ${prStr} | ${headStr} | ${msgStr} |`);
+    }
+  }
+  lines.push('');
+
+  for (const pkg of missing) {
+    const pkgDisplay = pkg.replace(/\|/g, '\\|');
+    const path = imagePaths[pkg] || pkg;
+    const pathDisplay = path.replace(/\|/g, '\\|');
+    lines.push(`#### 🔍 Candidate Tags Probed: \`${pkgDisplay}\` (\`${registry}/${pathDisplay}\`)`);
+    lines.push('');
+
+    const diag = packageDiagnostics[pkg];
+    if (diag?.bearerFailed) {
+      lines.push(
+        `> [!WARNING]\n> **Registry Authentication Failed**: Failed to obtain registry token for \`${registry}/${pathDisplay}\`. Check repository token permissions.`
+      );
+      lines.push('');
+      continue;
+    }
+
+    const probedMap = diag?.probedTags;
+    if (!probedMap || probedMap.size === 0) {
+      lines.push('*No candidate tags were probed.*');
+    } else {
+      lines.push('| Probed Tag | HTTP Status | Rejection Reason | Details |');
+      lines.push('| :--- | :--- | :--- | :--- |');
+      for (const [tag, info] of probedMap.entries()) {
+        const tagDisplay = `\`${tag.replace(/\|/g, '\\|')}\``;
+        const statusDisplay = info.status === 200 ? '200 OK' : (info.status === 404 ? '404 Not Found' : String(info.status));
+        const reasonDisplay = (info.reason || '').replace(/\|/g, '\\|');
+        const detailsDisplay = (info.details || '').replace(/\|/g, '\\|');
+        lines.push(`| ${tagDisplay} | ${statusDisplay} | ${reasonDisplay} | ${detailsDisplay} |`);
+      }
+    }
+    lines.push('');
+
+    if (diag?.iterativeStatus) {
+      lines.push(`*Iterative Scan*: ${diag.iterativeStatus}`);
+      lines.push('');
+    }
+  }
+
+  lines.push('#### 💡 Targeted Guidance');
+  lines.push('');
+
+  const guidance = generateGuidance({
+    candidates,
+    missing,
+    packageDiagnostics,
+    maxDepth,
+    sourceRepository
+  });
+
+  for (const item of guidance) {
+    lines.push(`- **${item.title}**: ${item.message}`);
+    if (item.subItems && item.subItems.length > 0) {
+      for (const sub of item.subItems) {
+        lines.push(`  - ${sub}`);
+      }
+    }
+  }
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+function renderDiagnosticConsole({
+  registry = 'ghcr.io',
+  candidates = [],
+  missing = [],
+  packageDiagnostics = {},
+  imagePaths = {},
+  prNumMap = {},
+  prMap = {},
+  candidateMessages = {},
+  maxDepth = 10,
+  sourceRepository = ''
+}) {
+  const border = '='.repeat(80);
+  const lines = [
+    border,
+    '❌ Image Tracker — Resolution Failure Diagnostics',
+    border,
+    `Failed to resolve container image for package(s): ${missing.join(', ')}`,
+    '',
+    `📋 Candidate Commits Inspected (Search Depth: ${candidates.length}):`
+  ];
+
+  if (candidates.length === 0) {
+    lines.push('  (No candidate commits found)');
+  } else {
+    for (const cand of candidates) {
+      const shortSha = cand.slice(0, 7);
+      const prNum = prNumMap[cand];
+      const prStr = (prNum ? `PR #${prNum}` : 'PR —').padEnd(8, ' ');
+      const headSha = prMap[cand];
+      const headStr = headSha ? `(head: ${headSha.slice(0, 7)}) ` : '';
+      const rawMsg = candidateMessages[cand] || '';
+      lines.push(`  • ${shortSha} | ${prStr} | ${headStr}${rawMsg}`);
+    }
+  }
+  lines.push('');
+
+  for (const pkg of missing) {
+    const path = imagePaths[pkg] || pkg;
+    lines.push(`🔍 Candidate Tags Probed for '${pkg}' (${registry}/${path}):`);
+    const diag = packageDiagnostics[pkg];
+    if (diag?.bearerFailed) {
+      lines.push('  ❌ Registry Authentication Failed: Could not obtain token. Check permissions.');
+      lines.push('');
+      continue;
+    }
+
+    const probedMap = diag?.probedTags;
+    if (!probedMap || probedMap.size === 0) {
+      lines.push('  (No candidate tags were probed)');
+    } else {
+      for (const [tag, info] of probedMap.entries()) {
+        const tagPad = tag.padEnd(16, ' ');
+        const statusStr = `[${info.status === 200 ? '200 OK' : (info.status === 404 ? '404 Not Found' : String(info.status))}]`.padEnd(16, ' ');
+        const detailsStr = info.details ? `: ${info.details}` : '';
+        lines.push(`  • ${tagPad} ${statusStr} ${info.reason}${detailsStr}`);
+      }
+    }
+
+    if (diag?.iterativeStatus) {
+      lines.push(`  [i] Iterative Scan: ${diag.iterativeStatus}`);
+    }
+    lines.push('');
+  }
+
+  const guidance = generateGuidance({
+    candidates,
+    missing,
+    packageDiagnostics,
+    maxDepth,
+    sourceRepository
+  });
+
+  lines.push('💡 Targeted Guidance:');
+  for (const item of guidance) {
+    lines.push(`  • ${item.title}: ${item.message}`);
+    if (item.subItems && item.subItems.length > 0) {
+      for (const sub of item.subItems) {
+        lines.push(`    - ${sub}`);
+      }
+    }
+  }
+  lines.push(border);
+
+  return lines.join('\n');
+}
+
+function renderDiagnosticSummary(options) {
+  return {
+    markdown: renderDiagnosticMarkdown(options),
+    text: renderDiagnosticConsole(options)
+  };
 }
 
 // ---- Helper to Extract PR Number from Payload / Object --------------------
@@ -1128,6 +1541,7 @@ async function runMain() {
     }
   }
 
+  const candidateMessages = {};
   for (const sha of candidates) {
     candidateMap[sha] = true;
     let msg = '';
@@ -1137,6 +1551,7 @@ async function runMain() {
         stdio: ['pipe', 'pipe', 'ignore']
       }).trim();
     } catch (err) {}
+    candidateMessages[sha] = msg;
 
     const prFromMsg = msg.match(/\(#([0-9]+)\)/);
     if (prFromMsg) {
@@ -1219,12 +1634,22 @@ async function runMain() {
   logInfo(`Starting SHA: ${pivotSha}`);
 
   const imagesJson = {};
+  const packageDiagnostics = {};
 
   for (const pkg of pkgOrder) {
     const path = imagePaths[pkg];
+    packageDiagnostics[pkg] = {
+      probedTags: new Map(),
+      bearerFailed: false,
+      iterativeTagsScanned: 0,
+      iterativeStatus: ''
+    };
+    const pkgDiag = packageDiagnostics[pkg];
+
     const bearer = await registryToken(path, registry, token);
     if (!bearer) {
       logError(`Failed to obtain registry token for ${path}.`);
+      pkgDiag.bearerFailed = true;
       missing.push(pkg);
       continue;
     }
@@ -1265,7 +1690,8 @@ async function runMain() {
           debug,
           prMergeMap,
           token,
-          sourceRepository
+          sourceRepository,
+          pkgDiag.probedTags
         );
         if (res) break;
       }
@@ -1289,7 +1715,8 @@ async function runMain() {
         digestPrMap,
         debug,
         prMergeMap,
-        sourceRepository
+        sourceRepository,
+        diagnostics: pkgDiag
       });
 
       if (iterRes.code === 2) {
@@ -1374,6 +1801,28 @@ async function runMain() {
       );
       return;
     }
+
+    const { markdown: diagMarkdown, text: diagText } = renderDiagnosticSummary({
+      registry,
+      candidates,
+      missing,
+      packageDiagnostics,
+      imagePaths,
+      prNumMap,
+      prMap,
+      candidateMessages,
+      maxDepth,
+      sourceRepository
+    });
+
+    console.error('\n' + diagText);
+
+    if (env.GITHUB_ACTIONS === 'true') {
+      if (env.GITHUB_STEP_SUMMARY) {
+        fs.appendFileSync(env.GITHUB_STEP_SUMMARY, '\n' + diagMarkdown + '\n');
+      }
+    }
+
     logError(`Failed to resolve: ${missing.join(' ')}`);
     process.exit(1);
   }
@@ -1395,6 +1844,10 @@ module.exports = {
   probeTag,
   resolveDigestIterative,
   renderStepSummary,
+  renderDiagnosticMarkdown,
+  renderDiagnosticConsole,
+  renderDiagnosticSummary,
+  generateGuidance,
   extractPrNumber,
   isForkPr,
   publishRepository,

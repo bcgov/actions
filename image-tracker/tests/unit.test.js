@@ -2545,5 +2545,239 @@ test('strict token input: consumes only INPUT_TOKEN and ignores legacy fallbacks
   }
 });
 
+test('renderDiagnosticMarkdown renders candidate commits table and probed tags table with reasons', () => {
+  const { renderDiagnosticMarkdown } = require('../index.js');
+
+  const candidates = ['07ac254b246bcb9829d95827a17c92cba219bf92', '746d271f4975c5d5572129d3ecd3bc92416b0f90'];
+  const prNumMap = { '07ac254b246bcb9829d95827a17c92cba219bf92': '662' };
+  const prMap = { '07ac254b246bcb9829d95827a17c92cba219bf92': '746d271f4975c5d5572129d3ecd3bc92416b0f90' };
+  const candidateMessages = {
+    '07ac254b246bcb9829d95827a17c92cba219bf92': 'chore(deps): update dependency uv (#662)',
+    '746d271f4975c5d5572129d3ecd3bc92416b0f90': 'feat: initial feature'
+  };
+
+  const probedTags = new Map([
+    [
+      'pr-662',
+      {
+        tag: 'pr-662',
+        status: 200,
+        reason: 'Revision mismatch',
+        details: "Image revision '4444444' does not match candidate commit(s)"
+      }
+    ],
+    [
+      'sha-07ac254',
+      {
+        tag: 'sha-07ac254',
+        status: 404,
+        reason: 'Tag not found',
+        details: 'Tag does not exist in registry'
+      }
+    ]
+  ]);
+
+  const packageDiagnostics = {
+    frontend: {
+      probedTags,
+      bearerFailed: false,
+      iterativeStatus: 'Scanned 5 tag(s); no matching candidate revision found'
+    }
+  };
+
+  const md = renderDiagnosticMarkdown({
+    registry: 'ghcr.io',
+    candidates,
+    missing: ['frontend'],
+    packageDiagnostics,
+    imagePaths: { frontend: 'bcgov/myapp/frontend' },
+    prNumMap,
+    prMap,
+    candidateMessages,
+    maxDepth: 10,
+    sourceRepository: 'bcgov/myapp'
+  });
+
+  assert.ok(md.includes('### ❌ Image Tracker — Resolution Failure Diagnostics'));
+  assert.ok(md.includes('| `07ac254` | #662 | `746d271` | chore(deps): update dependency uv (#662) |'));
+  assert.ok(md.includes('| `746d271` | — | — | feat: initial feature |'));
+  assert.ok(md.includes('#### 🔍 Candidate Tags Probed: `frontend` (`ghcr.io/bcgov/myapp/frontend`)'));
+  assert.ok(md.includes('| `pr-662` | 200 OK | Revision mismatch | Image revision \'4444444\' does not match candidate commit(s) |'));
+  assert.ok(md.includes('| `sha-07ac254` | 404 Not Found | Tag not found | Tag does not exist in registry |'));
+  assert.ok(md.includes('*Iterative Scan*: Scanned 5 tag(s); no matching candidate revision found'));
+  assert.ok(md.includes('Revision Mismatch (Stale Image Tag)'));
+});
+
+test('generateGuidance emits targeted troubleshooting guidance for all rejection categories', () => {
+  const { generateGuidance } = require('../index.js');
+
+  // Case 1: all 404s
+  const g1 = generateGuidance({
+    candidates: ['c1'],
+    missing: ['api'],
+    packageDiagnostics: {
+      api: {
+        probedTags: new Map([['sha-c1', { status: 404, reason: 'Tag not found' }]])
+      }
+    },
+    maxDepth: 10
+  });
+  assert.ok(g1.some((i) => i.title.includes('Missing Image Tags (All Probes Returned HTTP 404)')));
+
+  // Case 2: revision mismatch + missing label + depth reached
+  const g2 = generateGuidance({
+    candidates: ['c1', 'c2'],
+    missing: ['api'],
+    packageDiagnostics: {
+      api: {
+        probedTags: new Map([
+          ['pr-10', { status: 200, reason: 'Revision mismatch' }],
+          ['pr-11', { status: 200, reason: 'Missing revision label' }]
+        ])
+      }
+    },
+    maxDepth: 2
+  });
+  assert.ok(g2.some((i) => i.title.includes('Revision Mismatch')));
+  assert.ok(g2.some((i) => i.title.includes('Missing OCI Revision Label')));
+  assert.ok(g2.some((i) => i.title.includes('Search Depth Reached')));
+
+  // Case 3: source mismatch + auth error
+  const g3 = generateGuidance({
+    candidates: ['c1'],
+    missing: ['api'],
+    packageDiagnostics: {
+      api: {
+        bearerFailed: true,
+        probedTags: new Map([
+          ['pr-10', { status: 200, reason: 'Source repository mismatch' }]
+        ])
+      }
+    },
+    maxDepth: 10,
+    sourceRepository: 'bcgov/origin'
+  });
+  assert.ok(g3.some((i) => i.title.includes('Authentication / Permission Error')));
+  assert.ok(g3.some((i) => i.title.includes('Source Repository Mismatch')));
+});
+
+test('renderDiagnosticConsole formats readable plain text diagnostic table', () => {
+  const { renderDiagnosticConsole } = require('../index.js');
+
+  const text = renderDiagnosticConsole({
+    registry: 'ghcr.io',
+    candidates: ['07ac254b246bcb9829d95827a17c92cba219bf92'],
+    missing: ['frontend'],
+    packageDiagnostics: {
+      frontend: {
+        probedTags: new Map([
+          [
+            'pr-662',
+            {
+              status: 200,
+              reason: 'Revision mismatch',
+              details: "Image revision '4444444' does not match"
+            }
+          ]
+        ])
+      }
+    },
+    imagePaths: { frontend: 'bcgov/myapp/frontend' },
+    prNumMap: { '07ac254b246bcb9829d95827a17c92cba219bf92': '662' },
+    candidateMessages: { '07ac254b246bcb9829d95827a17c92cba219bf92': 'chore: update uv' },
+    maxDepth: 10,
+    sourceRepository: 'bcgov/myapp'
+  });
+
+  assert.ok(text.includes('❌ Image Tracker — Resolution Failure Diagnostics'));
+  assert.ok(text.includes('07ac254 | PR #662  | chore: update uv'));
+  assert.ok(text.includes('pr-662'));
+  assert.ok(text.includes('[200 OK]'));
+  assert.ok(text.includes('Revision mismatch: Image revision \'4444444\' does not match'));
+  assert.ok(text.includes('Targeted Guidance:'));
+});
+
+test('runMain writes diagnostic summary to GITHUB_STEP_SUMMARY on resolution failure', async () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const { execSync } = require('node:child_process');
+  const { runMain } = require('../index.js');
+  const origFetch = global.fetch;
+  const saved = snapshotEnv();
+  const cwd = process.cwd();
+  const origExit = process.exit;
+  let exitCode;
+  process.exit = (code) => {
+    exitCode = code;
+    throw new Error('__exit__');
+  };
+
+  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'git-diag-fail-'));
+  try {
+    execSync('git init -b main', { cwd: repoDir });
+    execSync('git config user.email "test@example.com"', { cwd: repoDir });
+    execSync('git config user.name "Test"', { cwd: repoDir });
+    fs.writeFileSync(path.join(repoDir, 'file.txt'), 'content');
+    execSync('git add . && git commit -m "feat: initial commit"', { cwd: repoDir });
+    const headSha = execSync('git rev-parse HEAD', { cwd: repoDir, encoding: 'utf8' }).trim();
+
+    global.fetch = async () => ({
+      ok: false,
+      status: 404,
+      statusText: 'Not Found',
+      headers: { get: () => null },
+      json: async () => ({})
+    });
+
+    const summaryFile = path.join(repoDir, 'step_summary.md');
+    process.env.GITHUB_ACTIONS = 'true';
+    process.env.GITHUB_STEP_SUMMARY = summaryFile;
+    process.env.GITHUB_OUTPUT = path.join(repoDir, 'github_output');
+    process.env.GITHUB_EVENT_NAME = 'push';
+    process.env.GITHUB_REF = 'refs/heads/main';
+    process.env.GITHUB_REPOSITORY = 'bcgov/foo';
+    process.env.INPUT_PACKAGE = 'frontend';
+    process.env.PACKAGE = 'frontend';
+    process.env.INPUT_REPOSITORY = 'bcgov/foo';
+    process.env.REPOSITORY = 'bcgov/foo';
+    process.env.INPUT_REVISION = headSha;
+    process.env.REVISION = headSha;
+    process.env.DIR = repoDir;
+    process.env.INPUT_DIR = repoDir;
+    delete process.env.TOKEN;
+    delete process.env.INPUT_TOKEN;
+
+    await assert.rejects(() => runMain(), /__exit__/);
+    assert.strictEqual(exitCode, 1);
+
+    assert.ok(fs.existsSync(summaryFile), 'step summary file must exist');
+    const summaryContent = fs.readFileSync(summaryFile, 'utf8');
+    assert.ok(
+      summaryContent.includes('### ❌ Image Tracker — Resolution Failure Diagnostics'),
+      'summary must include diagnostic failure section'
+    );
+    assert.ok(
+      summaryContent.includes('#### 📋 Candidate Commits Inspected'),
+      'summary must include candidate commits table'
+    );
+    assert.ok(
+      summaryContent.includes('#### 🔍 Candidate Tags Probed'),
+      'summary must include probed tags table'
+    );
+    assert.ok(
+      summaryContent.includes('#### 💡 Targeted Guidance'),
+      'summary must include targeted guidance'
+    );
+  } finally {
+    global.fetch = origFetch;
+    process.exit = origExit;
+    process.chdir(cwd);
+    restoreEnv(saved);
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+
 
 
