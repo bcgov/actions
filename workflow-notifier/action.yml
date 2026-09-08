@@ -6,8 +6,9 @@ branding:
 
 inputs:
   token:
-    description: "GitHub token (defaults to github.token)"
-    default: "${{ github.token }}"
+    description: 'Authentication token (defaults to github.token; override with PAT if needed).'
+    default: ${{ github.token }}
+    required: false
   debug:
     description: "Enable debug logging"
     default: "false"

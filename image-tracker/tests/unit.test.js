@@ -597,8 +597,10 @@ const ENV_KEYS = [
   'DIR',
   'INPUT_DIR',
   'GITHUB_TOKEN',
+  'GH_TOKEN',
   'INPUT_GITHUB_TOKEN',
-  'TOKEN'
+  'TOKEN',
+  'INPUT_TOKEN'
 ];
 
 function snapshotEnv() {
@@ -659,8 +661,10 @@ test('runMain fork unresolvable revision exits 0 with empty outputs', async () =
     process.env.DIR = dir;
     process.env.INPUT_DIR = dir;
     delete process.env.GITHUB_TOKEN;
+    delete process.env.GH_TOKEN;
     delete process.env.INPUT_GITHUB_TOKEN;
     delete process.env.TOKEN;
+    delete process.env.INPUT_TOKEN;
     await runMain();
     const text = fs.readFileSync(out, 'utf8');
     assert.match(text, /^images=\{\}$/m);
@@ -708,8 +712,10 @@ test('runMain same-repo unresolvable revision still exits 1', async () => {
       delete process.env.INPUT_REPOSITORY;
       delete process.env.REPOSITORY;
       delete process.env.GITHUB_TOKEN;
+      delete process.env.GH_TOKEN;
       delete process.env.INPUT_GITHUB_TOKEN;
       delete process.env.TOKEN;
+      delete process.env.INPUT_TOKEN;
       await assert.rejects(() => runMain(), /__exit__/);
       assert.strictEqual(exitCode, 1);
     });
@@ -1650,7 +1656,6 @@ test('runMain resolves PR image for squash-merged commit on main when image revi
     process.env.REVISION = squashSha;
     process.env.DIR = repoDir;
     process.env.INPUT_DIR = repoDir;
-    process.env.TOKEN = 'mock-token';
     process.env.INPUT_TOKEN = 'mock-token';
 
     await runMain();
@@ -1952,7 +1957,6 @@ test('runMain resolves multiple packages (frontend, rctool) on squash-merged mai
     process.env.REVISION = squashSha;
     process.env.DIR = repoDir;
     process.env.INPUT_DIR = repoDir;
-    process.env.TOKEN = 'mock-token';
     process.env.INPUT_TOKEN = 'mock-token';
 
     await runMain();
@@ -2087,7 +2091,6 @@ test('runMain resolves PR image when running on PR head commit checkout', async 
     process.env.REVISION = headSha;
     process.env.DIR = repoDir;
     process.env.INPUT_DIR = repoDir;
-    process.env.TOKEN = 'mock-token';
     process.env.INPUT_TOKEN = 'mock-token';
 
     await runMain();
@@ -2236,7 +2239,6 @@ test('runMain resolves PR image when squash commit is walked back via max_depth'
     process.env.INPUT_MAX_DEPTH = '5';
     process.env.DIR = repoDir;
     process.env.INPUT_DIR = repoDir;
-    process.env.TOKEN = 'mock-token';
     process.env.INPUT_TOKEN = 'mock-token';
 
     await runMain();
@@ -2454,5 +2456,94 @@ test('probeTag verifies synthetic PR merge revision via local git parentage with
     fs.rmSync(repoDir, { recursive: true, force: true });
   }
 });
+
+test('strict token input: consumes only INPUT_TOKEN and ignores legacy fallbacks', async () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const { runMain } = require('../index.js');
+  const saved = snapshotEnv();
+  const cwd = process.cwd();
+  const origFetch = global.fetch;
+
+  let capturedAuthHeaders = [];
+
+  global.fetch = async (url, opts = {}) => {
+    if (opts.headers && opts.headers.Authorization) {
+      capturedAuthHeaders.push(opts.headers.Authorization);
+    }
+    if (url.includes('/manifests/')) {
+      return {
+        ok: false,
+        status: 401,
+        headers: {
+          get: (h) => (h.toLowerCase() === 'www-authenticate' ? 'Bearer realm="https://ghcr.io/token",service="ghcr.io"' : null)
+        }
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      headers: {
+        get: () => 'application/json'
+      },
+      json: async () => ({ token: 'mock-bearer' })
+    };
+  };
+
+  try {
+    await withTempGitOrigin('file:///test-strict-token.git', async (dir) => {
+      const out = path.join(dir, 'github_output');
+      const eventPath = path.join(dir, 'event.json');
+      fs.writeFileSync(
+        eventPath,
+        JSON.stringify({
+          pull_request: { number: 1, head: { sha: SHA, repo: { full_name: 'fork/foo' } } }
+        })
+      );
+      process.env.GITHUB_ACTIONS = 'true';
+      process.env.GITHUB_OUTPUT = out;
+      process.env.GITHUB_EVENT_PATH = eventPath;
+      process.env.GITHUB_REPOSITORY = 'bcgov/foo';
+      process.env.GITHUB_EVENT_NAME = 'pull_request';
+      process.env.INPUT_PACKAGE = 'frontend';
+      process.env.PACKAGE = 'frontend';
+      process.env.INPUT_REPOSITORY = 'fork/foo';
+      process.env.REPOSITORY = 'fork/foo';
+      process.env.INPUT_REVISION = SHA;
+      process.env.REVISION = SHA;
+      process.env.DIR = dir;
+      process.env.INPUT_DIR = dir;
+
+      // Case 1: Legacy tokens set, but INPUT_TOKEN not set -> no auth header sent
+      process.env.TOKEN = 'legacy-token';
+      process.env.INPUT_GITHUB_TOKEN = 'legacy-github-token';
+      process.env.GITHUB_TOKEN = 'legacy-ambient-token';
+      process.env.GH_TOKEN = 'legacy-gh-token';
+      delete process.env.INPUT_TOKEN;
+
+      capturedAuthHeaders = [];
+      await runMain();
+      assert.strictEqual(
+        capturedAuthHeaders.length,
+        0,
+        'must not use legacy fallback environment variables'
+      );
+
+      // Case 2: INPUT_TOKEN set -> auth header uses INPUT_TOKEN
+      process.env.INPUT_TOKEN = 'canonical-token';
+      capturedAuthHeaders = [];
+      await runMain();
+      assert.ok(
+        capturedAuthHeaders.some(h => h.includes('canonical-token')),
+        `must use INPUT_TOKEN for authentication; saw ${JSON.stringify(capturedAuthHeaders)}`
+      );
+    });
+  } finally {
+    global.fetch = origFetch;
+    process.chdir(cwd);
+    restoreEnv(saved);
+  }
+});
+
 
 

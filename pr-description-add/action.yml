@@ -10,8 +10,9 @@ inputs:
     description: "Markdown message to use in PR description"
     required: true
   token:
-    description: "GitHub token or a Personal Access Token (PAT)"
+    description: 'Authentication token (defaults to github.token; override with PAT if needed).'
     default: ${{ github.token }}
+    required: false
   debug:
     description: "Enable debug logging"
     default: "false"

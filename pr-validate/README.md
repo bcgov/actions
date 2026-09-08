@@ -30,6 +30,9 @@ permissions:
     # Optional: Enforce Conventional Commits format on the PR title
     # Default: "true"
     conventional_commits: "true"
+
+    # Optional: Authentication token (defaults to github.token; override with PAT if needed)
+    token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
 ### Fork pull requests

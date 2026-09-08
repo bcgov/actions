@@ -30,8 +30,9 @@ inputs:
     description: 'Working directory containing the git repository.'
     default: '.'
   token:
-    description: 'GitHub token or registry token for auth (defaults to github.token).'
+    description: 'Authentication token (defaults to github.token; override with PAT if needed).'
     default: ${{ github.token }}
+    required: false
   max_tags:
     description: 'Upper bound on tags inspected per package before failing.'
     default: '500'
