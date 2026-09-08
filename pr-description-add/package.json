@@ -31,16 +31,17 @@
     "braces": "^3.0.3"
   },
   "devDependencies": {
+    "@eslint/compat": "^2.1.0",
     "@types/node": "^24.0.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
     "@vercel/ncc": "^0.45.0",
-    "@eslint/compat": "^2.1.0",
     "eslint": "^10.0.0",
     "eslint-plugin-github": "^6.0.0",
     "eslint-plugin-prettier": "^5.0.0",
+    "@typescript/native": "npm:typescript@^7.0.2",
     "prettier": "^3.0.2",
-    "typescript": "^6.0.0"
+    "typescript": "npm:@typescript/typescript6@^6.0.2"
   },
   "overrides": {
     "eslint-plugin-github": {
