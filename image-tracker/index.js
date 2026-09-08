@@ -953,6 +953,11 @@ async function resolveDigestIterative({
   return { hit: null, code: 1 };
 }
 
+// ---- Markdown Table Cell Escaper (Escapes backslashes first, then pipes) ---
+function escapeMarkdownCell(str) {
+  return String(str || '').replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
+}
+
 // ---- Step Summary Renderer ------------------------------------------------
 function renderStepSummary({
   registry = 'ghcr.io',
@@ -963,7 +968,7 @@ function renderStepSummary({
   imagePaths = {},
   images = {}
 }) {
-  const revisionDisplay = revision.replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
+  const revisionDisplay = escapeMarkdownCell(revision);
   let targetStr = '';
   if (pivotSha && (revision.startsWith(pivotSha.slice(0, 7)) || pivotSha.startsWith(revision))) {
     targetStr = `\`${pivotSha.slice(0, 7)}\``;
@@ -981,7 +986,7 @@ function renderStepSummary({
   ];
 
   for (const pkg of pkgOrder) {
-    const pkgDisplay = pkg.replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
+    const pkgDisplay = escapeMarkdownCell(pkg);
     const hitObj = images[pkg];
     const path = imagePaths[pkg] || '';
 
@@ -1166,7 +1171,7 @@ function renderDiagnosticMarkdown({
   const lines = [
     '### ❌ Image Tracker — Resolution Failure Diagnostics',
     '',
-    `Failed to resolve container image for package(s): ${missing.map((p) => `**\`${p.replace(/\|/g, '\\|')}\`**`).join(', ')}`,
+    `Failed to resolve container image for package(s): ${missing.map((p) => `**\`${escapeMarkdownCell(p)}\`**`).join(', ')}`,
     '',
     `#### 📋 Candidate Commits Inspected (Search Depth: ${candidates.length})`,
     ''
@@ -1184,16 +1189,16 @@ function renderDiagnosticMarkdown({
       const headSha = prMap[cand];
       const headStr = headSha ? `\`${headSha.slice(0, 7)}\`` : '—';
       const rawMsg = candidateMessages[cand] || '';
-      const msgStr = rawMsg.replace(/\\/g, '\\\\').replace(/\|/g, '\\|') || '—';
+      const msgStr = escapeMarkdownCell(rawMsg) || '—';
       lines.push(`| \`${shortSha}\` | ${prStr} | ${headStr} | ${msgStr} |`);
     }
   }
   lines.push('');
 
   for (const pkg of missing) {
-    const pkgDisplay = pkg.replace(/\|/g, '\\|');
+    const pkgDisplay = escapeMarkdownCell(pkg);
     const path = imagePaths[pkg] || pkg;
-    const pathDisplay = path.replace(/\|/g, '\\|');
+    const pathDisplay = escapeMarkdownCell(path);
     lines.push(`#### 🔍 Candidate Tags Probed: \`${pkgDisplay}\` (\`${registry}/${pathDisplay}\`)`);
     lines.push('');
 
@@ -1213,10 +1218,10 @@ function renderDiagnosticMarkdown({
       lines.push('| Probed Tag | HTTP Status | Rejection Reason | Details |');
       lines.push('| :--- | :--- | :--- | :--- |');
       for (const [tag, info] of probedMap.entries()) {
-        const tagDisplay = `\`${tag.replace(/\|/g, '\\|')}\``;
+        const tagDisplay = `\`${escapeMarkdownCell(tag)}\``;
         const statusDisplay = info.status === 200 ? '200 OK' : (info.status === 404 ? '404 Not Found' : String(info.status));
-        const reasonDisplay = (info.reason || '').replace(/\|/g, '\\|');
-        const detailsDisplay = (info.details || '').replace(/\|/g, '\\|');
+        const reasonDisplay = escapeMarkdownCell(info.reason);
+        const detailsDisplay = escapeMarkdownCell(info.details);
         lines.push(`| ${tagDisplay} | ${statusDisplay} | ${reasonDisplay} | ${detailsDisplay} |`);
       }
     }
@@ -1844,6 +1849,7 @@ module.exports = {
   probeTag,
   resolveDigestIterative,
   renderStepSummary,
+  escapeMarkdownCell,
   renderDiagnosticMarkdown,
   renderDiagnosticConsole,
   renderDiagnosticSummary,

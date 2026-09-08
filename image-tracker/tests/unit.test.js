@@ -2545,6 +2545,16 @@ test('strict token input: consumes only INPUT_TOKEN and ignores legacy fallbacks
   }
 });
 
+test('escapeMarkdownCell escapes backslashes first, then pipes', () => {
+  const { escapeMarkdownCell } = require('../index.js');
+
+  assert.strictEqual(escapeMarkdownCell('foo|bar'), 'foo\\|bar');
+  assert.strictEqual(escapeMarkdownCell('foo\\bar'), 'foo\\\\bar');
+  assert.strictEqual(escapeMarkdownCell('foo\\|bar'), 'foo\\\\\\|bar');
+  assert.strictEqual(escapeMarkdownCell(''), '');
+  assert.strictEqual(escapeMarkdownCell(null), '');
+});
+
 test('renderDiagnosticMarkdown renders candidate commits table and probed tags table with reasons', () => {
   const { renderDiagnosticMarkdown } = require('../index.js');
 
