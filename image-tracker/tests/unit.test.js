@@ -2788,6 +2788,222 @@ test('runMain writes diagnostic summary to GITHUB_STEP_SUMMARY on resolution fai
   }
 });
 
+test('runMain defaults max_depth to 100 when unset and walks back history', async () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const os = require('node:os');
+  const { runMain } = require('../index.js');
+  const origFetch = global.fetch;
+  const origExit = process.exit;
+  const saved = snapshotEnv();
+  const cwd = process.cwd();
+
+  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'default-depth-test-'));
+  try {
+    process.exit = (code) => {
+      throw new Error(`process.exit called with code ${code}`);
+    };
+    process.chdir(repoDir);
+    execFileSync('git', ['init', '-b', 'main'], { encoding: 'utf8' });
+    execFileSync('git', ['config', 'user.name', 'test'], { encoding: 'utf8' });
+    execFileSync('git', ['config', 'user.email', 'test@example.com'], { encoding: 'utf8' });
+    execFileSync('git', ['remote', 'add', 'origin', 'https://github.com/bcgov/nr-hydrometric-rating-curve.git'], { encoding: 'utf8' });
+
+    fs.writeFileSync(path.join(repoDir, 'file.txt'), 'base');
+    execFileSync('git', ['add', '.'], { encoding: 'utf8' });
+    execFileSync('git', ['commit', '-m', 'initial commit'], { encoding: 'utf8' });
+
+    // Commit 1: squash merge commit of PR #500
+    fs.writeFileSync(path.join(repoDir, 'file.txt'), 'feature');
+    execFileSync('git', ['add', '.'], { encoding: 'utf8' });
+    execFileSync('git', ['commit', '-m', 'feat: cool feature (#500)'], { encoding: 'utf8' });
+    const squashSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+
+    // Commit 2: docs update (no image)
+    fs.writeFileSync(path.join(repoDir, 'README.md'), 'docs');
+    execFileSync('git', ['add', '.'], { encoding: 'utf8' });
+    execFileSync('git', ['commit', '-m', 'docs: update readme'], { encoding: 'utf8' });
+
+    // Commit 3: chore bump (no image)
+    fs.writeFileSync(path.join(repoDir, 'version.txt'), '1.0.1');
+    execFileSync('git', ['add', '.'], { encoding: 'utf8' });
+    execFileSync('git', ['commit', '-m', 'chore: bump version'], { encoding: 'utf8' });
+    const headCommit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+
+    const prHeadSha = '5555555555555555555555555555555555555555';
+    const syntheticMergeSha = '6666666666666666666666666666666666666666';
+    const expectedDigest = 'sha256:5555555555555555555555555555555555555555555555555555555555555555';
+
+    global.fetch = async (url) => {
+      if (url.includes(`/commits/${squashSha}/pulls`)) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [
+            {
+              number: 500,
+              head: { sha: prHeadSha },
+              merge_commit_sha: squashSha,
+              title: 'feat: cool feature'
+            }
+          ]
+        };
+      }
+      if (url.includes(`/commits/${syntheticMergeSha}`)) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            sha: syntheticMergeSha,
+            parents: [{ sha: 'base-sha' }, { sha: prHeadSha }],
+            commit: { message: `Merge ${prHeadSha} into base-sha` }
+          })
+        };
+      }
+      if (url.endsWith('/manifests/latest')) {
+        return {
+          ok: false,
+          status: 401,
+          headers: {
+            get: (h) =>
+              h.toLowerCase() === 'www-authenticate'
+                ? 'Bearer realm="https://ghcr.io/token",service="ghcr.io"'
+                : null
+          },
+          json: async () => ({})
+        };
+      }
+      if (url.includes('/token?')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          json: async () => ({ token: 'mock-token' })
+        };
+      }
+      if (url.includes('/manifests/pr-500')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: {
+            get: (h) => (h.toLowerCase() === 'docker-content-digest' ? expectedDigest : null)
+          },
+          json: async () => ({
+            schemaVersion: 2,
+            mediaType: 'application/vnd.oci.image.manifest.v1+json',
+            digest: expectedDigest,
+            annotations: {
+              'org.opencontainers.image.revision': syntheticMergeSha,
+              'org.opencontainers.image.version': 'pr-500',
+              'org.opencontainers.image.source': 'https://github.com/bcgov/nr-hydrometric-rating-curve'
+            }
+          })
+        };
+      }
+      return { ok: false, status: 404, headers: { get: () => null }, json: async () => ({}) };
+    };
+
+    const out = path.join(repoDir, 'github_output');
+    process.env.GITHUB_ACTIONS = 'true';
+    process.env.GITHUB_STEP_SUMMARY = path.join(repoDir, 'step_summary.md');
+    process.env.GITHUB_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
+    process.env.GITHUB_OUTPUT = out;
+    process.env.GITHUB_EVENT_NAME = 'push';
+    process.env.GITHUB_REF = 'refs/heads/main';
+    process.env.GITHUB_SHA = headCommit;
+    process.env.INPUT_PACKAGE = 'frontend';
+    process.env.PACKAGE = 'frontend';
+    process.env.INPUT_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
+    process.env.REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
+    process.env.INPUT_REVISION = headCommit;
+    process.env.REVISION = headCommit;
+    // Omit MAX_DEPTH entirely - must default to 100!
+    delete process.env.MAX_DEPTH;
+    delete process.env.INPUT_MAX_DEPTH;
+    process.env.DIR = repoDir;
+    process.env.INPUT_DIR = repoDir;
+    process.env.INPUT_TOKEN = 'mock-token';
+
+    await runMain();
+
+    const outputContent = fs.readFileSync(out, 'utf8');
+    assert.match(outputContent, new RegExp(expectedDigest), 'must default to walking 100 commits and find squash PR image');
+    assert.match(outputContent, /pr=500/, 'must set resolved PR number 500');
+  } finally {
+    global.fetch = origFetch;
+    process.exit = origExit;
+    process.chdir(cwd);
+    restoreEnv(saved);
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+test('runMain with required=false exits 0 with empty outputs on same-repo miss', async () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const os = require('node:os');
+  const { runMain } = require('../index.js');
+  const origFetch = global.fetch;
+  const origExit = process.exit;
+  const saved = snapshotEnv();
+  const cwd = process.cwd();
+
+  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'required-false-test-'));
+  try {
+    process.exit = (code) => {
+      throw new Error(`process.exit called with code ${code}`);
+    };
+    process.chdir(repoDir);
+    execFileSync('git', ['init', '-b', 'main'], { encoding: 'utf8' });
+    execFileSync('git', ['config', 'user.name', 'test'], { encoding: 'utf8' });
+    execFileSync('git', ['config', 'user.email', 'test@example.com'], { encoding: 'utf8' });
+    execFileSync('git', ['remote', 'add', 'origin', 'https://github.com/bcgov/nr-hydrometric-rating-curve.git'], { encoding: 'utf8' });
+
+    fs.writeFileSync(path.join(repoDir, 'file.txt'), 'base');
+    execFileSync('git', ['add', '.'], { encoding: 'utf8' });
+    execFileSync('git', ['commit', '-m', 'initial commit'], { encoding: 'utf8' });
+    const headSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+
+    global.fetch = async () => ({
+      ok: false,
+      status: 404,
+      headers: { get: () => null },
+      json: async () => ({})
+    });
+
+    const out = path.join(repoDir, 'github_output');
+    process.env.GITHUB_ACTIONS = 'true';
+    process.env.GITHUB_STEP_SUMMARY = path.join(repoDir, 'step_summary.md');
+    process.env.GITHUB_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
+    process.env.GITHUB_OUTPUT = out;
+    process.env.GITHUB_EVENT_NAME = 'pull_request';
+    process.env.GITHUB_REF = 'refs/pull/384/merge';
+    process.env.GITHUB_SHA = headSha;
+    process.env.INPUT_PACKAGE = 'frontend';
+    process.env.INPUT_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
+    process.env.INPUT_REVISION = headSha;
+    process.env.INPUT_REQUIRED = 'false';
+    process.env.DIR = repoDir;
+    process.env.INPUT_DIR = repoDir;
+    process.env.INPUT_TOKEN = 'mock-token';
+
+    // Must NOT throw process.exit
+    await runMain();
+
+    const outputContent = fs.readFileSync(out, 'utf8');
+    assert.match(outputContent, /digest=\r?\n/, 'must write empty digest output');
+    assert.match(outputContent, /image=\r?\n/, 'must write empty image output');
+    assert.match(outputContent, /images={}\r?\n/, 'must write empty images JSON output');
+  } finally {
+    global.fetch = origFetch;
+    process.exit = origExit;
+    process.chdir(cwd);
+    restoreEnv(saved);
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+
 
 
 

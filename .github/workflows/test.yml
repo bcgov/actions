@@ -537,7 +537,6 @@ jobs:
           revision: HEAD
           repository: ${{ matrix.repo }}
           dir: target
-          max_depth: 20
 
       - name: Verify HEAD action outputs
         env:
