@@ -2938,70 +2938,8 @@ test('runMain defaults max_depth to 100 when unset and walks back history', asyn
   }
 });
 
-test('runMain with required=false exits 0 with empty outputs on same-repo miss', async () => {
-  const fs = require('node:fs');
-  const path = require('node:path');
-  const os = require('node:os');
-  const { runMain } = require('../index.js');
-  const origFetch = global.fetch;
-  const origExit = process.exit;
-  const saved = snapshotEnv();
-  const cwd = process.cwd();
 
-  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'required-false-test-'));
-  try {
-    process.exit = (code) => {
-      throw new Error(`process.exit called with code ${code}`);
-    };
-    process.chdir(repoDir);
-    execFileSync('git', ['init', '-b', 'main'], { encoding: 'utf8' });
-    execFileSync('git', ['config', 'user.name', 'test'], { encoding: 'utf8' });
-    execFileSync('git', ['config', 'user.email', 'test@example.com'], { encoding: 'utf8' });
-    execFileSync('git', ['remote', 'add', 'origin', 'https://github.com/bcgov/nr-hydrometric-rating-curve.git'], { encoding: 'utf8' });
 
-    fs.writeFileSync(path.join(repoDir, 'file.txt'), 'base');
-    execFileSync('git', ['add', '.'], { encoding: 'utf8' });
-    execFileSync('git', ['commit', '-m', 'initial commit'], { encoding: 'utf8' });
-    const headSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-
-    global.fetch = async () => ({
-      ok: false,
-      status: 404,
-      headers: { get: () => null },
-      json: async () => ({})
-    });
-
-    const out = path.join(repoDir, 'github_output');
-    process.env.GITHUB_ACTIONS = 'true';
-    process.env.GITHUB_STEP_SUMMARY = path.join(repoDir, 'step_summary.md');
-    process.env.GITHUB_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
-    process.env.GITHUB_OUTPUT = out;
-    process.env.GITHUB_EVENT_NAME = 'pull_request';
-    process.env.GITHUB_REF = 'refs/pull/384/merge';
-    process.env.GITHUB_SHA = headSha;
-    process.env.INPUT_PACKAGE = 'frontend';
-    process.env.INPUT_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
-    process.env.INPUT_REVISION = headSha;
-    process.env.INPUT_REQUIRED = 'false';
-    process.env.DIR = repoDir;
-    process.env.INPUT_DIR = repoDir;
-    process.env.INPUT_TOKEN = 'mock-token';
-
-    // Must NOT throw process.exit
-    await runMain();
-
-    const outputContent = fs.readFileSync(out, 'utf8');
-    assert.match(outputContent, /digest=\r?\n/, 'must write empty digest output');
-    assert.match(outputContent, /image=\r?\n/, 'must write empty image output');
-    assert.match(outputContent, /images={}\r?\n/, 'must write empty images JSON output');
-  } finally {
-    global.fetch = origFetch;
-    process.exit = origExit;
-    process.chdir(cwd);
-    restoreEnv(saved);
-    fs.rmSync(repoDir, { recursive: true, force: true });
-  }
-});
 
 
 

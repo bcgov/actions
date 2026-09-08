@@ -128,7 +128,6 @@ deploy can skip.
 | `token`        |          | `github.token`       | GitHub token used to mint a GHCR bearer token.                                 |
 | `max_tags`   |          | `500`                | Upper bound on tags inspected per package before failing.                      |
 | `max_depth`  |          | `100`                | Max number of commits back in history to search for an image.                  |
-| `required`   |          | `true`               | Fail the action if any package cannot be resolved. Set to `false` to output empty digests and allow downstream deploy to no-op. |
 
 Package-to-image-path convention:
 - If package name == repository name → `ghcr.io/<owner>/<repo>`

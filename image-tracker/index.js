@@ -1406,7 +1406,6 @@ async function runMain() {
   const token = env.INPUT_TOKEN || '';
   const maxTagsStr = env.MAX_TAGS || env.INPUT_MAX_TAGS || '500';
   const maxDepthStr = env.MAX_DEPTH || env.INPUT_MAX_DEPTH || '100';
-  const isRequired = (env.REQUIRED || env.INPUT_REQUIRED || 'true').toLowerCase() !== 'false';
   const debug = env.DEBUG || env.INPUT_DEBUG || 'false';
 
   if (!/^\d+$/.test(maxTagsStr) || parseInt(maxTagsStr, 10) <= 0) {
@@ -1511,10 +1510,10 @@ async function runMain() {
   }
 
   if (!pivotSha) {
-    if (!isRequired || imageResolveMissIsExpected(eventName, ghRepository, headRepository)) {
+    if (imageResolveMissIsExpected(eventName, ghRepository, headRepository)) {
       logWarn(
-        `Could not resolve revision '${revision}'. ` +
-          `Downstream deploy should no-op on an empty digest.`
+        `Fork pull_request: could not resolve revision '${revision}'. ` +
+          `Downstream deploy should no-op on an empty digest. See ${ACTIONS_FORK_DOCS_URL}`
       );
       writeEmptyGithubOutputs(env);
       return;
@@ -1798,20 +1797,13 @@ async function runMain() {
   }
 
   if (missing.length > 0) {
-    if (!isRequired || imageResolveMissIsExpected(eventName, ghRepository, headRepository)) {
-      if (imageResolveMissIsExpected(eventName, ghRepository, headRepository)) {
-        logWarn(
-          `Fork pull_request: no image in ${registry} for ${missing.join(', ')} at ${repository}. ` +
-            `Downstream deploy should no-op on an empty digest. ` +
-            `Images publish on push to your fork (packages must be public for upstream CI to pull). ` +
-            `See ${ACTIONS_FORK_DOCS_URL}`
-        );
-      } else {
-        logWarn(
-          `Could not resolve image for ${missing.join(', ')} at ${repository}. ` +
-            `'required' is false: downstream deploy should no-op on an empty digest.`
-        );
-      }
+    if (imageResolveMissIsExpected(eventName, ghRepository, headRepository)) {
+      logWarn(
+        `Fork pull_request: no image in ${registry} for ${missing.join(', ')} at ${repository}. ` +
+          `Downstream deploy should no-op on an empty digest. ` +
+          `Images publish on push to your fork (packages must be public for upstream CI to pull). ` +
+          `See ${ACTIONS_FORK_DOCS_URL}`
+      );
       writeEmptyGithubOutputs(env);
       return;
     }

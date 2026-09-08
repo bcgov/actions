@@ -39,10 +39,6 @@ inputs:
   max_depth:
     description: 'Max number of commits back in history to search for an image (default: 100).'
     default: '100'
-  required:
-    description: 'Fail the action if any package cannot be resolved (default: true).'
-    default: 'true'
-    required: false
 
 outputs:
   images:
