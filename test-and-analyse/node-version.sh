@@ -44,8 +44,8 @@ else
     if [ -z "$OUTPUT_VERSION_FILE" ]; then
         for dockerfile in "$DIR/Dockerfile" "$ROOT/Dockerfile"; do
             if [ -f "$dockerfile" ]; then
-                # Match e.g. FROM node:22-bookworm-slim, FROM node:24.20.0, FROM gcr.io/distroless/nodejs20-debian12
-                DETECTED=$(grep -m 1 -oE 'FROM\s+.*node(js)?:?([0-9]+)' "$dockerfile" 2>/dev/null | sed -E 's/.*node(js)?:?([0-9]+).*/\2/' || true)
+                # Match e.g. FROM node:22-bookworm-slim, from --platform=linux/amd64 node:24.20.0, FROM gcr.io/distroless/nodejs20-debian12
+                DETECTED=$(grep -im 1 -oE '^[[:space:]]*FROM[[:space:]]+(--platform=[^[:space:]]+[[:space:]]+)?([^[:space:]]+/)?node(js)?:?[0-9]+' "$dockerfile" 2>/dev/null | grep -oE '[0-9]+$' || true)
                 if [ -n "$DETECTED" ]; then
                     OUTPUT_VERSION="$DETECTED"
                     echo "Auto-discovered Node version '$OUTPUT_VERSION' from '$dockerfile'"

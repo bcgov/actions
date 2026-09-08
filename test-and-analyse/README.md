@@ -56,8 +56,10 @@ permissions:
     dir: frontend
 
     ### Versioning
-    # Node.js version (for Node projects). If omitted, automatically detected from
-    # project files (.node-version, .nvmrc, Dockerfile, package.json). Defaults to "24".
+    # Node.js version (for Node projects). If omitted, automatically detected.
+    # Resolution order: node_version; node_version_file; .node-version / .nvmrc
+    # (project dir, then root); Dockerfile (project dir, then root); package.json
+    # engines.node (project dir, then root); then default: "24".
     # node_version: "24"
     # node_version_file: ".nvmrc"  # Optional explicit version file
     

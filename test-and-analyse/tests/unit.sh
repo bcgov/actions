@@ -224,6 +224,11 @@ mkdir -p "$TMP_DIR/nv-nvmrc" && echo "22.0.0" > "$TMP_DIR/nv-nvmrc/.nvmrc"
 mkdir -p "$TMP_DIR/nv-dockerfile-slim" && echo "FROM node:22-bookworm-slim" > "$TMP_DIR/nv-dockerfile-slim/Dockerfile"
 mkdir -p "$TMP_DIR/nv-dockerfile-distroless" && echo "FROM gcr.io/distroless/nodejs20-debian12" > "$TMP_DIR/nv-dockerfile-distroless/Dockerfile"
 mkdir -p "$TMP_DIR/nv-dockerfile-fullver" && echo "FROM docker.io/library/node:24.20.0" > "$TMP_DIR/nv-dockerfile-fullver/Dockerfile"
+mkdir -p "$TMP_DIR/nv-dockerfile-commented"
+cat << 'EOF' > "$TMP_DIR/nv-dockerfile-commented/Dockerfile"
+# FROM node:18-alpine
+  from --platform=linux/amd64 docker.io/library/node:22.14.0-bookworm
+EOF
 mkdir -p "$TMP_DIR/nv-pkg-engines" && echo '{"name":"test","engines":{"node":">=20.0.0"}}' > "$TMP_DIR/nv-pkg-engines/package.json"
 mkdir -p "$TMP_DIR/nv-pkg-no-engines" && echo '{"name":"test"}' > "$TMP_DIR/nv-pkg-no-engines/package.json"
 mkdir -p "$TMP_DIR/nv-monorepo/packages/app" && echo "20" > "$TMP_DIR/nv-monorepo/.nvmrc"
@@ -251,6 +256,7 @@ assert_node_version "" "" "$TMP_DIR/nv-monorepo/packages/app" "$TMP_DIR/nv-monor
 assert_node_version "" "" "$TMP_DIR/nv-dockerfile-slim" "$TMP_DIR/nv-dockerfile-slim" "22|" "auto-discover: extracts Node version from node:22-bookworm-slim"
 assert_node_version "" "" "$TMP_DIR/nv-dockerfile-distroless" "$TMP_DIR/nv-dockerfile-distroless" "20|" "auto-discover: extracts Node version from distroless nodejs20"
 assert_node_version "" "" "$TMP_DIR/nv-dockerfile-fullver" "$TMP_DIR/nv-dockerfile-fullver" "24|" "auto-discover: extracts major version from node:24.20.0"
+assert_node_version "" "" "$TMP_DIR/nv-dockerfile-commented" "$TMP_DIR/nv-dockerfile-commented" "22|" "auto-discover: ignores commented FROM and handles lowercase/platform flag"
 
 # --- 5. Auto-discover package.json engines.node ---
 assert_node_version "" "" "$TMP_DIR/nv-pkg-engines" "$TMP_DIR/nv-pkg-engines" "|$TMP_DIR/nv-pkg-engines/package.json" "auto-discover: delegates to package.json when engines.node is defined"
