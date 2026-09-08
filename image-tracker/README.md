@@ -42,6 +42,14 @@ wrapper does this for you when `metadata_tags: true` (the default from v4.3.0).
 Images that lack the `org.opencontainers.image.revision` label cannot be
 resolved — there is no workaround short of rebuilding them with proper labels.
 
+## Diagnostics and Troubleshooting
+
+When package resolution fails, `image-tracker` automatically outputs a diagnostic report to the workflow run logs and the GitHub Step Summary. The diagnostic report includes:
+
+1. **Candidate Commits Table**: Summarizes commits walked up to `max_depth`, associated PR numbers, and commit messages.
+2. **Probed Candidate Tags Table**: Lists candidate tags probed in the registry (`sha-<commit>`, `pr-<number>`, etc.), HTTP response status, and exact rejection reasons (e.g. 404 Not Found, revision label mismatch, or source repository mismatch).
+3. **Targeted Guidance**: Actionable recommendations tailored to the specific failure reasons observed (e.g. verifying builder workflows, adjusting `max_depth`, or verifying permissions).
+
 ## Usage
 
 ```yaml
