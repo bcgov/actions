@@ -56,8 +56,10 @@ permissions:
     dir: frontend
 
     ### Versioning
-    # Node.js version (for Node projects). Default: "24"
-    node_version: "24"
+    # Node.js version (for Node projects). If omitted, automatically detected from
+    # project files (.node-version, .nvmrc, Dockerfile, package.json). Defaults to "24".
+    # node_version: "24"
+    # node_version_file: ".nvmrc"  # Optional explicit version file
     
     # Java version (for Java projects). Default: "21"
     java_version: "21"

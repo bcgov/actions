@@ -139,6 +139,127 @@ assert_fails "npm" "java" "java: fails fast on node manager 'npm'"
 assert_fails "gradle" "python" "python: fails fast on java manager 'gradle'"
 assert_fails "npm" "unsupported" "fails fast on unsupported language"
 
+# ==============================================================================
+# Node.js Version Determination & Auto-Detection Tests
+# ==============================================================================
+NODE_VERSION_SCRIPT="${SCRIPT_DIR}/../node-version.sh"
+
+determine_node_version() {
+    local VER="$1"
+    local VER_FILE="$2"
+    local DIR="${3:-.}"
+    local ROOT="${4:-.}"
+
+    local out_file
+    out_file="$(mktemp)"
+
+    if GITHUB_OUTPUT="$out_file" \
+       INPUT_NODE_VERSION="$VER" \
+       INPUT_NODE_VERSION_FILE="$VER_FILE" \
+       INPUT_DIR="$DIR" \
+       INPUT_CHECKOUT_PATH="$ROOT" \
+       bash "$NODE_VERSION_SCRIPT" >/dev/null 2>&1; then
+        local ver_out=""
+        local file_out=""
+        if grep -q '^node_version=' "$out_file"; then
+            ver_out="$(grep '^node_version=' "$out_file" | cut -d= -f2-)"
+        fi
+        if grep -q '^node_version_file=' "$out_file"; then
+            file_out="$(grep '^node_version_file=' "$out_file" | cut -d= -f2-)"
+        fi
+        rm -f "$out_file"
+        printf '%s|%s' "$ver_out" "$file_out"
+        return 0
+    else
+        rm -f "$out_file"
+        return 1
+    fi
+}
+
+assert_node_version() {
+    local ver_in="$1"
+    local file_in="$2"
+    local dir_in="$3"
+    local root_in="$4"
+    local expected="$5" # format: version|version_file
+    local name="$6"
+
+    local actual
+    actual="$(determine_node_version "$ver_in" "$file_in" "$dir_in" "$root_in")"
+
+    if [[ "$actual" == "$expected" ]]; then
+        echo "✓ $name"
+        passed=$((passed + 1))
+    else
+        echo "✗ $name"
+        echo "  Expected: '$expected'"
+        echo "  Actual:   '$actual'"
+        failed=$((failed + 1))
+    fi
+}
+
+assert_node_version_fails() {
+    local ver_in="$1"
+    local file_in="$2"
+    local dir_in="$3"
+    local root_in="$4"
+    local name="$5"
+
+    if ! determine_node_version "$ver_in" "$file_in" "$dir_in" "$root_in" 2>/dev/null; then
+        echo "✓ $name"
+        passed=$((passed + 1))
+    else
+        echo "✗ $name"
+        echo "  Expected failure, but command succeeded"
+        failed=$((failed + 1))
+    fi
+}
+
+echo ""
+echo "Running node-version auto-detection unit tests..."
+
+# Node version fixtures
+mkdir -p "$TMP_DIR/nv-node-version" && echo "20.10.0" > "$TMP_DIR/nv-node-version/.node-version"
+mkdir -p "$TMP_DIR/nv-nvmrc" && echo "22.0.0" > "$TMP_DIR/nv-nvmrc/.nvmrc"
+mkdir -p "$TMP_DIR/nv-dockerfile-slim" && echo "FROM node:22-bookworm-slim" > "$TMP_DIR/nv-dockerfile-slim/Dockerfile"
+mkdir -p "$TMP_DIR/nv-dockerfile-distroless" && echo "FROM gcr.io/distroless/nodejs20-debian12" > "$TMP_DIR/nv-dockerfile-distroless/Dockerfile"
+mkdir -p "$TMP_DIR/nv-dockerfile-fullver" && echo "FROM docker.io/library/node:24.20.0" > "$TMP_DIR/nv-dockerfile-fullver/Dockerfile"
+mkdir -p "$TMP_DIR/nv-pkg-engines" && echo '{"name":"test","engines":{"node":">=20.0.0"}}' > "$TMP_DIR/nv-pkg-engines/package.json"
+mkdir -p "$TMP_DIR/nv-pkg-no-engines" && echo '{"name":"test"}' > "$TMP_DIR/nv-pkg-no-engines/package.json"
+mkdir -p "$TMP_DIR/nv-monorepo/packages/app" && echo "20" > "$TMP_DIR/nv-monorepo/.nvmrc"
+mkdir -p "$TMP_DIR/nv-monorepo-pkg/packages/app" && echo '{"engines":{"node":">=22"}}' > "$TMP_DIR/nv-monorepo-pkg/package.json"
+mkdir -p "$TMP_DIR/nv-override"
+echo "18" > "$TMP_DIR/nv-override/.nvmrc"
+echo "FROM node:20" > "$TMP_DIR/nv-override/Dockerfile"
+echo '{"engines":{"node":">=22"}}' > "$TMP_DIR/nv-override/package.json"
+mkdir -p "$TMP_DIR/nv-empty"
+
+# --- 1. Explicit Version Input Precedence ---
+assert_node_version "24" "" "$TMP_DIR/nv-override" "$TMP_DIR/nv-override" "24|" "node_version: explicit input overrides .nvmrc, Dockerfile, and package.json"
+assert_node_version "lts/*" "" "$TMP_DIR/nv-override" "$TMP_DIR/nv-override" "lts/*|" "node_version: explicit lts/* alias works"
+
+# --- 2. Explicit Version File Input ---
+assert_node_version "" ".nvmrc" "$TMP_DIR/nv-nvmrc" "$TMP_DIR/nv-nvmrc" "|$TMP_DIR/nv-nvmrc/.nvmrc" "node_version_file: explicit relative .nvmrc in DIR"
+assert_node_version_fails "" "missing-file.txt" "$TMP_DIR/nv-empty" "$TMP_DIR/nv-empty" "node_version_file: fails fast if specified file does not exist"
+
+# --- 3. Auto-discover .node-version or .nvmrc ---
+assert_node_version "" "" "$TMP_DIR/nv-node-version" "$TMP_DIR/nv-node-version" "|$TMP_DIR/nv-node-version/.node-version" "auto-discover: finds .node-version in DIR"
+assert_node_version "" "" "$TMP_DIR/nv-nvmrc" "$TMP_DIR/nv-nvmrc" "|$TMP_DIR/nv-nvmrc/.nvmrc" "auto-discover: finds .nvmrc in DIR"
+assert_node_version "" "" "$TMP_DIR/nv-monorepo/packages/app" "$TMP_DIR/nv-monorepo" "|$TMP_DIR/nv-monorepo/.nvmrc" "auto-discover: finds .nvmrc in monorepo ROOT when DIR has none"
+
+# --- 4. Auto-discover Dockerfile base image ---
+assert_node_version "" "" "$TMP_DIR/nv-dockerfile-slim" "$TMP_DIR/nv-dockerfile-slim" "22|" "auto-discover: extracts Node version from node:22-bookworm-slim"
+assert_node_version "" "" "$TMP_DIR/nv-dockerfile-distroless" "$TMP_DIR/nv-dockerfile-distroless" "20|" "auto-discover: extracts Node version from distroless nodejs20"
+assert_node_version "" "" "$TMP_DIR/nv-dockerfile-fullver" "$TMP_DIR/nv-dockerfile-fullver" "24|" "auto-discover: extracts major version from node:24.20.0"
+
+# --- 5. Auto-discover package.json engines.node ---
+assert_node_version "" "" "$TMP_DIR/nv-pkg-engines" "$TMP_DIR/nv-pkg-engines" "|$TMP_DIR/nv-pkg-engines/package.json" "auto-discover: delegates to package.json when engines.node is defined"
+assert_node_version "" "" "$TMP_DIR/nv-monorepo-pkg/packages/app" "$TMP_DIR/nv-monorepo-pkg" "|$TMP_DIR/nv-monorepo-pkg/package.json" "auto-discover: finds root package.json engines in monorepo"
+
+# --- 6. Fallback default when no indicators present ---
+assert_node_version "" "" "$TMP_DIR/nv-pkg-no-engines" "$TMP_DIR/nv-pkg-no-engines" "24|" "fallback: defaults to 24 when package.json lacks engines.node"
+assert_node_version "" "" "$TMP_DIR/nv-empty" "$TMP_DIR/nv-empty" "24|" "fallback: defaults to 24 when directory is empty"
+
 echo ""
 echo "Unit tests finished: ${passed} passed, ${failed} failed."
 
