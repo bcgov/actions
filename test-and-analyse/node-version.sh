@@ -59,8 +59,13 @@ else
     if [ -z "$OUTPUT_VERSION" ] && [ -z "$OUTPUT_VERSION_FILE" ]; then
         for pkg_json in "$DIR/package.json" "$ROOT/package.json"; do
             if [ -f "$pkg_json" ]; then
-                HAS_ENGINE=$(node -e 'try { const p = JSON.parse(require("node:fs").readFileSync(process.argv[1])); process.exit(p.engines?.node ? 0 : 1); } catch { process.exit(1); }' "$pkg_json" 2>/dev/null && echo "true" || echo "false")
-                if [ "$HAS_ENGINE" == "true" ]; then
+                if awk '
+                    /"engines"[[:space:]]*:[[:space:]]*\{[^}]*"node"[[:space:]]*:/ { found=1; exit }
+                    /"engines"[[:space:]]*:/ { in_engines=1; next }
+                    in_engines && /"node"[[:space:]]*:/ { found=1; exit }
+                    in_engines && /\}/ { in_engines=0 }
+                    END { exit(found ? 0 : 1) }
+                ' "$pkg_json" 2>/dev/null; then
                     OUTPUT_VERSION_FILE="$pkg_json"
                     echo "Auto-discovered engines.node in '$OUTPUT_VERSION_FILE'"
                     break
