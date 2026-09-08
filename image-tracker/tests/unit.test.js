@@ -2819,15 +2819,10 @@ test('runMain defaults max_depth to 100 when unset and walks back history', asyn
     execFileSync('git', ['commit', '-m', 'feat: cool feature (#500)'], { encoding: 'utf8' });
     const squashSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 
-    // Commit 2: docs update (no image)
-    fs.writeFileSync(path.join(repoDir, 'README.md'), 'docs');
-    execFileSync('git', ['add', '.'], { encoding: 'utf8' });
-    execFileSync('git', ['commit', '-m', 'docs: update readme'], { encoding: 'utf8' });
-
-    // Commit 3: chore bump (no image)
-    fs.writeFileSync(path.join(repoDir, 'version.txt'), '1.0.1');
-    execFileSync('git', ['add', '.'], { encoding: 'utf8' });
-    execFileSync('git', ['commit', '-m', 'chore: bump version'], { encoding: 'utf8' });
+    // Add 99 intermediate commits so squashSha is exactly candidate #100 from HEAD
+    for (let i = 0; i < 99; i++) {
+      execFileSync('git', ['commit', '--allow-empty', '-m', `chore: intermediate commit ${i}`], { encoding: 'utf8' });
+    }
     const headCommit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 
     const prHeadSha = '5555555555555555555555555555555555555555';
@@ -2904,6 +2899,7 @@ test('runMain defaults max_depth to 100 when unset and walks back history', asyn
     };
 
     const out = path.join(repoDir, 'github_output');
+    delete process.env.GITHUB_EVENT_PATH;
     process.env.GITHUB_ACTIONS = 'true';
     process.env.GITHUB_STEP_SUMMARY = path.join(repoDir, 'step_summary.md');
     process.env.GITHUB_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
@@ -2927,7 +2923,7 @@ test('runMain defaults max_depth to 100 when unset and walks back history', asyn
     await runMain();
 
     const outputContent = fs.readFileSync(out, 'utf8');
-    assert.match(outputContent, new RegExp(expectedDigest), 'must default to walking 100 commits and find squash PR image');
+    assert.match(outputContent, new RegExp(expectedDigest), 'must default to walking 100 commits and find squash PR image at candidate depth 100');
     assert.match(outputContent, /pr=500/, 'must set resolved PR number 500');
   } finally {
     global.fetch = origFetch;
@@ -2936,6 +2932,108 @@ test('runMain defaults max_depth to 100 when unset and walks back history', asyn
     restoreEnv(saved);
     fs.rmSync(repoDir, { recursive: true, force: true });
   }
+});
+
+test('runMain with default max_depth misses when target commit is at candidate depth 101', async () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const os = require('node:os');
+  const { runMain } = require('../index.js');
+  const origFetch = global.fetch;
+  const origExit = process.exit;
+  const saved = snapshotEnv();
+  const cwd = process.cwd();
+
+  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'depth-101-miss-test-'));
+  try {
+    process.exit = (code) => {
+      throw new Error(`process.exit called with code ${code}`);
+    };
+    process.chdir(repoDir);
+    execFileSync('git', ['init', '-b', 'main'], { encoding: 'utf8' });
+    execFileSync('git', ['config', 'user.name', 'test'], { encoding: 'utf8' });
+    execFileSync('git', ['config', 'user.email', 'test@example.com'], { encoding: 'utf8' });
+    execFileSync('git', ['remote', 'add', 'origin', 'https://github.com/bcgov/nr-hydrometric-rating-curve.git'], { encoding: 'utf8' });
+
+    fs.writeFileSync(path.join(repoDir, 'file.txt'), 'base');
+    execFileSync('git', ['add', '.'], { encoding: 'utf8' });
+    execFileSync('git', ['commit', '-m', 'initial commit'], { encoding: 'utf8' });
+
+    // Commit 1: squash merge commit of PR #500
+    fs.writeFileSync(path.join(repoDir, 'file.txt'), 'feature');
+    execFileSync('git', ['add', '.'], { encoding: 'utf8' });
+    execFileSync('git', ['commit', '-m', 'feat: cool feature (#500)'], { encoding: 'utf8' });
+    const squashSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+
+    // Add 100 intermediate commits so squashSha is at candidate depth 101 from HEAD (outside default max_depth 100)
+    for (let i = 0; i < 100; i++) {
+      execFileSync('git', ['commit', '--allow-empty', '-m', `chore: intermediate commit ${i}`], { encoding: 'utf8' });
+    }
+    const headCommit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+
+    const prHeadSha = '5555555555555555555555555555555555555555';
+    const syntheticMergeSha = '6666666666666666666666666666666666666666';
+
+    global.fetch = async (url) => {
+      if (url.includes(`/commits/${squashSha}/pulls`)) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [
+            {
+              number: 500,
+              head: { sha: prHeadSha },
+              merge_commit_sha: squashSha,
+              title: 'feat: cool feature'
+            }
+          ]
+        };
+      }
+      return { ok: false, status: 404, headers: { get: () => null }, json: async () => ({}) };
+    };
+
+    const out = path.join(repoDir, 'github_output');
+    delete process.env.GITHUB_EVENT_PATH;
+    process.env.GITHUB_ACTIONS = 'true';
+    process.env.GITHUB_STEP_SUMMARY = path.join(repoDir, 'step_summary.md');
+    process.env.GITHUB_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
+    process.env.GITHUB_OUTPUT = out;
+    process.env.GITHUB_EVENT_NAME = 'push';
+    process.env.GITHUB_REF = 'refs/heads/main';
+    process.env.GITHUB_SHA = headCommit;
+    process.env.INPUT_PACKAGE = 'frontend';
+    process.env.PACKAGE = 'frontend';
+    process.env.INPUT_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
+    process.env.REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
+    process.env.INPUT_REVISION = headCommit;
+    process.env.REVISION = headCommit;
+    delete process.env.MAX_DEPTH;
+    delete process.env.INPUT_MAX_DEPTH;
+    process.env.DIR = repoDir;
+    process.env.INPUT_DIR = repoDir;
+    process.env.INPUT_TOKEN = 'mock-token';
+
+    await assert.rejects(
+      async () => {
+        await runMain();
+      },
+      /process\.exit called with code 1/,
+      'must fail with exit code 1 when target commit is at candidate depth 101 with default max_depth 100'
+    );
+  } finally {
+    global.fetch = origFetch;
+    process.exit = origExit;
+    process.chdir(cwd);
+    restoreEnv(saved);
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+test('action.yml defines max_depth default of 100', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const actionYaml = fs.readFileSync(path.join(__dirname, '..', 'action.yml'), 'utf8');
+  assert.match(actionYaml, /max_depth:[\s\S]*?default:\s*['"]?100['"]?/, 'action.yml must default max_depth to 100');
 });
 
 
