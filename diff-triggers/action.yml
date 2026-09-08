@@ -22,8 +22,9 @@ inputs:
       remote refs (branches, tags, SHAs) work for all events.
     required: false
   token:
-    description: Specify token (GH or PAT), instead of inheriting one from the calling workflow
+    description: 'Authentication token (defaults to github.token; override with PAT if needed).'
     default: ${{ github.token }}
+    required: false
   annotations:
     description: Emit workflow summary annotations (::notice::) for fired/not fired results. Set to false to suppress annotations
     required: false
