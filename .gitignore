@@ -90,7 +90,6 @@ out
 # Nuxt.js build / generate output
 .nuxt
 dist
-!pr-description-add/dist/
 !test-and-analyse/dist/
 
 # Gatsby files

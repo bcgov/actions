@@ -39,22 +39,6 @@ Forensic history traversal to resolve stable image SHAs from Tags or SHAs.
   uses: bcgov/actions/image-tracker@vX.Y.Z # Replace with latest release tag
 ```
 
-### [pr-description-add](./pr-description-add/)
-Add markdown content to Pull Request descriptions dynamically.
-
-```yaml
-- name: Update PR Description
-  uses: bcgov/actions/pr-description-add@vX.Y.Z # Replace with latest release tag
-```
-
-### [pr-validate](./pr-validate/)
-Validate Pull Request metadata and apply organizational guardrails.
-
-```yaml
-- name: Validate PR
-  uses: bcgov/actions/pr-validate@vX.Y.Z # Replace with latest release tag
-```
-
 ### [sysdig-monitor](./sysdig-monitor/)
 Create or update Sysdig email alerts for an app on PROD deploy. Idempotent, additive and non-blocking.
 
@@ -94,7 +78,6 @@ Refer to each action's directory for its exact minimum required permissions bloc
 - **[diff-triggers](./diff-triggers/)**: `contents: read`
 - **[get-pr](./get-pr/)**: `pull-requests: read`, `contents: read` (optional, for offline/fallback commit resolution)
 - **[image-tracker](./image-tracker/)**: `contents: read`, `pull-requests: read`, `packages: read`
-- **[pr-description-add](./pr-description-add/)**: `pull-requests: write`
 - **[sysdig-monitor](./sysdig-monitor/)**: `contents: read` (alert templates are read from the consuming repo's checkout)
 - **[test-and-analyse](./test-and-analyse/)**: `contents: read`, `actions: write` (optional, for caching)
 - **[workflow-notifier](./workflow-notifier/)**: `contents: read`, `issues: write`, `pull-requests: read` (optional, for PR merge author resolution)
@@ -126,7 +109,7 @@ Workflows and composite actions in **this** repo reference sibling actions with 
 
 ```yaml
 uses: $/diff-triggers          # action at the running commit — no checkout required
-uses: $/pr-validate             # action at the running commit — no checkout required
+uses: $/get-pr                 # action at the running commit — no checkout required
 ```
 
 **Consumers** outside this repo still pin published actions normally:

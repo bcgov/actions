@@ -39,17 +39,11 @@ jobs:
               - 'image-tracker/**'
             workflow-notifier:
               - 'workflow-notifier/**'
-            pr-description-add:
-              - 'pr-description-add/**'
-            pr-validate:
-              - 'pr-validate/**'
-              - '.github/workflows/pr-validate.yml'
             sysdig-monitor:
               - 'sysdig-monitor/**'
             test-and-analyse:
               - 'test-and-analyse/**'
-            # Shared runner infrastructure and test harness changes trigger the full suite.
-            # Specific workflows map directly to their action filters (e.g. pr-validate)
+            # Shared runner infrastructure and test harness changes trigger the full suite
             # rather than triggering blanket integration runs across unrelated actions.
             workflows:
               - '.github/workflows/test.yml'
@@ -656,40 +650,6 @@ jobs:
           fi
           echo "All notifier tests passed."
 
-  # ─── PR DESCRIPTION ADD ────────────────────────────────────────────────────
-  test-pr-description-add:
-    name: Test PR Description Add
-    needs: [filter]
-    if: contains(fromJSON(needs.filter.outputs.changes), 'pr-description-add') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - uses: $/pr-description-add
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          add_markdown: "Automated Integration Test Verification"
-
-  # ─── PR VALIDATE ───────────────────────────────────────────────────────────
-  test-pr-validate:
-    name: Test PR Validate
-    needs: [filter]
-    if: contains(fromJSON(needs.filter.outputs.changes), 'pr-validate') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      pull-requests: read
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Context self-check
-        run: bash pr-validate/tests/self-check.sh
-
-      - name: Test pr-validate action
-        uses: $/pr-validate
-        with:
-          conventional_commits: "false"
 
   # ─── SYSDIG MONITOR ────────────────────────────────────────────────────────
   test-sysdig-monitor:
@@ -869,8 +829,6 @@ jobs:
       - test-get-pr
       - test-image-tracker
       - test-notifier
-      - test-pr-description-add
-      - test-pr-validate
       - test-sysdig-monitor
       - test-test-and-analyse
       - test-test-and-analyse-shallow
