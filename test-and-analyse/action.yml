@@ -15,8 +15,14 @@ inputs:
     required: true
 
   node_version:
-    description: Node version to use (e.g., '24')
-    default: "24"
+    description: >-
+      Node version to use (e.g., '24', 'lts/*'). If omitted, automatically
+      detected from project files (.node-version, .nvmrc, Dockerfile, package.json).
+    default: ""
+
+  node_version_file:
+    description: Explicit file to resolve Node version from (.node-version, .nvmrc, package.json). Optional.
+    default: ""
 
   java_version:
     description: Java version to use (e.g., '21')
@@ -200,11 +206,24 @@ runs:
       run: |
         "${{ github.action_path }}/cache.sh"
 
+    - name: Determine Node.js Version
+      id: node_version_logic
+      if: steps.final_triggered.outputs.triggered == 'true' && inputs.language == 'node'
+      shell: bash
+      env:
+        INPUT_NODE_VERSION: ${{ inputs.node_version }}
+        INPUT_NODE_VERSION_FILE: ${{ inputs.node_version_file }}
+        INPUT_DIR: ${{ inputs.dir }}
+        INPUT_CHECKOUT_PATH: ${{ inputs.checkout_path }}
+      run: |
+        "${{ github.action_path }}/node-version.sh"
+
     - name: Setup Node.js
       uses: actions/setup-node@v7
       if: steps.final_triggered.outputs.triggered == 'true' && inputs.language == 'node'
       with:
-        node-version: ${{ inputs.node_version }}
+        node-version: ${{ steps.node_version_logic.outputs.node_version }}
+        node-version-file: ${{ steps.node_version_logic.outputs.node_version_file }}
         cache: ${{ steps.cache_logic.outputs.cache }}
         cache-dependency-path: |
           ${{ inputs.dir }}/${{ steps.cache_logic.outputs.cache == 'yarn' && 'yarn.lock' || (steps.cache_logic.outputs.cache == 'pnpm' && 'pnpm-lock.yaml' || 'package-lock.json') }}
