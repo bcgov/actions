@@ -54,8 +54,6 @@ Universal Test and Analyze with Triggers, SonarCloud, and Multi-Language Support
 ### ~~test-and-analyse-java~~ (Consolidated)
 **Deprecated**: This Java-specific utility has been consolidated into [test-and-analyse](./test-and-analyse/). Please migrate to `test-and-analyse` with `language: java` specified.
 
-### ~~get-pr~~ (Deprecated)
-**Deprecated**: Removed in favor of [image-tracker](./image-tracker/), which extracts and outputs the associated PR number (`steps.tracker.outputs.pr`) as part of ancestry resolution while resolving immutable OCI digests (`steps.tracker.outputs.images`). Downstream workflows should migrate to `image-tracker`. Legacy consumers may temporarily continue using the standalone repository [`bcgov/action-get-pr`](https://github.com/bcgov/action-get-pr).
 
 ### [workflow-notifier](./workflow-notifier/)
 Find `CODEOWNERS` and coordinate notifications (GitHub Issues) on job failures.
