@@ -101,6 +101,24 @@ External repository:
     dir: target
 ```
 
+### Migrating from `get-pr`
+
+Downstream workflows previously using `get-pr` to extract PR numbers for deployment can replace it with `image-tracker`. `image-tracker` resolves the associated PR number (`steps.tracker.outputs.pr`) as part of commit traversal while simultaneously resolving immutable image digests (`steps.tracker.outputs.images` / `steps.tracker.outputs.digest`):
+
+```yaml
+- name: Track Images & PR
+  id: tracker
+  uses: bcgov/actions/image-tracker@vX.Y.Z
+  with:
+    package: frontend
+
+- name: Deploy
+  if: steps.tracker.outputs.digest != ''
+  run: |
+    echo "Deploying PR #${{ steps.tracker.outputs.pr }} with image ${{ steps.tracker.outputs.image }}"
+    ./deploy.sh --image "${{ steps.tracker.outputs.image }}" --pr "${{ steps.tracker.outputs.pr }}"
+```
+
 Fork pull requests: a shallow checkout of `refs/pull/N/merge` often does not
 contain `head.sha`. Three repositories are distinct:
 

@@ -33,8 +33,6 @@ jobs:
               - 'builder-ghcr/**'
             diff-triggers:
               - 'diff-triggers/**'
-            get-pr:
-              - 'get-pr/**'
             image-tracker:
               - 'image-tracker/**'
             workflow-notifier:
@@ -284,70 +282,6 @@ jobs:
             exit 1
           fi
           echo "Verified: caller's checkout left intact."
-
-  # ─── GET PR ─────────────────────────────────────────────────────────────────
-  test-get-pr:
-    name: Test Get PR
-    needs: [filter]
-    if: contains(fromJSON(needs.filter.outputs.changes), 'get-pr') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-    steps:
-      - name: Run Get PR Action
-        id: vars
-        uses: $/get-pr
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Verify PR Number
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ] && [ -z "${{ steps.vars.outputs.pr }}" ]; then
-            echo "Error: Expected PR number on pull_request event."
-            exit 1
-          fi
-          echo "PR: ${{ steps.vars.outputs.pr }}"
-
-      - name: Checkout Code
-        uses: actions/checkout@v7
-
-      - name: Set up Node.js 24
-        uses: actions/setup-node@v7
-        with:
-          node-version: 24
-
-      - name: Run Scenario Tests
-        run: |
-          node -e "
-            const { execSync } = require('child_process');
-            console.log('Running Get PR Scenarios...');
-            // Pull Request event simulation
-            const prOut = execSync('node get-pr/index.js', {
-              env: {
-                ...process.env,
-                TEST_EVENT_NAME: 'pull_request',
-                TEST_EVENT_PATH: '',
-                GITHUB_EVENT_PATH: '',
-                GITHUB_EVENT_NUMBER: '42'
-              }
-            }).toString();
-            console.log(prOut);
-            if (!prOut.includes('PR: 42')) throw new Error('Failed pull_request test');
-
-            // Merge Group simulation
-            const mgOut = execSync('node get-pr/index.js', {
-              env: {
-                ...process.env,
-                TEST_EVENT_NAME: 'merge_group',
-                TEST_EVENT_PATH: '',
-                GITHUB_EVENT_PATH: '',
-                MERGE_GROUP_HEAD_REF: 'refs/heads/gh-readonly-queue/main/pr-99-abcdef'
-              }
-            }).toString();
-            console.log(mgOut);
-            if (!mgOut.includes('PR: 99')) throw new Error('Failed merge_group test');
-            console.log('All scenarios passed.');
-          "
 
   # ─── IMAGE TRACKER ──────────────────────────────────────────────────────────
   test-image-tracker:
@@ -826,7 +760,6 @@ jobs:
       - test-builder-ghcr-build
       - test-builder-ghcr-matrix
       - test-diff-triggers
-      - test-get-pr
       - test-image-tracker
       - test-notifier
       - test-sysdig-monitor

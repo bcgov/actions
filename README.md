@@ -23,13 +23,6 @@ Checks git diff for file and path changes to conditionally trigger workflow jobs
   uses: bcgov/actions/diff-triggers@vX.Y.Z # Replace with latest release tag
 ```
 
-### [get-pr](./get-pr/)
-Resolve the Pull Request number for merge queues, squash merges, pushes, and releases.
-
-```yaml
-- name: Get PR Number
-  uses: bcgov/actions/get-pr@vX.Y.Z # Replace with latest release tag
-```
 
 ### [image-tracker](./image-tracker/)
 Forensic history traversal to resolve stable image SHAs from Tags or SHAs.
@@ -61,6 +54,7 @@ Universal Test and Analyze with Triggers, SonarCloud, and Multi-Language Support
 ### ~~test-and-analyse-java~~ (Consolidated)
 **Deprecated**: This Java-specific utility has been consolidated into [test-and-analyse](./test-and-analyse/). Please migrate to `test-and-analyse` with `language: java` specified.
 
+
 ### [workflow-notifier](./workflow-notifier/)
 Find `CODEOWNERS` and coordinate notifications (GitHub Issues) on job failures.
 
@@ -76,7 +70,6 @@ In alignment with security best practices, you should always declare minimum exp
 Refer to each action's directory for its exact minimum required permissions block:
 - **[builder-ghcr](./builder-ghcr/)**: `contents: read`, `packages: write`, plus `id-token: write` and `attestations: write` (optional, for build provenance attestations)
 - **[diff-triggers](./diff-triggers/)**: `contents: read`
-- **[get-pr](./get-pr/)**: `pull-requests: read`, `contents: read` (optional, for offline/fallback commit resolution)
 - **[image-tracker](./image-tracker/)**: `contents: read`, `pull-requests: read`, `packages: read`
 - **[sysdig-monitor](./sysdig-monitor/)**: `contents: read` (alert templates are read from the consuming repo's checkout)
 - **[test-and-analyse](./test-and-analyse/)**: `contents: read`, `actions: write` (optional, for caching)
@@ -109,7 +102,7 @@ Workflows and composite actions in **this** repo reference sibling actions with 
 
 ```yaml
 uses: $/diff-triggers          # action at the running commit — no checkout required
-uses: $/get-pr                 # action at the running commit — no checkout required
+uses: $/image-tracker          # action at the running commit — no checkout required
 ```
 
 **Consumers** outside this repo still pin published actions normally:
