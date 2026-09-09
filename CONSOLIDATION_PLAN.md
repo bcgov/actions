@@ -23,7 +23,6 @@ All actions in each repository are versioned and released together as a **single
 actions/
 ├── builder-ghcr/
 ├── diff-triggers/
-├── get-pr/
 ├── image-tracker/
 ├── sysdig-monitor/
 ├── test-and-analyse/
