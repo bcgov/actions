@@ -37,6 +37,9 @@ jobs:
               - 'image-tracker/**'
             pr-description-add:
               - 'pr-description-add/**'
+            pr-validate:
+              - 'pr-validate/**'
+              - '.github/workflows/pr-validate.yml'
             workflow-notifier:
               - 'workflow-notifier/**'
             sysdig-monitor:
@@ -498,6 +501,27 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           add_markdown: "Automated Integration Test Verification"
 
+  # ─── PR VALIDATE ───────────────────────────────────────────────────────────
+  test-pr-validate:
+    name: Test PR Validate
+    needs: [filter]
+    if: contains(fromJSON(needs.filter.outputs.changes), 'pr-validate') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Context self-check
+        run: bash pr-validate/tests/self-check.sh
+
+      - name: Test pr-validate action
+        uses: $/pr-validate
+        with:
+          conventional_commits: "false"
+          add_markdown: "pr-validate wrapper integration test"
+
   # ─── WORKFLOW NOTIFIER ──────────────────────────────────────────────────────
   test-notifier:
     name: Test Workflow Notifier
@@ -779,6 +803,7 @@ jobs:
       - test-diff-triggers
       - test-image-tracker
       - test-pr-description-add
+      - test-pr-validate
       - test-notifier
       - test-sysdig-monitor
       - test-test-and-analyse
