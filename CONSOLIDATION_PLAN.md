@@ -24,6 +24,7 @@ actions/
 ├── builder-ghcr/
 ├── diff-triggers/
 ├── image-tracker/
+├── pr-description-add/
 ├── sysdig-monitor/
 ├── test-and-analyse/
 ├── workflow-notifier/  # (Formerly report-failures)

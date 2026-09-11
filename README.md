@@ -32,6 +32,14 @@ Forensic history traversal to resolve stable image SHAs from Tags or SHAs.
   uses: bcgov/actions/image-tracker@vX.Y.Z # Replace with latest release tag
 ```
 
+### [pr-description-add](./pr-description-add/)
+Add markdown content to Pull Request descriptions dynamically.
+
+```yaml
+- name: Update PR Description
+  uses: bcgov/actions/pr-description-add@vX.Y.Z # Replace with latest release tag
+```
+
 ### [sysdig-monitor](./sysdig-monitor/)
 Create or update Sysdig email alerts for an app on PROD deploy. Idempotent, additive and non-blocking.
 
@@ -71,6 +79,7 @@ Refer to each action's directory for its exact minimum required permissions bloc
 - **[builder-ghcr](./builder-ghcr/)**: `contents: read`, `packages: write`, plus `id-token: write` and `attestations: write` (optional, for build provenance attestations)
 - **[diff-triggers](./diff-triggers/)**: `contents: read`
 - **[image-tracker](./image-tracker/)**: `contents: read`, `pull-requests: read`, `packages: read`
+- **[pr-description-add](./pr-description-add/)**: `pull-requests: write`
 - **[sysdig-monitor](./sysdig-monitor/)**: `contents: read` (alert templates are read from the consuming repo's checkout)
 - **[test-and-analyse](./test-and-analyse/)**: `contents: read`, `actions: write` (optional, for caching)
 - **[workflow-notifier](./workflow-notifier/)**: `contents: read`, `issues: write`, `pull-requests: read` (optional, for PR merge author resolution)

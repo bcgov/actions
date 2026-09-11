@@ -35,6 +35,8 @@ jobs:
               - 'diff-triggers/**'
             image-tracker:
               - 'image-tracker/**'
+            pr-description-add:
+              - 'pr-description-add/**'
             workflow-notifier:
               - 'workflow-notifier/**'
             sysdig-monitor:
@@ -481,6 +483,21 @@ jobs:
           fi
           echo "✅ ${PACKAGE}: HEAD commit resolved correctly"
 
+  # ─── PR DESCRIPTION ADD ────────────────────────────────────────────────────
+  test-pr-description-add:
+    name: Test PR Description Add
+    needs: [filter]
+    if: contains(fromJSON(needs.filter.outputs.changes), 'pr-description-add') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: $/pr-description-add
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          add_markdown: "Automated Integration Test Verification"
+
   # ─── WORKFLOW NOTIFIER ──────────────────────────────────────────────────────
   test-notifier:
     name: Test Workflow Notifier
@@ -761,6 +778,7 @@ jobs:
       - test-builder-ghcr-matrix
       - test-diff-triggers
       - test-image-tracker
+      - test-pr-description-add
       - test-notifier
       - test-sysdig-monitor
       - test-test-and-analyse
