@@ -64,7 +64,8 @@ actions-openshift/
 
 **Phase 3: Update Workflows & Deprecation**
 1. [x] Update internal suite workflows to sibling `uses: $/…` paths.
-2. [ ] After `v1.0.0`: soak early adopters, then archive old standalone repos / drive Renovate replacements (#214 and follow-ons).
-3. [ ] OpenShift actions → `bcgov/actions-openshift` (separate epic).
+2. [ ] Before `v1.0.0`: soak early-adopter / owned repos on an RC or `main` SHA (#214).
+3. [ ] After `v1.0.0`: archive old standalone repos and drive Renovate replacements.
+4. [ ] OpenShift actions → `bcgov/actions-openshift` (separate epic).
 
 Internal workflows in `bcgov/actions` use GitHub's self-repository syntax (`uses: $/action-name`) for sibling actions and reusable workflows at the running commit. Downstream consumers continue to pin `bcgov/actions/<name>@vX.Y.Z`.
