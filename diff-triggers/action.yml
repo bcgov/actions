@@ -7,9 +7,10 @@ branding:
 inputs:
   triggers:
     description: >-
-      Paths used to trigger an event. Supports JSON arrays (["frontend/", "backend/"]),
-      parenthesized bash-style lists: ('frontend/' 'backend/'), and delimited strings
-      separated by spaces, commas, or semicolons. Always triggers if omitted.
+      Paths used to trigger an event. Prefer a multiline string (one path per line).
+      Legacy formats still accepted through v1.0: JSON arrays, comma/semicolon/space
+      delimited strings, and parenthesized bash-style lists ('frontend/' 'backend/').
+      Always triggers if omitted.
     required: false
   debug:
     description: Enable debug logging
