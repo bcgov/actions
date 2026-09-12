@@ -36,7 +36,7 @@ it the recommended form for deployment references.
 The target images **must** be built with OCI labels populated. The easiest way
 is [`docker/metadata-action`](https://github.com/docker/metadata-action), which
 sets the labels by default. At bcgov, the
-[`bcgov/actions/builder-ghcr`](../builder-ghcr/)
+[`bcgov/actions/builder`](../builder/)
 wrapper does this for you when `metadata_tags: true` (the default from v4.3.0).
 
 Images that lack the `org.opencontainers.image.revision` label cannot be

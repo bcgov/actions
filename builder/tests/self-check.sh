@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Offline checks for builder-ghcr image targeting (fork/push contract).
+# Offline checks for builder image targeting (fork/push contract).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -79,7 +79,7 @@ fork_prt="$(refuse_reason pull_request_target bcgov/actions fork/actions)"
 assert_contains "$fork_prt" "refuses pull_request_target" "fork pull_request_target is refused"
 assert_contains "$fork_prt" "checks out PR head" "pull_request_target message uses correct verb"
 assert_contains "$fork_prt" "pull_request workflow instead" "pull_request_target message steers to pull_request"
-assert_contains "$fork_prt" "builder-ghcr/README.md#fork-builds" "pull_request_target message links to docs"
+assert_contains "$fork_prt" "builder/README.md#fork-builds" "pull_request_target message links to docs"
 
 assert_empty "$(refuse_reason pull_request_target bcgov/actions bcgov/actions)" \
   "same-repo pull_request_target is allowed"
@@ -103,7 +103,7 @@ fi
 msg="$(fork_visibility_message)"
 assert_contains "$msg" "Images built from forks require" "visibility message states the requirement"
 assert_contains "$msg" "package visibility to public" "visibility message names the fix"
-assert_contains "$msg" "builder-ghcr/README.md#fork-builds" "visibility message links to docs"
+assert_contains "$msg" "builder/README.md#fork-builds" "visibility message links to docs"
 
 pr_msg="$(fork_pr_publish_message bcgov/actions/backend abcdef)"
 assert_contains "$pr_msg" "Fork pull_request cannot push" "fork PR notice explains read-only"

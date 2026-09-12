@@ -21,7 +21,7 @@ All actions in each repository are versioned and released together as a **single
 
 ```
 actions/
-├── builder-ghcr/
+├── builder/
 ├── diff-triggers/
 ├── image-tracker/
 ├── pr-description-add/

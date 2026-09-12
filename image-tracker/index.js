@@ -49,7 +49,7 @@ function logEndGroup() {
 const ACTIONS_FORK_DOCS_URL =
   'https://github.com/bcgov/actions/blob/main/README.md#fork-pull-requests';
 
-// ---- Repository resolution (mirrors builder-ghcr publish_repository) ---------
+// ---- Repository resolution (mirrors builder publish_repository) ---------
 function normalizeRepo(repo) {
   return (repo || '').trim().toLowerCase();
 }
@@ -83,7 +83,7 @@ function headRepositoryFromEvent(event) {
   return event?.pull_request?.head?.repo?.full_name || '';
 }
 
-// Explicit repository input overrides; otherwise match builder-ghcr publish targets.
+// Explicit repository input overrides; otherwise match builder publish targets.
 function resolveImageRepository({
   inputRepository,
   ghRepository,
@@ -1084,7 +1084,7 @@ function generateGuidance({
       title: 'Missing Image Tags (All Probes Returned HTTP 404)',
       message: 'None of the candidate tags exist in the container registry.',
       subItems: [
-        'Verify that the image builder workflow (e.g. `builder-ghcr`) ran and completed successfully.',
+        'Verify that the image builder workflow (e.g. `builder`) ran and completed successfully.',
         'Verify that the `package` input matches the container image name published to the registry.',
         'If the package was recently published, check for delays in registry replication or publishing step errors.'
       ]

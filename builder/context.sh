@@ -1,4 +1,4 @@
-# Image targeting helpers for builder-ghcr. Sourced by action.yml and tests.
+# Image targeting helpers for builder. Sourced by action.yml and tests.
 # Not executed directly.
 
 # image_path_for PACKAGE GITHUB_REPOSITORY REPO_NAME
@@ -86,11 +86,11 @@ can_push_packages() {
   return 0
 }
 
-BUILDER_GHCR_FORK_DOCS_URL="${BUILDER_GHCR_FORK_DOCS_URL:-https://github.com/bcgov/actions/blob/main/builder-ghcr/README.md#fork-builds}"
+BUILDER_FORK_DOCS_URL="${BUILDER_FORK_DOCS_URL:-https://github.com/bcgov/actions/blob/main/builder/README.md#fork-builds}"
 
 # fork_visibility_message [DOCS_URL]
 fork_visibility_message() {
-  local docs_url="${1:-$BUILDER_GHCR_FORK_DOCS_URL}"
+  local docs_url="${1:-$BUILDER_FORK_DOCS_URL}"
   printf 'Images built from forks require that the fork set package visibility to public. See %s for details.' \
     "$docs_url"
 }
@@ -99,7 +99,7 @@ fork_visibility_message() {
 fork_pr_publish_message() {
   local image_path="$1"
   local source_sha="$2"
-  local docs_url="${3:-$BUILDER_GHCR_FORK_DOCS_URL}"
+  local docs_url="${3:-$BUILDER_FORK_DOCS_URL}"
   printf 'Fork pull_request cannot push to GHCR (read-only token). Build validates only; images publish on push to your fork at ghcr.io/%s:%s. See %s for details.' \
     "$image_path" "$source_sha" "$docs_url"
 }
@@ -125,5 +125,5 @@ refuse_reason() {
     return 0
   fi
 
-  printf '%s\n' "builder-ghcr refuses pull_request_target from a fork. That event has write access to ghcr.io/${gh_repo} and this action checks out PR head, which would publish an untrusted image to the base registry. Use the same pull_request workflow instead; images publish on push to the fork. See ${BUILDER_GHCR_FORK_DOCS_URL}"
+  printf '%s\n' "builder refuses pull_request_target from a fork. That event has write access to ghcr.io/${gh_repo} and this action checks out PR head, which would publish an untrusted image to the base registry. Use the same pull_request workflow instead; images publish on push to the fork. See ${BUILDER_FORK_DOCS_URL}"
 }
