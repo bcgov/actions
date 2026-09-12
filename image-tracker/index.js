@@ -1353,23 +1353,6 @@ function extractPrNumber(payload) {
   return '';
 }
 
-function pivotPrNumber(pivotSha, prNumMap = {}) {
-  const n = prNumMap[pivotSha];
-  return n ? String(n) : '';
-}
-
-function isStaleAncestorHit(hit, pivotPr) {
-  if (!pivotPr || !hit) return false;
-  const hitPr = hit.prNum != null && hit.prNum !== '' ? String(hit.prNum) : '';
-  return hitPr !== '' && hitPr !== String(pivotPr);
-}
-
-function isForeignPrCandidate(sha, prNumMap, pivotPr) {
-  if (!pivotPr) return false;
-  const n = prNumMap[sha];
-  return Boolean(n) && String(n) !== String(pivotPr);
-}
-
 // ---- Main Function ---------------------------------------------------------
 async function runMain() {
   const env = process.env;
@@ -1631,8 +1614,6 @@ async function runMain() {
     process.exit(1);
   }
 
-  const pivotPr = pivotPrNumber(pivotSha, prNumMap);
-
   // ---- Execution -------------------------------------------------------------
   logGroup(`Image Tracker — resolving ancestry for ${revision}`);
   logInfo(`Registry: ${registry}`);
@@ -1664,13 +1645,6 @@ async function runMain() {
     let res = null;
     // 1. Direct candidate probes (Issue #143)
     for (const candidate of candidates) {
-      if (isForeignPrCandidate(candidate, prNumMap, pivotPr)) {
-        logDebug(
-          `Skipping foreign PR #${prNumMap[candidate]} candidate ${candidate.slice(0, 7)} (target is PR #${pivotPr})`,
-          debug
-        );
-        continue;
-      }
       const prHead = prMap[candidate];
       const prNum = prNumMap[candidate];
       const prMerges = Array.isArray(prMergeMap[candidate])
@@ -1710,14 +1684,6 @@ async function runMain() {
         if (res) break;
       }
 
-      if (res && isStaleAncestorHit(res, pivotPr)) {
-        logInfo(
-          `Skipping stale ancestor image for PR #${res.prNum} (target is PR #${pivotPr})`
-        );
-        res = null;
-        continue;
-      }
-
       if (res) break;
     }
 
@@ -1746,12 +1712,6 @@ async function runMain() {
         process.exit(2);
       }
       res = iterRes.hit;
-      if (res && isStaleAncestorHit(res, pivotPr)) {
-        logInfo(
-          `Skipping stale ancestor image for PR #${res.prNum} (target is PR #${pivotPr})`
-        );
-        res = null;
-      }
     }
 
     if (!res) {
@@ -1879,9 +1839,6 @@ module.exports = {
   renderDiagnosticSummary,
   generateGuidance,
   extractPrNumber,
-  pivotPrNumber,
-  isStaleAncestorHit,
-  isForeignPrCandidate,
   isForkPr,
   publishRepository,
   resolveImageRepository,

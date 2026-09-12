@@ -32,13 +32,8 @@ The returned digest is immutable and cryptographically verified on pull, making
 it the recommended form for deployment references.
 
 `max_depth` defaults to **1**: only the target revision (and its PR head/merge
-aliases) may resolve. Raise `max_depth` to walk git ancestry. When the target
-revision maps to a PR (`(#N)` in the commit message, or the GitHub API),
-ancestry will not accept an image from a **different** PR.
-
-A miss is always `exit 1`, including fork `pull_request`. Fork images publish
-on `push` to the fork; packages must be public for upstream CI to pull. See
-[Fork pull requests](../README.md#fork-pull-requests).
+aliases) may resolve. Raise `max_depth` to walk git ancestry. A miss is always
+`exit 1`. Fork does not change that: hit or stop.
 
 ## Requirements
 

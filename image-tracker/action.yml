@@ -39,8 +39,7 @@ inputs:
   max_depth:
     description: |
       Max commits of git ancestry to search. Default 1 (the target revision only).
-      Raise this to reuse an older image. When the target commit maps to a PR,
-      images from a different PR are never accepted.
+      Raise this to reuse an older image for a package that was not rebuilt.
     default: '1'
 
 outputs:
