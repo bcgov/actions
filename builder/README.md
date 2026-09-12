@@ -28,7 +28,7 @@ Use the **same workflow** on upstream and fork (`on: [push, pull_request]`). The
 | `pull_request` (same repo) | Upstream | `ghcr.io/<upstream>/...` | Yes |
 | `pull_request` (fork → upstream) | Upstream | `ghcr.io/<fork-owner>/...` | No — validates locally; image is published on fork `push` |
 
-There is **no `pushed` output**. Do not add one, and do not gate deploy on builder-ghcr. Use `build → image-tracker → deploy` and skip deploy when `steps.tracker.outputs.digest` is empty.
+There is **no `pushed` output**. Do not add one, and do not gate deploy on builder. Use `build → image-tracker → deploy` and skip deploy when `steps.tracker.outputs.digest` is empty.
 
 On a fork pull request, `image_path` and `source_sha` name the fork image (`ghcr.io/<fork-owner>/...:<head.sha>`). Images publish on `push` to the fork.
 
@@ -50,7 +50,7 @@ jobs:
       matrix:
         package: [backend, frontend]
     steps:
-      - uses: bcgov/actions/builder-ghcr@vX.Y.Z
+      - uses: bcgov/actions/builder@vX.Y.Z
         with:
           package: ${{ matrix.package }}
           tag_fallback: test
@@ -59,7 +59,7 @@ jobs:
 
 **GHCR visibility:** images pushed to a fork's GHCR are **private by default**. The action emits this warning after a fork `push`:
 
-> WARNING: Images built from forks require that the fork set package visibility to public. See the [fork builds guide](https://github.com/bcgov/actions/blob/main/builder-ghcr/README.md#fork-builds) for details.
+> WARNING: Images built from forks require that the fork set package visibility to public. See the [fork builds guide](https://github.com/bcgov/actions/blob/main/builder/README.md#fork-builds) for details.
 
 This tool is currently strongly opinionated and generates images with a rigid structure below.  This is intended to become more flexible in future.
 
@@ -67,12 +67,12 @@ Package name: `<organization>/<repository>/<package>:<tag>`
 
 Pull with: `docker pull ghcr.io/<organization>/<repository>/<package>:<tag>` 
 
-Only GitHub Container Registry (ghcr.io) is supported so far.
+Only GitHub Container Registry (`ghcr.io`) is supported.
 
 # Usage
 
 ```yaml
-- uses: bcgov/actions/builder-ghcr@vX.Y.Z
+- uses: bcgov/actions/builder@vX.Y.Z
   with:
     ### Required
 
@@ -201,7 +201,7 @@ builds:
   runs-on: ubuntu-24.04
   steps:
     - name: Builds
-      uses: bcgov/actions/builder-ghcr@vX.Y.Z
+      uses: bcgov/actions/builder@vX.Y.Z
       with:
         package: frontend
         tag_fallback: test
@@ -217,7 +217,7 @@ builds:
   runs-on: ubuntu-24.04
   steps:
     - name: Builds
-      uses: bcgov/actions/builder-ghcr@vX.Y.Z
+      uses: bcgov/actions/builder@vX.Y.Z
       with:
         package: frontend
         build_context: ./
@@ -249,7 +249,7 @@ builds:
   steps:
     - uses: actions/checkout@v7
     - name: Test Builds
-      uses: bcgov/actions/builder-ghcr@vX.Y.Z
+      uses: bcgov/actions/builder@vX.Y.Z
       with:
         package: ${{ matrix.package }}
         tags: ${{ github.event.number }}
@@ -269,7 +269,7 @@ builds:
   runs-on: ubuntu-24.04
   steps:
     - name: Builds with Metadata Tags
-      uses: bcgov/actions/builder-ghcr@vX.Y.Z
+      uses: bcgov/actions/builder@vX.Y.Z
       with:
         package: frontend
         tag_fallback: test
@@ -382,7 +382,7 @@ New image digest (SHA).  This applies to build and retags.
 
 ```yaml
 - id: digest
-  uses: bcgov/actions/builder-ghcr@vX.Y.Z
+  uses: bcgov/actions/builder@vX.Y.Z
   ...
 
 - name: Echo digest
@@ -395,7 +395,7 @@ Has an image been built?  [true|false]
 
 ```yaml
 - id: trigger
-  uses: bcgov/actions/builder-ghcr@vX.Y.Z
+  uses: bcgov/actions/builder@vX.Y.Z
   ...
 
 - name: Echo build trigger

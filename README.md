@@ -7,12 +7,12 @@
 
 A centralized repository for custom GitHub Actions and workflows provided to the `bcgov` organization. These are often consumed as part of the [QuickStart for OpenShift](https://github.com/bcgov/quickstart-openshift).
 
-### [builder-ghcr](./builder-ghcr/)
-Generic GHCR container builder with automatic tag management.
+### [builder](./builder/)
+Conditional container builder with automatic tag management. Publishes to GitHub Container Registry (`ghcr.io`).
 
 ```yaml
 - name: Build Container
-  uses: bcgov/actions/builder-ghcr@vX.Y.Z # Replace with latest release tag
+  uses: bcgov/actions/builder@vX.Y.Z # Replace with latest release tag
 ```
 
 ### [diff-triggers](./diff-triggers/)
@@ -84,7 +84,7 @@ Find `CODEOWNERS` and coordinate notifications (GitHub Issues) on job failures.
 In alignment with security best practices, you should always declare minimum explicit permissions for the `GITHUB_TOKEN` in your workflows rather than granting wildcard/admin permissions. 
 
 Refer to each action's directory for its exact minimum required permissions block:
-- **[builder-ghcr](./builder-ghcr/)**: `contents: read`, `packages: write`, plus `id-token: write` and `attestations: write` (optional, for build provenance attestations)
+- **[builder](./builder/)**: `contents: read`, `packages: write`, plus `id-token: write` and `attestations: write` (optional, for build provenance attestations)
 - **[diff-triggers](./diff-triggers/)**: `contents: read`
 - **[image-tracker](./image-tracker/)**: `contents: read`, `pull-requests: read`, `packages: read`
 - **[pr-description-add](./pr-description-add/)**: `pull-requests: write`
@@ -101,7 +101,7 @@ On a fork `pull_request` into upstream, GitHub grants a **read-only** `GITHUB_TO
 
 | Concern | Where to read more |
 |---|---|
-| Container builds and GHCR | [builder-ghcr — Fork builds](./builder-ghcr/README.md#fork-builds) |
+| Container builds and GHCR | [builder — Fork builds](./builder/README.md#fork-builds) |
 | Image digest lookup | [image-tracker](./image-tracker/) — fork PR miss exits 0 with empty `digest`; gate deploy with `if: steps.tracker.outputs.digest != ''`. There is no `pushed` output. |
 
 **Do not use `pull_request_target`** for builds or deploys from fork PRs.

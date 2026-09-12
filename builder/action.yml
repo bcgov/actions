@@ -1,5 +1,5 @@
 name: Conditional Container Builder with Fallback
-description: Build if trigger conditions are met, else use fallback image
+description: Build if trigger conditions are met, else use fallback image. Publishes to ghcr.io.
 branding:
   icon: package
   color: blue
@@ -115,7 +115,7 @@ outputs:
     value: ${{ steps.final_outputs.outputs.image_path }}
 
   source_sha:
-    description: "Git commit SHA tagged on the image (PR head SHA, or github.sha on push). Deploy workflows can pull ghcr.io/<owner>/<repo>/<package>:<source_sha>."
+    description: "Git commit SHA tagged on the image (PR head SHA, or github.sha on push). Deploy workflows can pull <registry>/<owner>/<repo>/<package>:<source_sha>."
     value: ${{ steps.resolved_sha.outputs.source_sha || steps.vars.outputs.source_sha }}
 
 runs:
@@ -139,6 +139,8 @@ runs:
         set -euo pipefail
         # shellcheck source=context.sh
         source "${{ github.action_path }}/context.sh"
+
+        registry="ghcr.io"
 
         reason="$(refuse_reason "${EVENT_NAME}" "${GH_REPOSITORY}" "${HEAD_REPO}")"
         if [ -n "${reason}" ]; then
@@ -165,8 +167,8 @@ runs:
         fi
 
         echo "image_path=${image_path}" >> "$GITHUB_OUTPUT"
-        echo "image_name=ghcr.io/${image_path}" >> "$GITHUB_OUTPUT"
-        echo "registry_host=ghcr.io" >> "$GITHUB_OUTPUT"
+        echo "image_name=${registry}/${image_path}" >> "$GITHUB_OUTPUT"
+        echo "registry_host=${registry}" >> "$GITHUB_OUTPUT"
         echo "source_sha=${sha}" >> "$GITHUB_OUTPUT"
         echo "can_push=${can_push}" >> "$GITHUB_OUTPUT"
         {
@@ -202,14 +204,14 @@ runs:
     - name: Log in to the Container registry
       uses: docker/login-action@v4
       with:
-        registry: ghcr.io
+        registry: ${{ steps.vars.outputs.registry_host }}
         username: ${{ inputs.username }}
         password: ${{ inputs.token }}
 
     # Check if a build is required (steps.build.outputs.triggered=true|false)
     - name: Check for builds
       env:
-        URL_FALLBACK: ghcr.io/${{ steps.vars.outputs.image_path }}:${{ inputs.tag_fallback }}
+        URL_FALLBACK: ${{ steps.vars.outputs.registry_host }}/${{ steps.vars.outputs.image_path }}:${{ inputs.tag_fallback }}
       id: build
       shell: bash
       run: |
@@ -261,7 +263,7 @@ runs:
       uses: shrink/actions-docker-registry-tag@e6aaef25c595b6e0edd18bf4c7dbfea3abd43299 # v5
       if: steps.build.outputs.triggered != 'true' && steps.vars.outputs.can_push == 'true'
       with:
-        registry: ghcr.io
+        registry: ${{ steps.vars.outputs.registry_host }}
         repository: ${{ steps.vars.outputs.image_path }}
         target: ${{ inputs.tag_fallback }}
         tags: |
@@ -352,7 +354,7 @@ runs:
           # Filter out empty lines and process tags; use printf to safely handle multiline input
           filtered_tags=$(printf '%s\n' "${INPUT_TAGS}" | grep -v '^$' || true)
           if [ -n "${filtered_tags}" ]; then
-            custom_tags=$(printf '%s\n' "${filtered_tags}" | sed "s|^|ghcr.io/${{ steps.vars.outputs.image_path }}:|" | tr '[:upper:]' '[:lower:]' | paste -sd,)
+            custom_tags=$(printf '%s\n' "${filtered_tags}" | sed "s|^|${{ steps.vars.outputs.registry_host }}/${{ steps.vars.outputs.image_path }}:|" | tr '[:upper:]' '[:lower:]' | paste -sd,)
           fi
         fi
 
@@ -395,7 +397,7 @@ runs:
           if [ "${{ inputs.metadata_tags }}" == "true" ]; then
             echo "::warning::metadata_tags is enabled but no tags were generated. This may indicate missing or invalid metadata_tag_rules. Falling back to :latest tag."
           fi
-          final_tags="ghcr.io/${{ steps.vars.outputs.image_path }}:latest"
+          final_tags="${{ steps.vars.outputs.registry_host }}/${{ steps.vars.outputs.image_path }}:latest"
         fi
 
         echo "final_tags=${final_tags}" >> $GITHUB_OUTPUT
@@ -411,8 +413,8 @@ runs:
         tags: ${{ steps.tags.outputs.final_tags }}
         labels: ${{ steps.tags.outputs.labels }}
         annotations: ${{ steps.tags.outputs.annotations }}
-        cache-from: type=registry,ref=ghcr.io/${{ steps.vars.outputs.image_path }}:buildcache
-        cache-to: ${{ steps.vars.outputs.can_push == 'true' && format('type=registry,ref=ghcr.io/{0}:buildcache,mode=max', steps.vars.outputs.image_path) || '' }}
+        cache-from: type=registry,ref=${{ steps.vars.outputs.registry_host }}/${{ steps.vars.outputs.image_path }}:buildcache
+        cache-to: ${{ steps.vars.outputs.can_push == 'true' && format('type=registry,ref={0}/{1}:buildcache,mode=max', steps.vars.outputs.registry_host, steps.vars.outputs.image_path) || '' }}
         build-args: ${{ inputs.build_args }}
         secrets: |
           ${{ inputs.secrets }}
@@ -440,7 +442,7 @@ runs:
         # Install Syft
         curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
 
-        IMAGE="ghcr.io/${{ steps.vars.outputs.image_path }}@${{ steps.build_and_push.outputs.digest }}"
+        IMAGE="${{ steps.vars.outputs.registry_host }}/${{ steps.vars.outputs.image_path }}@${{ steps.build_and_push.outputs.digest }}"
         PACKAGE_SANITIZED=$(echo "${{ inputs.package }}" | tr '/:' '-' | tr -d ' ')
         echo "package_sanitized=${PACKAGE_SANITIZED}" >> $GITHUB_OUTPUT
 
@@ -508,7 +510,7 @@ runs:
       if: steps.build.outputs.triggered == 'true' && steps.vars.outputs.can_push == 'true' && steps.attest_check.outputs.can_attest == 'true'
       uses: actions/attest-build-provenance@v4
       with:
-        subject-name: ghcr.io/${{ steps.vars.outputs.image_path }}
+        subject-name: ${{ steps.vars.outputs.registry_host }}/${{ steps.vars.outputs.image_path }}
         subject-digest: ${{ steps.build_and_push.outputs.digest }}
 
 
@@ -522,7 +524,7 @@ runs:
           # Derive image_path from the actual tags generated/pushed
           # steps.tags.outputs.final_tags is a comma-separated list of full URLs
           full_primary_image=$(echo "${{ steps.tags.outputs.final_tags }}" | cut -d, -f1)
-          image_path=$(echo "${full_primary_image}" | sed 's|^ghcr.io||')
+          image_path=$(echo "${full_primary_image}" | sed 's|^${{ steps.vars.outputs.registry_host }}||')
         else
           echo "digest=${{ steps.build.outputs.fallback_digest }}" >> $GITHUB_OUTPUT
           # For retagged images, use the first tag from inputs.tags or fallback
@@ -587,5 +589,5 @@ runs:
           echo ""
           echo "WARNING: ${msg}"
           echo ""
-          echo "Image: \`ghcr.io/${IMAGE_PATH}:${SOURCE_SHA}\`"
+          echo "Image: \`${{ steps.vars.outputs.registry_host }}/${IMAGE_PATH}:${SOURCE_SHA}\`"
         } >> "$GITHUB_STEP_SUMMARY"

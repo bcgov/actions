@@ -346,7 +346,7 @@ test('isForkPr - fork and same-repo', () => {
   assert.strictEqual(isForkPr('bcgov/actions', ''), false, 'empty head repo');
 });
 
-test('publishRepository - matches builder-ghcr contract', () => {
+test('publishRepository - matches builder contract', () => {
   const { publishRepository } = require('../index.js');
   assert.strictEqual(
     publishRepository('pull_request', 'bcgov/foo', 'fork/foo'),
