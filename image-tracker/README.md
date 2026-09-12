@@ -31,6 +31,17 @@ Tag names (`sha-<7>`, `pr-123`, `latest`, etc.) are used as search hints, but th
 The returned digest is immutable and cryptographically verified on pull, making
 it the recommended form for deployment references.
 
+When the target revision maps to a PR (`(#N)` in the commit message, or the
+GitHub API), ancestry will not accept an image from a **different** PR. That
+stops merge pipelines from deploying a stale ancestor after a code merge that
+never published an image. Unmapped commits (docs/chore with no PR) may still
+walk history up to `max_depth`. Merge and promote workflows that must bind to
+the exact git SHA should set `max_depth: 1`.
+
+Same-repository misses fail the action (`exit 1`). The empty `digest` output
+is only for fork `pull_request`, where an image in the fork registry is often
+absent; gate deploy with `if: steps.tracker.outputs.digest != ''`.
+
 ## Requirements
 
 The target images **must** be built with OCI labels populated. The easiest way
@@ -133,7 +144,8 @@ contain `head.sha`. Three repositories are distinct:
 The action fetches the SHA from origin first, then the workflow PR ref when it
 applies, then the GitHub API against the **source** repo. If the revision still
 cannot be resolved on a fork PR, the action exits 0 with an empty `digest` so
-deploy can skip.
+deploy can skip. Same-repository misses, and mapped-PR misses that would
+otherwise resolve a different PR's ancestor image, fail the step.
 
 ## Inputs
 
@@ -145,7 +157,7 @@ deploy can skip.
 | `dir`        |          | `.`                  | Working directory containing the git repository.                               |
 | `token`        |          | `github.token`       | GitHub token used to mint a GHCR bearer token.                                 |
 | `max_tags`   |          | `500`                | Upper bound on tags inspected per package before failing.                      |
-| `max_depth`  |          | `100`                | Max number of commits back in history to search for an image.                  |
+| `max_depth`  |          | `100`                | Max commits of git ancestry to search. Use `1` to require an image for the exact target revision. |
 
 Package-to-image-path convention:
 - If package name == repository name → `ghcr.io/<owner>/<repo>`
