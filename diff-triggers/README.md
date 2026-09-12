@@ -18,7 +18,7 @@ permissions:
 - ✅ **Push Event Support**: Works with push events for deployer workflows
 - ✅ **Flexible Ref Comparison**: Compare against any ref (branch, commit SHA, HEAD^, etc.)
 - ✅ **Smart Path Matching**: Uses git pathspec matching for accurate trigger detection
-- ✅ **Multiple Trigger Formats**: Multiline (recommended); legacy JSON / delimited / parenthesized still accepted through v1.0
+- ✅ **Multiple Trigger Formats**: Multiline (recommended); JSON arrays supported; legacy delimited / parenthesized still accepted through v1.0
 - ✅ **Visible Logging**: Prominent banners and collapsible details in step logs, plus notice annotations in workflow summary and annotations views
 
 ## Trigger Formats
