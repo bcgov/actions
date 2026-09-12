@@ -114,7 +114,8 @@ jobs:
           repository: bcgov/quickstart-openshift
           tags: ${{ github.event.number || github.run_id }}-no-attestation
           tag_fallback: test
-          triggers: ('frontend/')
+          triggers: |
+            frontend/
 
       - name: Test Advanced (Root Build Context)
         id: advanced
@@ -152,7 +153,8 @@ jobs:
             ${{ github.event.number || github.run_id }}
             custom-tag
           tag_fallback: test
-          triggers: ('frontend/')
+          triggers: |
+            frontend/
           metadata_tags: "true"
           metadata_flavor: |
             latest=true
