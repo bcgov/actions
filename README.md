@@ -8,7 +8,7 @@
 A centralized repository for custom GitHub Actions and workflows provided to the `bcgov` organization. These are often consumed as part of the [QuickStart for OpenShift](https://github.com/bcgov/quickstart-openshift).
 
 ### [builder](./builder/)
-Conditional container builder with automatic tag management. Defaults to `ghcr.io`; additional registries planned.
+Conditional container builder with automatic tag management. Publishes to GitHub Container Registry (`ghcr.io`).
 
 ```yaml
 - name: Build Container

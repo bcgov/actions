@@ -1,5 +1,5 @@
 name: Conditional Container Builder with Fallback
-description: Build if trigger conditions are met, else use fallback image. Registry defaults to ghcr.io.
+description: Build if trigger conditions are met, else use fallback image. Publishes to ghcr.io.
 branding:
   icon: package
   color: blue
@@ -14,9 +14,6 @@ inputs:
     default: "false"
 
   ### Typical / recommended
-  registry:
-    description: OCI registry host. Only ghcr.io is supported today.
-    default: ghcr.io
   build_context:
     description: Build context, not required for self-contained package/default directory
   build_file:
@@ -110,7 +107,7 @@ outputs:
     value: ${{ steps.tags.outputs.annotations }}
 
   registry_host:
-    description: "The registry host from the registry input (ghcr.io today)"
+    description: "The registry host name, always `ghcr.io`"
     value: ${{ steps.vars.outputs.registry_host }}
 
   image_path:
@@ -130,7 +127,6 @@ runs:
       shell: bash
       env:
         INPUT_PACKAGE: ${{ inputs.package }}
-        INPUT_REGISTRY: ${{ inputs.registry }}
         INPUT_TAGS: ${{ inputs.tags }}
         INPUT_REPOSITORY: ${{ inputs.repository }}
         EVENT_NAME: ${{ github.event_name }}
@@ -144,11 +140,7 @@ runs:
         # shellcheck source=context.sh
         source "${{ github.action_path }}/context.sh"
 
-        registry="${INPUT_REGISTRY:-ghcr.io}"
-        if [ "${registry}" != "ghcr.io" ]; then
-          echo "::error::Only ghcr.io is supported today. Set registry: ghcr.io or omit the input."
-          exit 1
-        fi
+        registry="ghcr.io"
 
         reason="$(refuse_reason "${EVENT_NAME}" "${GH_REPOSITORY}" "${HEAD_REPO}")"
         if [ -n "${reason}" ]; then

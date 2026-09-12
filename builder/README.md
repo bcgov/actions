@@ -67,7 +67,7 @@ Package name: `<organization>/<repository>/<package>:<tag>`
 
 Pull with: `docker pull ghcr.io/<organization>/<repository>/<package>:<tag>` 
 
-Only GitHub Container Registry (ghcr.io) is supported so far.
+Only GitHub Container Registry (`ghcr.io`) is supported.
 
 # Usage
 
