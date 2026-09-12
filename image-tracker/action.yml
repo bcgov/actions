@@ -37,8 +37,10 @@ inputs:
     description: 'Upper bound on tags inspected per package before failing.'
     default: '500'
   max_depth:
-    description: 'Max number of commits back in history to search for an image (default: 100).'
-    default: '100'
+    description: |
+      Max commits of git ancestry to search. Default 1 (the target revision only).
+      Raise this to reuse an older image for a package that was not rebuilt.
+    default: '1'
 
 outputs:
   images:
