@@ -167,12 +167,6 @@ Only GitHub Container Registry (`ghcr.io`) is supported.
         type=semver,pattern={{major}}
 
 
-    ### Deprecated
-
-    # Single-value tag input has been deprecated and will be removed in a future release
-    # Please use inputs.tags, which can handle multiple values
-    tag: do not use!
-
 ```
 
 # Private Repository Support
@@ -411,13 +405,6 @@ Has an image been built?  [true|false]
 - Single package repos: `ghcr.io/org/repo:tag`
 
 Single package naming is only triggered when package=repository.
-
-# Deprecations
-
-> ⚠️ **Deprecated:** The `tag` input has been deprecated in favor of `tags`, a multiline string that can handle multiple values. The `tag` input will be removed in a future release.
-
-- The `digest_old` output has been deprecated due to non-use.
-- The `digest_new` output has been renamed to `digest`.
 
 <!-- # Acknowledgements
 
