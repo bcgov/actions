@@ -9,6 +9,12 @@ This plan consolidates scattered bcgov GitHub Actions into two centralized repos
 
 Each action will live in its own subdirectory within the appropriate repository.
 
+**Status (2026-09):** The general suite in `bcgov/actions` is feature-complete for the
+`v1.0.0` stabilization epic (#209): `builder/` (renamed from `builder-ghcr`),
+`diff-triggers`, `image-tracker` (replaces standalone `get-pr` usage), and the other
+actions listed below. Creating and migrating **`bcgov/actions-openshift`** is a later
+sprint and is out of scope for the `v1.0.0` tag.
+
 ## Versioning Strategy
 
 All actions in each repository are versioned and released together as a **single suite**. A single semver tag (e.g. `v1.2.3`) on the repository applies to every action simultaneously.
@@ -49,16 +55,17 @@ actions-openshift/
 
 **Phase 1: Assessment & Setup**
 - [x] Create `bcgov/actions` (using current repo)
-- [ ] Create `bcgov/actions-openshift`
+- [ ] Create `bcgov/actions-openshift` *(later sprint — not required for suite `v1.0.0`)*
 - [x] Establish repository structure and documentation standards
 
-**Phase 2: Migration with Backwards Compatibility**
-1. Migrate each action to its new location.
-2. Add **::warning::** deprecation notices to the old action repositories. *(Note: We initially planned to use thin wrapper actions to call the new locations, but this caused logging problems, so we only added deprecation warnings.)*
+**Phase 2: Migration with Backwards Compatibility** *(general suite)*
+1. [x] Migrate general actions into `bcgov/actions` subdirectories (`builder/`, etc.).
+2. [x] Add **::warning::** deprecation notices to the old standalone action repositories. *(Thin wrappers were abandoned due to logging problems.)*
 
 **Phase 3: Update Workflows & Deprecation**
-1. Update internal workflows to use new locations.
-2. Set deprecation timeline for old repos (e.g., 6 months).
-3. Archive old repos after migration.
+1. [x] Update internal suite workflows to sibling `uses: $/…` paths.
+2. [ ] Before `v1.0.0`: soak early-adopter / owned repos on an RC or `main` SHA (#214).
+3. [ ] After `v1.0.0`: archive old standalone repos and drive Renovate replacements.
+4. [ ] OpenShift actions → `bcgov/actions-openshift` (separate epic).
 
 Internal workflows in `bcgov/actions` use GitHub's self-repository syntax (`uses: $/action-name`) for sibling actions and reusable workflows at the running commit. Downstream consumers continue to pin `bcgov/actions/<name>@vX.Y.Z`.

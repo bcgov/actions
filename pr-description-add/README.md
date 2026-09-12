@@ -93,9 +93,6 @@ BC Government QuickStart for OpenShift - [Issues](https://github.com/bcgov/quick
 
 BC Government QuickStart for OpenShift - [Discussions](https://github.com/bcgov/quickstart-openshift/discussions)
 
-## Deprecations
-
-The parameter `limit_to_pr_opened` was deprecated due to non-use.  Using this parameter will result in a warning only.
 
 ## Contributing
 
