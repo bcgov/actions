@@ -84,7 +84,7 @@ jobs:
             echo "Error! digest required when the image is in GHCR."
             exit 1
           fi
-          if [ -z "${{ steps.build.outputs.registry_host }}" ]; then
+          if [ "${{ steps.build.outputs.registry_host }}" != "ghcr.io" ]; then
             echo "Error! registry_host mismatch: ${{ steps.build.outputs.registry_host }}"
             exit 1
           fi
