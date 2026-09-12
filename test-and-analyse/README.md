@@ -142,7 +142,9 @@ jobs:
               -Dsonar.projectKey=bcgov_your-project-key
           dir: backend
           sonar_token: ${{ secrets.SONAR_TOKEN }}
-          triggers: ('backend/' 'pom.xml')
+          triggers: |
+            backend/
+            pom.xml
 ```
 
 # Example: Python with Pytest and JUnit Reporting
@@ -163,7 +165,9 @@ jobs:
             pip install -r requirements.txt
             pytest --junitxml=junit.xml
           dir: app
-          triggers: ('app/' 'requirements.txt')
+          triggers: |
+            app/
+            requirements.txt
 ```
 
 # Example, Only Running Tests (No SonarCloud, No Dependency/Export Analysis), No Triggers
@@ -202,10 +206,14 @@ jobs:
         include:
           - dir: backend
             sonar_token: SONAR_TOKEN
-            triggers: ('frontend/' 'charts/frontend')
+            triggers: |
+              backend/
+              charts/backend
           - dir: frontend
             sonar_token: SONAR_TOKEN
-            triggers: ('backend/' 'charts/backend')
+            triggers: |
+              frontend/
+              charts/frontend
     steps:
       - uses: actions/checkout@v7
       - uses: bcgov/actions/test-and-analyse@vX.Y.Z
@@ -242,8 +250,8 @@ Has the action been triggered by path changes? \[true|false\]
       npm run test:cov
     dir: frontend
     node_version: "20"
-    triggers: ('frontend/')
-
+    triggers: |
+      frontend/
 - if: steps.test.outputs.triggered == 'true'
   run: echo "✅ Tests were triggered by path changes"
 
