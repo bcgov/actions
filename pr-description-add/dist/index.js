@@ -32214,7 +32214,7 @@ function isDebug() {
  * @param message debug message
  */
 function core_debug(message) {
-    issueCommand('debug', {}, message);
+    command_issueCommand('debug', {}, message);
 }
 /**
  * Adds an error issue
@@ -36629,41 +36629,42 @@ function getOctokit(token, options, ...additionalPlugins) {
     return new GitHubWithPlugins(getOctokitOptions(token, options));
 }
 //# sourceMappingURL=github.js.map
-;// CONCATENATED MODULE: ./lib/main.js
-
-
-// Action input
-const markdown = getInput('add_markdown', { required: true });
-const token = getInput('token', { required: true });
+;// CONCATENATED MODULE: ./lib/compare.js
 /**
- * Normalizes text for comparison by trimming and normalizing whitespace
- * This helps detect duplicates even with minor whitespace differences
+ * Normalizes text for comparison by trimming and normalizing whitespace.
+ * This helps detect duplicates even with minor whitespace differences.
  */
 function normalizeText(text) {
     return text
-        .replace(/\r\n/g, '\n') // Normalize line endings
+        .replace(/\r\n/g, '\n')
         .replace(/\r/g, '\n')
         .split('\n')
-        .map(line => line.trimEnd()) // Trim trailing whitespace from each line
+        .map(line => line.trimEnd())
         .join('\n')
-        .trim(); // Trim leading/trailing whitespace from entire block
-}
-/**
- * Removes checkbox markdown syntax from text for comparison purposes.
- * This treats checkbox state changes (- [ ] to - [x]) as expected body mutations
- * that shouldn't trigger duplicate detection.
- */
-function removeCheckboxes(text) {
-    return text
-        .replace(/^-? \[ \] .*$/gm, '') // Unchecked: "- [ ] text" or "[ ] text"
-        .replace(/^-? \[x\] .*/gim, '') // Checked: "- [x] text" or "[x] text" (with optional hyphen)
-        .replace(/^\s*$/gm, '') // Remove empty lines left by removed checkboxes
-        .replace(/\n{3,}/g, '\n\n') // Normalize multiple blank lines
         .trim();
 }
-// Main function
+/**
+ * Canonicalizes GFM task-list markers so [x]/[X]/[ ] do not count as a
+ * different block. Task labels are preserved.
+ */
+function normalizeCheckboxState(text) {
+    return text.replace(/^(\s*-?\s*)\[(?: |x|X)\]/gm, '$1[ ]');
+}
+
+;// CONCATENATED MODULE: ./lib/main.js
+
+
+
+const markdown = getInput('add_markdown', { required: true });
+const token = getInput('token', { required: true });
+const debugEnabled = getInput('debug') === 'true';
+function logDebug(message) {
+    core_debug(message);
+    if (debugEnabled) {
+        info(message);
+    }
+}
 async function action() {
-    // Ensure pull request exists
     if (!github_context.payload.pull_request) {
         setFailed('Error: No pull request found in context. Exiting.');
         return;
@@ -36674,8 +36675,8 @@ async function action() {
     }
     const prNumber = github_context.payload.pull_request.number;
     const octokit = getOctokit(token);
-    // Fetch latest PR body from API to avoid race conditions
-    let currentBody = '';
+    logDebug(`Fetching current body for PR #${prNumber}`);
+    let currentBody;
     try {
         const { data: pr } = await octokit.rest.pulls.get({
             owner: github_context.repo.owner,
@@ -36685,26 +36686,19 @@ async function action() {
         currentBody = pr.body || '';
     }
     catch (err) {
-        // Fallback to context if API call fails
-        error(`Failed to fetch PR from API: ${err instanceof Error ? err.message : err}`);
-        currentBody = github_context.payload.pull_request?.body || '';
-        info('Fell back to context PR body.');
+        setFailed(`Failed to fetch PR from API: ${err instanceof Error ? err.message : String(err)}. Aborting update to avoid overwriting the current description.`);
+        return;
     }
-    // Check if markdown is already present using normalized comparison
-    // Exclude checkbox state from comparison since clicking checkboxes is an expected body change
-    const normalizedBody = normalizeText(currentBody);
-    const normalizedMarkdown = normalizeText(markdown);
-    const bodyForComparison = removeCheckboxes(normalizedBody);
-    const markdownForComparison = removeCheckboxes(normalizedMarkdown);
+    const bodyForComparison = normalizeCheckboxState(normalizeText(currentBody));
+    const markdownForComparison = normalizeCheckboxState(normalizeText(markdown));
+    logDebug(`Normalized add_markdown length: ${markdownForComparison.length}`);
     if (bodyForComparison.includes(markdownForComparison)) {
         info('Markdown message is already present (excluding checkbox state). Exiting.');
         return;
     }
-    // Append markdown
     const updatedBody = currentBody
         ? `${currentBody.trim()}\n\n${markdown}`
         : markdown;
-    // Update PR body
     info('Description is being updated.');
     try {
         await octokit.rest.pulls.update({
@@ -36718,7 +36712,6 @@ async function action() {
     catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
         const statusCode = err?.status;
-        // Handle specific error cases
         if (statusCode === 404) {
             error('PR not found. It may have been deleted.');
         }
@@ -36731,7 +36724,6 @@ async function action() {
         throw err;
     }
 }
-// Run main function
 ;
 (async () => {
     try {

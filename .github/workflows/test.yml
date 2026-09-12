@@ -496,7 +496,18 @@ jobs:
       contents: read
       pull-requests: write
     steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .tool-versions
+
+      - name: Comparison self-check
+        run: node --experimental-strip-types --no-warnings tests/self-check.ts
+        working-directory: pr-description-add
+
       - uses: $/pr-description-add
+        if: github.event_name == 'pull_request'
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           add_markdown: "Automated Integration Test Verification"
@@ -517,6 +528,7 @@ jobs:
         run: bash pr-validate/tests/self-check.sh
 
       - name: Test pr-validate action
+        if: github.event_name == 'pull_request'
         uses: $/pr-validate
         with:
           conventional_commits: "false"

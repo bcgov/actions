@@ -1,41 +1,19 @@
-import {error, getInput, info, notice, setFailed} from '@actions/core'
+import {debug, error, getInput, info, notice, setFailed} from '@actions/core'
 import {context, getOctokit} from '@actions/github'
+import {normalizeCheckboxState, normalizeText} from './compare.js'
 
-// Action input
 const markdown = getInput('add_markdown', {required: true})
 const token = getInput('token', {required: true})
+const debugEnabled = getInput('debug') === 'true'
 
-/**
- * Normalizes text for comparison by trimming and normalizing whitespace
- * This helps detect duplicates even with minor whitespace differences
- */
-function normalizeText(text: string): string {
-  return text
-    .replace(/\r\n/g, '\n') // Normalize line endings
-    .replace(/\r/g, '\n')
-    .split('\n')
-    .map(line => line.trimEnd()) // Trim trailing whitespace from each line
-    .join('\n')
-    .trim() // Trim leading/trailing whitespace from entire block
+function logDebug(message: string): void {
+  debug(message)
+  if (debugEnabled) {
+    info(message)
+  }
 }
 
-/**
- * Removes checkbox markdown syntax from text for comparison purposes.
- * This treats checkbox state changes (- [ ] to - [x]) as expected body mutations
- * that shouldn't trigger duplicate detection.
- */
-function removeCheckboxes(text: string): string {
-  return text
-    .replace(/^-? \[ \] .*$/gm, '') // Unchecked: "- [ ] text" or "[ ] text"
-    .replace(/^-? \[x\] .*/gim, '') // Checked: "- [x] text" or "[x] text" (with optional hyphen)
-    .replace(/^\s*$/gm, '') // Remove empty lines left by removed checkboxes
-    .replace(/\n{3,}/g, '\n\n') // Normalize multiple blank lines
-    .trim()
-}
-
-// Main function
 async function action(): Promise<void> {
-  // Ensure pull request exists
   if (!context.payload.pull_request) {
     setFailed('Error: No pull request found in context. Exiting.')
     return
@@ -50,9 +28,9 @@ async function action(): Promise<void> {
 
   const prNumber = context.payload.pull_request.number
   const octokit = getOctokit(token)
+  logDebug(`Fetching current body for PR #${prNumber}`)
 
-  // Fetch latest PR body from API to avoid race conditions
-  let currentBody = ''
+  let currentBody: string
   try {
     const {data: pr} = await octokit.rest.pulls.get({
       owner: context.repo.owner,
@@ -61,20 +39,15 @@ async function action(): Promise<void> {
     })
     currentBody = pr.body || ''
   } catch (err) {
-    // Fallback to context if API call fails
-    error(
-      `Failed to fetch PR from API: ${err instanceof Error ? err.message : err}`
+    setFailed(
+      `Failed to fetch PR from API: ${err instanceof Error ? err.message : String(err)}. Aborting update to avoid overwriting the current description.`
     )
-    currentBody = context.payload.pull_request?.body || ''
-    info('Fell back to context PR body.')
+    return
   }
 
-  // Check if markdown is already present using normalized comparison
-  // Exclude checkbox state from comparison since clicking checkboxes is an expected body change
-  const normalizedBody = normalizeText(currentBody)
-  const normalizedMarkdown = normalizeText(markdown)
-  const bodyForComparison = removeCheckboxes(normalizedBody)
-  const markdownForComparison = removeCheckboxes(normalizedMarkdown)
+  const bodyForComparison = normalizeCheckboxState(normalizeText(currentBody))
+  const markdownForComparison = normalizeCheckboxState(normalizeText(markdown))
+  logDebug(`Normalized add_markdown length: ${markdownForComparison.length}`)
 
   if (bodyForComparison.includes(markdownForComparison)) {
     info(
@@ -83,12 +56,10 @@ async function action(): Promise<void> {
     return
   }
 
-  // Append markdown
   const updatedBody = currentBody
     ? `${currentBody.trim()}\n\n${markdown}`
     : markdown
 
-  // Update PR body
   info('Description is being updated.')
   try {
     await octokit.rest.pulls.update({
@@ -102,7 +73,6 @@ async function action(): Promise<void> {
     const errorMessage = err instanceof Error ? err.message : String(err)
     const statusCode = (err as {status?: number})?.status
 
-    // Handle specific error cases
     if (statusCode === 404) {
       error('PR not found. It may have been deleted.')
     } else if (statusCode === 403) {
@@ -114,7 +84,6 @@ async function action(): Promise<void> {
   }
 }
 
-// Run main function
 ;(async () => {
   try {
     await action()

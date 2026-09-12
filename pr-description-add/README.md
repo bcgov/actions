@@ -13,6 +13,8 @@ This action adds to Pull Request descriptions using markdown.  It checks if the 
 
 `token`: ${{ secrets.GITHUB_TOKEN }} or a Personal Access Token (PAT).  Default is to inherit a token from the calling workflow.
 
+`debug`: Set to `"true"` to print extra `info` logs (GitHub `debug` logs are always emitted).
+
 ## Permissions
 
 To run this action, the calling workflow job must have the following minimum permissions:
