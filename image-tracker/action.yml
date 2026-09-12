@@ -38,10 +38,10 @@ inputs:
     default: '500'
   max_depth:
     description: |
-      Max commits of git ancestry to search (default 100). Use 1 for merge/promote
-      so only the target revision may resolve. When the target commit maps to a PR,
+      Max commits of git ancestry to search. Default 1 (the target revision only).
+      Raise this to reuse an older image. When the target commit maps to a PR,
       images from a different PR are never accepted.
-    default: '100'
+    default: '1'
 
 outputs:
   images:

@@ -31,16 +31,14 @@ Tag names (`sha-<7>`, `pr-123`, `latest`, etc.) are used as search hints, but th
 The returned digest is immutable and cryptographically verified on pull, making
 it the recommended form for deployment references.
 
-When the target revision maps to a PR (`(#N)` in the commit message, or the
-GitHub API), ancestry will not accept an image from a **different** PR. That
-stops merge pipelines from deploying a stale ancestor after a code merge that
-never published an image. Unmapped commits (docs/chore with no PR) may still
-walk history up to `max_depth`. Merge and promote workflows that must bind to
-the exact git SHA should set `max_depth: 1`.
+`max_depth` defaults to **1**: only the target revision (and its PR head/merge
+aliases) may resolve. Raise `max_depth` to walk git ancestry. When the target
+revision maps to a PR (`(#N)` in the commit message, or the GitHub API),
+ancestry will not accept an image from a **different** PR.
 
-Same-repository misses fail the action (`exit 1`). The empty `digest` output
-is only for fork `pull_request`, where an image in the fork registry is often
-absent; gate deploy with `if: steps.tracker.outputs.digest != ''`.
+A miss is always `exit 1`, including fork `pull_request`. Fork images publish
+on `push` to the fork; packages must be public for upstream CI to pull. See
+[Fork pull requests](../README.md#fork-pull-requests).
 
 ## Requirements
 
@@ -71,7 +69,6 @@ When package resolution fails, `image-tracker` automatically outputs a diagnosti
     package: frontend
 
 - name: Deploy
-  if: steps.tracker.outputs.digest != ''
   run: ./deploy.sh ${{ steps.tracker.outputs.digest }}
 ```
 
@@ -124,7 +121,6 @@ Downstream workflows previously using `get-pr` to extract PR numbers for deploym
     package: frontend
 
 - name: Deploy
-  if: steps.tracker.outputs.digest != ''
   run: |
     echo "Deploying PR #${{ steps.tracker.outputs.pr }} with image ${{ steps.tracker.outputs.image }}"
     ./deploy.sh --image "${{ steps.tracker.outputs.image }}" --pr "${{ steps.tracker.outputs.pr }}"
@@ -142,10 +138,8 @@ contain `head.sha`. Three repositories are distinct:
   head SHA.
 
 The action fetches the SHA from origin first, then the workflow PR ref when it
-applies, then the GitHub API against the **source** repo. If the revision still
-cannot be resolved on a fork PR, the action exits 0 with an empty `digest` so
-deploy can skip. Same-repository misses, and mapped-PR misses that would
-otherwise resolve a different PR's ancestor image, fail the step.
+applies, then the GitHub API against the **source** repo. If the revision cannot
+be resolved, or no image exists for that revision, the action fails (`exit 1`).
 
 ## Inputs
 
@@ -157,7 +151,7 @@ otherwise resolve a different PR's ancestor image, fail the step.
 | `dir`        |          | `.`                  | Working directory containing the git repository.                               |
 | `token`        |          | `github.token`       | GitHub token used to mint a GHCR bearer token.                                 |
 | `max_tags`   |          | `500`                | Upper bound on tags inspected per package before failing.                      |
-| `max_depth`  |          | `100`                | Max commits of git ancestry to search. Use `1` to require an image for the exact target revision. |
+| `max_depth`  |          | `1`                  | Max commits of git ancestry to search. Default is the target revision only. Raise to walk history. |
 
 Package-to-image-path convention:
 - If package name == repository name → `ghcr.io/<owner>/<repo>`

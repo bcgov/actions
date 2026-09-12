@@ -104,11 +104,6 @@ function resolveImageRepository({
   return fallback;
 }
 
-// Fork pull_request often has no GHCR image yet — miss is expected, not fatal.
-function imageResolveMissIsExpected(eventName, ghRepo, headRepo) {
-  return eventName === 'pull_request' && isForkPr(ghRepo, headRepo);
-}
-
 function revParseQuiet(revision) {
   try {
     return execFileSync('git', ['rev-parse', '--verify', '--quiet', `${revision}^{commit}`], {
@@ -193,16 +188,6 @@ function sourceRepositoryFromOrigin() {
     return repositoryFromRemoteUrl(remoteUrl);
   } catch {
     return '';
-  }
-}
-
-function emptyTrackerOutputLines() {
-  return ['images={}', 'image=', 'digest=', 'digests={}', 'pr='];
-}
-
-function writeEmptyGithubOutputs(env) {
-  if (env.GITHUB_ACTIONS === 'true' && env.GITHUB_OUTPUT) {
-    fs.appendFileSync(env.GITHUB_OUTPUT, emptyTrackerOutputLines().join('\n') + '\n');
   }
 }
 
@@ -1422,7 +1407,7 @@ async function runMain() {
   const dir = env.DIR || env.INPUT_DIR || '.';
   const token = env.INPUT_TOKEN || '';
   const maxTagsStr = env.MAX_TAGS || env.INPUT_MAX_TAGS || '500';
-  const maxDepthStr = env.MAX_DEPTH || env.INPUT_MAX_DEPTH || '100';
+  const maxDepthStr = env.MAX_DEPTH || env.INPUT_MAX_DEPTH || '1';
   const debug = env.DEBUG || env.INPUT_DEBUG || 'false';
 
   if (!/^\d+$/.test(maxTagsStr) || parseInt(maxTagsStr, 10) <= 0) {
@@ -1527,13 +1512,11 @@ async function runMain() {
   }
 
   if (!pivotSha) {
-    if (imageResolveMissIsExpected(eventName, ghRepository, headRepository)) {
-      logWarn(
+    if (eventName === 'pull_request' && isForkPr(ghRepository, headRepository)) {
+      logError(
         `Fork pull_request: could not resolve revision '${revision}'. ` +
-          `Downstream deploy should no-op on an empty digest. See ${ACTIONS_FORK_DOCS_URL}`
+          `Images publish on push to your fork. See ${ACTIONS_FORK_DOCS_URL}`
       );
-      writeEmptyGithubOutputs(env);
-      return;
     }
     logError(`Could not resolve git revision '${revision}'.`);
     process.exit(1);
@@ -1837,15 +1820,12 @@ async function runMain() {
   }
 
   if (missing.length > 0) {
-    if (imageResolveMissIsExpected(eventName, ghRepository, headRepository)) {
-      logWarn(
+    if (eventName === 'pull_request' && isForkPr(ghRepository, headRepository)) {
+      logError(
         `Fork pull_request: no image in ${registry} for ${missing.join(', ')} at ${repository}. ` +
-          `Downstream deploy should no-op on an empty digest. ` +
           `Images publish on push to your fork (packages must be public for upstream CI to pull). ` +
           `See ${ACTIONS_FORK_DOCS_URL}`
       );
-      writeEmptyGithubOutputs(env);
-      return;
     }
 
     const { markdown: diagMarkdown, text: diagText } = renderDiagnosticSummary({
@@ -1905,14 +1885,11 @@ module.exports = {
   isForkPr,
   publishRepository,
   resolveImageRepository,
-  imageResolveMissIsExpected,
   headRepositoryFromEvent,
   resolvePivotSha,
   workflowPrFetchRef,
   prLookupUrl,
   repositoryFromRemoteUrl,
-  emptyTrackerOutputLines,
-  writeEmptyGithubOutputs,
   isShallowRepository,
   gitFetchDeepen,
   runMain
