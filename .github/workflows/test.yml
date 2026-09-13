@@ -350,7 +350,7 @@ jobs:
           probe_tag() {
             local tag="$1" b="$2"
             local resp body mtype child cfg rev mdigest
-            resp=$(curl -sS -i -H "Authorization: Bearer ${b}" -H "Accept: ${accept}" \
+            resp=$(curl -sS -L -i -H "Authorization: Bearer ${b}" -H "Accept: ${accept}" \
               "https://ghcr.io/v2/${image_path}/manifests/${tag}")
             mdigest=$(printf '%s' "$resp" \
               | awk 'BEGIN{IGNORECASE=1}/^docker-content-digest:/{gsub(/\r/,""); print $2; exit}')
@@ -506,7 +506,7 @@ jobs:
               child=$(printf '%s' "$body" | jq -r '
                 (.manifests[] | select(.platform.architecture=="amd64" and (.platform.os//"")!="unknown") | .digest),
                 (.manifests[0].digest)' | head -1)
-              child_resp=$(curl -sS -i -H "Authorization: Bearer ${b}" -H "Accept: ${accept_m}" \
+              child_resp=$(curl -sS -L -i -H "Authorization: Bearer ${b}" -H "Accept: ${accept_m}" \
                 "https://ghcr.io/v2/${image_path}/manifests/${child}")
               code=$(http_status "$child_resp")
               if [[ "$code" != "200" ]]; then
@@ -517,7 +517,7 @@ jobs:
             fi
             cfg=$(printf '%s' "$body" | jq -r '.config.digest // empty')
             [[ -z "$cfg" ]] && return 0
-            blob_resp=$(curl -sS -i -H "Authorization: Bearer ${b}" \
+            blob_resp=$(curl -sS -L -i -H "Authorization: Bearer ${b}" \
               "https://ghcr.io/v2/${image_path}/blobs/${cfg}")
             code=$(http_status "$blob_resp")
             if [[ "$code" != "200" ]]; then
