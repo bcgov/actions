@@ -474,5 +474,10 @@ ACTION_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
   npm ci
   npm run build
   git diff --ignore-space-at-eol --exit-code dist/
+  untracked="$(git ls-files --others --exclude-standard -- dist/)"
+  if [ -n "$untracked" ]; then
+    printf '%s\n' "$untracked" >&2
+    exit 1
+  fi
 )
 echo "✅ dist/ matches fresh build"
