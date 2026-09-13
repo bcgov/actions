@@ -31,6 +31,14 @@ Tag names (`sha-<7>`, `pr-123`, `latest`, etc.) are used as search hints, but th
 The returned digest is immutable and cryptographically verified on pull, making
 it the recommended form for deployment references.
 
+**Promotion contract:** `build → image-tracker → deploy` that digest. Do not
+promote by mutable PR tag (`:<pr>` / retag `:test`). A squash merge SHA was
+never built, so merge/promote must **walk** (`max_depth` large enough to find
+the last image for each package, e.g. `100`). `max_depth: 1` only asks “was
+this git SHA built?” — that fails ordinary merges. A miss is always `exit 1`.
+Fork does not change that: hit or stop. Do not copy `quickstart-openshift`
+`merge.yml` as the image spec until it uses this contract.
+
 ## Requirements
 
 The target images **must** be built with OCI labels populated. The easiest way
@@ -57,10 +65,10 @@ When package resolution fails, `image-tracker` automatically outputs a diagnosti
   id: tracker
   uses: bcgov/actions/image-tracker@vX.Y.Z
   with:
-    package: frontend
+    package: frontend, backend
+    max_depth: 100
 
 - name: Deploy
-  if: steps.tracker.outputs.digest != ''
   run: ./deploy.sh ${{ steps.tracker.outputs.digest }}
 ```
 
@@ -103,7 +111,8 @@ External repository:
 
 ### Migrating from `get-pr`
 
-Downstream workflows previously using `get-pr` to extract PR numbers for deployment can replace it with `image-tracker`. `image-tracker` resolves the associated PR number (`steps.tracker.outputs.pr`) as part of commit traversal while simultaneously resolving immutable image digests (`steps.tracker.outputs.images` / `steps.tracker.outputs.digest`):
+Downstream workflows previously using `get-pr` to pick a mutable `:<pr>` tag
+must deploy the **digest** instead. `outputs.pr` is metadata only.
 
 ```yaml
 - name: Track Images & PR
@@ -111,12 +120,12 @@ Downstream workflows previously using `get-pr` to extract PR numbers for deploym
   uses: bcgov/actions/image-tracker@vX.Y.Z
   with:
     package: frontend
+    max_depth: 100
 
 - name: Deploy
-  if: steps.tracker.outputs.digest != ''
   run: |
-    echo "Deploying PR #${{ steps.tracker.outputs.pr }} with image ${{ steps.tracker.outputs.image }}"
-    ./deploy.sh --image "${{ steps.tracker.outputs.image }}" --pr "${{ steps.tracker.outputs.pr }}"
+    echo "PR #${{ steps.tracker.outputs.pr }} digest ${{ steps.tracker.outputs.digest }}"
+    ./deploy.sh --image "${{ steps.tracker.outputs.image }}"
 ```
 
 Fork pull requests: a shallow checkout of `refs/pull/N/merge` often does not
@@ -131,9 +140,8 @@ contain `head.sha`. Three repositories are distinct:
   head SHA.
 
 The action fetches the SHA from origin first, then the workflow PR ref when it
-applies, then the GitHub API against the **source** repo. If the revision still
-cannot be resolved on a fork PR, the action exits 0 with an empty `digest` so
-deploy can skip.
+applies, then the GitHub API against the **source** repo. If the revision cannot
+be resolved, or no image exists for that revision, the action fails (`exit 1`).
 
 ## Inputs
 
@@ -145,7 +153,7 @@ deploy can skip.
 | `dir`        |          | `.`                  | Working directory containing the git repository.                               |
 | `token`        |          | `github.token`       | GitHub token used to mint a GHCR bearer token.                                 |
 | `max_tags`   |          | `500`                | Upper bound on tags inspected per package before failing.                      |
-| `max_depth`  |          | `100`                | Max number of commits back in history to search for an image.                  |
+| `max_depth`  |          | `1`                  | Max commits of git ancestry to search. Default is this SHA only. Merge/promote must raise this (e.g. `100`) so a squash can resolve the last built image. |
 
 Package-to-image-path convention:
 - If package name == repository name → `ghcr.io/<owner>/<repo>`

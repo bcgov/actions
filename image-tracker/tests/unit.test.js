@@ -405,19 +405,53 @@ test('resolveImageRepository - explicit override and auto fork target', () => {
   );
 });
 
-test('imageResolveMissIsExpected - fork PR only', () => {
-  const { imageResolveMissIsExpected } = require('../index.js');
-  assert.strictEqual(
-    imageResolveMissIsExpected('pull_request', 'bcgov/foo', 'fork/foo'),
-    true,
-    'fork pull_request miss is expected'
-  );
-  assert.strictEqual(
-    imageResolveMissIsExpected('pull_request', 'bcgov/foo', 'bcgov/foo'),
-    false,
-    'same-repo PR miss is an error'
-  );
-  assert.strictEqual(imageResolveMissIsExpected('push', 'fork/foo', ''), false, 'push miss is an error');
+test('runMain fork unresolvable revision exits 1', async () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const { runMain } = require('../index.js');
+  const saved = snapshotEnv();
+  const cwd = process.cwd();
+  const origExit = process.exit;
+  let exitCode;
+  process.exit = (code) => {
+    exitCode = code;
+    throw new Error('__exit__');
+  };
+  try {
+    await withTempGitOrigin('file:///nonexistent-image-tracker-origin.git', async (dir) => {
+      const eventPath = path.join(dir, 'event.json');
+      fs.writeFileSync(
+        eventPath,
+        JSON.stringify({
+          pull_request: { number: 379, head: { sha: SHA, repo: { full_name: 'fork/foo' } } }
+        })
+      );
+      process.env.GITHUB_ACTIONS = 'true';
+      process.env.GITHUB_OUTPUT = path.join(dir, 'github_output');
+      process.env.GITHUB_EVENT_PATH = eventPath;
+      process.env.GITHUB_REPOSITORY = 'bcgov/foo';
+      process.env.GITHUB_EVENT_NAME = 'pull_request';
+      process.env.INPUT_PACKAGE = 'frontend';
+      process.env.PACKAGE = 'frontend';
+      process.env.INPUT_REPOSITORY = 'fork/foo';
+      process.env.REPOSITORY = 'fork/foo';
+      process.env.INPUT_REVISION = SHA;
+      process.env.REVISION = SHA;
+      process.env.DIR = dir;
+      process.env.INPUT_DIR = dir;
+      delete process.env.GITHUB_TOKEN;
+      delete process.env.GH_TOKEN;
+      delete process.env.INPUT_GITHUB_TOKEN;
+      delete process.env.TOKEN;
+      delete process.env.INPUT_TOKEN;
+      await assert.rejects(() => runMain(), /__exit__/);
+      assert.strictEqual(exitCode, 1);
+    });
+  } finally {
+    process.exit = origExit;
+    process.chdir(cwd);
+    restoreEnv(saved);
+  }
 });
 
 const SHA = '7ba8a2cac4f6debe314be035a1ad4781bbc3df0d';
@@ -470,28 +504,6 @@ test('repositoryFromRemoteUrl parses origin and retains dots while stripping ter
     repositoryFromRemoteUrl('https://github.com/owner/app.one.git'),
     repositoryFromRemoteUrl('https://github.com/owner/app.two.git')
   );
-});
-
-test('emptyTrackerOutputLines covers the five consumer outputs', () => {
-  const { emptyTrackerOutputLines } = require('../index.js');
-  const lines = emptyTrackerOutputLines();
-  assert.deepStrictEqual(lines, ['images={}', 'image=', 'digest=', 'digests={}', 'pr=']);
-});
-
-test('writeEmptyGithubOutputs writes all five outputs', () => {
-  const fs = require('node:fs');
-  const os = require('node:os');
-  const path = require('node:path');
-  const { writeEmptyGithubOutputs } = require('../index.js');
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tracker-out-'));
-  const out = path.join(dir, 'github_output');
-  writeEmptyGithubOutputs({ GITHUB_ACTIONS: 'true', GITHUB_OUTPUT: out });
-  const text = fs.readFileSync(out, 'utf8');
-  assert.match(text, /^images=\{\}$/m);
-  assert.match(text, /^image=$/m);
-  assert.match(text, /^digest=$/m);
-  assert.match(text, /^digests=\{\}$/m);
-  assert.match(text, /^pr=$/m);
 });
 
 test('resolvePivotSha fetches the SHA from origin before calling the API', async () => {
@@ -630,52 +642,6 @@ async function withTempGitOrigin(originUrl, fn) {
     process.chdir(cwd);
   }
 }
-
-test('runMain fork unresolvable revision exits 0 with empty outputs', async () => {
-  const fs = require('node:fs');
-  const os = require('node:os');
-  const path = require('node:path');
-  const { runMain } = require('../index.js');
-  const saved = snapshotEnv();
-  const cwd = process.cwd();
-  await withTempGitOrigin('file:///nonexistent-image-tracker-origin.git', async (dir) => {
-    const out = path.join(dir, 'github_output');
-    const eventPath = path.join(dir, 'event.json');
-    fs.writeFileSync(
-      eventPath,
-      JSON.stringify({
-        pull_request: { number: 379, head: { sha: SHA, repo: { full_name: 'fork/foo' } } }
-      })
-    );
-    process.env.GITHUB_ACTIONS = 'true';
-    process.env.GITHUB_OUTPUT = out;
-    process.env.GITHUB_EVENT_PATH = eventPath;
-    process.env.GITHUB_REPOSITORY = 'bcgov/foo';
-    process.env.GITHUB_EVENT_NAME = 'pull_request';
-    process.env.INPUT_PACKAGE = 'frontend';
-    process.env.PACKAGE = 'frontend';
-    process.env.INPUT_REPOSITORY = 'fork/foo';
-    process.env.REPOSITORY = 'fork/foo';
-    process.env.INPUT_REVISION = SHA;
-    process.env.REVISION = SHA;
-    process.env.DIR = dir;
-    process.env.INPUT_DIR = dir;
-    delete process.env.GITHUB_TOKEN;
-    delete process.env.GH_TOKEN;
-    delete process.env.INPUT_GITHUB_TOKEN;
-    delete process.env.TOKEN;
-    delete process.env.INPUT_TOKEN;
-    await runMain();
-    const text = fs.readFileSync(out, 'utf8');
-    assert.match(text, /^images=\{\}$/m);
-    assert.match(text, /^image=$/m);
-    assert.match(text, /^digest=$/m);
-    assert.match(text, /^digests=\{\}$/m);
-    assert.match(text, /^pr=$/m);
-  });
-  process.chdir(cwd);
-  restoreEnv(saved);
-});
 
 test('runMain same-repo unresolvable revision still exits 1', async () => {
   const fs = require('node:fs');
@@ -2464,6 +2430,7 @@ test('strict token input: consumes only INPUT_TOKEN and ignores legacy fallbacks
   const saved = snapshotEnv();
   const cwd = process.cwd();
   const origFetch = global.fetch;
+  const origExit = process.exit;
 
   let capturedAuthHeaders = [];
 
@@ -2490,31 +2457,33 @@ test('strict token input: consumes only INPUT_TOKEN and ignores legacy fallbacks
     };
   };
 
+  process.exit = (code) => {
+    throw new Error(`process.exit called with code ${code}`);
+  };
+
   try {
     await withTempGitOrigin('file:///test-strict-token.git', async (dir) => {
+      execFileSync('git', ['config', 'user.name', 'test'], { cwd: dir, stdio: 'ignore' });
+      execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: dir, stdio: 'ignore' });
+      fs.writeFileSync(path.join(dir, 'file.txt'), 'x\n');
+      execFileSync('git', ['add', '.'], { cwd: dir, stdio: 'ignore' });
+      execFileSync('git', ['commit', '-m', 'init'], { cwd: dir, stdio: 'ignore' });
+
       const out = path.join(dir, 'github_output');
-      const eventPath = path.join(dir, 'event.json');
-      fs.writeFileSync(
-        eventPath,
-        JSON.stringify({
-          pull_request: { number: 1, head: { sha: SHA, repo: { full_name: 'fork/foo' } } }
-        })
-      );
       process.env.GITHUB_ACTIONS = 'true';
       process.env.GITHUB_OUTPUT = out;
-      process.env.GITHUB_EVENT_PATH = eventPath;
+      process.env.GITHUB_EVENT_NAME = 'push';
       process.env.GITHUB_REPOSITORY = 'bcgov/foo';
-      process.env.GITHUB_EVENT_NAME = 'pull_request';
       process.env.INPUT_PACKAGE = 'frontend';
       process.env.PACKAGE = 'frontend';
-      process.env.INPUT_REPOSITORY = 'fork/foo';
-      process.env.REPOSITORY = 'fork/foo';
-      process.env.INPUT_REVISION = SHA;
-      process.env.REVISION = SHA;
+      process.env.INPUT_REPOSITORY = 'bcgov/foo';
+      process.env.REPOSITORY = 'bcgov/foo';
+      process.env.INPUT_REVISION = 'HEAD';
+      process.env.REVISION = 'HEAD';
       process.env.DIR = dir;
       process.env.INPUT_DIR = dir;
+      delete process.env.GITHUB_EVENT_PATH;
 
-      // Case 1: Legacy tokens set, but INPUT_TOKEN not set -> no auth header sent
       process.env.TOKEN = 'legacy-token';
       process.env.INPUT_GITHUB_TOKEN = 'legacy-github-token';
       process.env.GITHUB_TOKEN = 'legacy-ambient-token';
@@ -2522,24 +2491,23 @@ test('strict token input: consumes only INPUT_TOKEN and ignores legacy fallbacks
       delete process.env.INPUT_TOKEN;
 
       capturedAuthHeaders = [];
-      await runMain();
-      assert.strictEqual(
-        capturedAuthHeaders.length,
-        0,
+      await assert.rejects(() => runMain(), /process\.exit called with code 1/);
+      assert.ok(
+        capturedAuthHeaders.every((h) => !/legacy/i.test(h)),
         'must not use legacy fallback environment variables'
       );
 
-      // Case 2: INPUT_TOKEN set -> auth header uses INPUT_TOKEN
       process.env.INPUT_TOKEN = 'canonical-token';
       capturedAuthHeaders = [];
-      await runMain();
+      await assert.rejects(() => runMain(), /process\.exit called with code 1/);
       assert.ok(
-        capturedAuthHeaders.some(h => h.includes('canonical-token')),
+        capturedAuthHeaders.some((h) => h.includes('canonical-token')),
         `must use INPUT_TOKEN for authentication; saw ${JSON.stringify(capturedAuthHeaders)}`
       );
     });
   } finally {
     global.fetch = origFetch;
+    process.exit = origExit;
     process.chdir(cwd);
     restoreEnv(saved);
   }
@@ -2788,7 +2756,7 @@ test('runMain writes diagnostic summary to GITHUB_STEP_SUMMARY on resolution fai
   }
 });
 
-test('runMain defaults max_depth to 100 when unset and walks back history', async () => {
+test('runMain defaults max_depth to 1 when unset and does not walk to an ancestor image', async () => {
   const fs = require('node:fs');
   const path = require('node:path');
   const os = require('node:os');
@@ -2819,10 +2787,7 @@ test('runMain defaults max_depth to 100 when unset and walks back history', asyn
     execFileSync('git', ['commit', '-m', 'feat: cool feature (#500)'], { encoding: 'utf8' });
     const squashSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 
-    // Add 99 intermediate commits so squashSha is exactly candidate #100 from HEAD
-    for (let i = 0; i < 99; i++) {
-      execFileSync('git', ['commit', '--allow-empty', '-m', `chore: intermediate commit ${i}`], { encoding: 'utf8' });
-    }
+    execFileSync('git', ['commit', '--allow-empty', '-m', 'docs: no image'], { encoding: 'utf8' });
     const headCommit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 
     const prHeadSha = '5555555555555555555555555555555555555555';
@@ -2913,18 +2878,15 @@ test('runMain defaults max_depth to 100 when unset and walks back history', asyn
     process.env.REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
     process.env.INPUT_REVISION = headCommit;
     process.env.REVISION = headCommit;
-    // Omit MAX_DEPTH entirely - must default to 100!
     delete process.env.MAX_DEPTH;
     delete process.env.INPUT_MAX_DEPTH;
     process.env.DIR = repoDir;
     process.env.INPUT_DIR = repoDir;
     process.env.INPUT_TOKEN = 'mock-token';
 
-    await runMain();
-
+    await assert.rejects(() => runMain(), /process\.exit called with code 1/);
     const outputContent = fs.readFileSync(out, 'utf8');
-    assert.match(outputContent, new RegExp(expectedDigest), 'must default to walking 100 commits and find squash PR image at candidate depth 100');
-    assert.match(outputContent, /pr=500/, 'must set resolved PR number 500');
+    assert.doesNotMatch(outputContent, new RegExp(expectedDigest), 'must not resolve ancestor squash image at default max_depth 1');
   } finally {
     global.fetch = origFetch;
     process.exit = origExit;
@@ -2934,108 +2896,12 @@ test('runMain defaults max_depth to 100 when unset and walks back history', asyn
   }
 });
 
-test('runMain with default max_depth misses when target commit is at candidate depth 101', async () => {
-  const fs = require('node:fs');
-  const path = require('node:path');
-  const os = require('node:os');
-  const { runMain } = require('../index.js');
-  const origFetch = global.fetch;
-  const origExit = process.exit;
-  const saved = snapshotEnv();
-  const cwd = process.cwd();
-
-  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'depth-101-miss-test-'));
-  try {
-    process.exit = (code) => {
-      throw new Error(`process.exit called with code ${code}`);
-    };
-    process.chdir(repoDir);
-    execFileSync('git', ['init', '-b', 'main'], { encoding: 'utf8' });
-    execFileSync('git', ['config', 'user.name', 'test'], { encoding: 'utf8' });
-    execFileSync('git', ['config', 'user.email', 'test@example.com'], { encoding: 'utf8' });
-    execFileSync('git', ['remote', 'add', 'origin', 'https://github.com/bcgov/nr-hydrometric-rating-curve.git'], { encoding: 'utf8' });
-
-    fs.writeFileSync(path.join(repoDir, 'file.txt'), 'base');
-    execFileSync('git', ['add', '.'], { encoding: 'utf8' });
-    execFileSync('git', ['commit', '-m', 'initial commit'], { encoding: 'utf8' });
-
-    // Commit 1: squash merge commit of PR #500
-    fs.writeFileSync(path.join(repoDir, 'file.txt'), 'feature');
-    execFileSync('git', ['add', '.'], { encoding: 'utf8' });
-    execFileSync('git', ['commit', '-m', 'feat: cool feature (#500)'], { encoding: 'utf8' });
-    const squashSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-
-    // Add 100 intermediate commits so squashSha is at candidate depth 101 from HEAD (outside default max_depth 100)
-    for (let i = 0; i < 100; i++) {
-      execFileSync('git', ['commit', '--allow-empty', '-m', `chore: intermediate commit ${i}`], { encoding: 'utf8' });
-    }
-    const headCommit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-
-    const prHeadSha = '5555555555555555555555555555555555555555';
-    const syntheticMergeSha = '6666666666666666666666666666666666666666';
-
-    global.fetch = async (url) => {
-      if (url.includes(`/commits/${squashSha}/pulls`)) {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => [
-            {
-              number: 500,
-              head: { sha: prHeadSha },
-              merge_commit_sha: squashSha,
-              title: 'feat: cool feature'
-            }
-          ]
-        };
-      }
-      return { ok: false, status: 404, headers: { get: () => null }, json: async () => ({}) };
-    };
-
-    const out = path.join(repoDir, 'github_output');
-    delete process.env.GITHUB_EVENT_PATH;
-    process.env.GITHUB_ACTIONS = 'true';
-    process.env.GITHUB_STEP_SUMMARY = path.join(repoDir, 'step_summary.md');
-    process.env.GITHUB_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
-    process.env.GITHUB_OUTPUT = out;
-    process.env.GITHUB_EVENT_NAME = 'push';
-    process.env.GITHUB_REF = 'refs/heads/main';
-    process.env.GITHUB_SHA = headCommit;
-    process.env.INPUT_PACKAGE = 'frontend';
-    process.env.PACKAGE = 'frontend';
-    process.env.INPUT_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
-    process.env.REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
-    process.env.INPUT_REVISION = headCommit;
-    process.env.REVISION = headCommit;
-    delete process.env.MAX_DEPTH;
-    delete process.env.INPUT_MAX_DEPTH;
-    process.env.DIR = repoDir;
-    process.env.INPUT_DIR = repoDir;
-    process.env.INPUT_TOKEN = 'mock-token';
-
-    await assert.rejects(
-      async () => {
-        await runMain();
-      },
-      /process\.exit called with code 1/,
-      'must fail with exit code 1 when target commit is at candidate depth 101 with default max_depth 100'
-    );
-  } finally {
-    global.fetch = origFetch;
-    process.exit = origExit;
-    process.chdir(cwd);
-    restoreEnv(saved);
-    fs.rmSync(repoDir, { recursive: true, force: true });
-  }
-});
-
-test('action.yml defines max_depth default of 100', () => {
+test('action.yml defines max_depth default of 1', () => {
   const fs = require('node:fs');
   const path = require('node:path');
   const actionYaml = fs.readFileSync(path.join(__dirname, '..', 'action.yml'), 'utf8');
-  assert.match(actionYaml, /max_depth:[\s\S]*?default:\s*['"]?100['"]?/, 'action.yml must default max_depth to 100');
+  assert.match(actionYaml, /max_depth:[\s\S]*?default:\s*['"]?1['"]?/, 'action.yml must default max_depth to 1');
 });
-
 
 
 

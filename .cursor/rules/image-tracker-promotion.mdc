@@ -1,0 +1,15 @@
+---
+description: Image promotion is digest-based via image-tracker, not quickstart PR tags
+alwaysApply: true
+---
+
+# Image promotion
+
+Pipeline is **build → image-tracker → deploy** `outputs.digest` / `images`.
+
+Do **not** use `quickstart-openshift` `.github/workflows/merge.yml` as the image spec. That file still promotes mutable `:<pr>` tags via `get-pr`. The contract is [image-tracker/README.md](../../image-tracker/README.md) and brain **ADR-009**.
+
+- Squash `HEAD` was never built. Merge/promote must set `max_depth` high enough to find the last OCI-labeled image per package (e.g. `100`). `max_depth: 1` is “this SHA was built,” not merge promotion.
+- Miss = `exit 1`. Fork does not change that. No empty-digest skip, no fork `if:`.
+- Do not reject a digest because it was built on a different PR (unchanged package).
+- Do not add `get-pr` or retag-by-PR-number as the deploy identity.

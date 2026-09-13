@@ -28,7 +28,7 @@ Use the **same workflow** on upstream and fork (`on: [push, pull_request]`). The
 | `pull_request` (same repo) | Upstream | `ghcr.io/<upstream>/...` | Yes |
 | `pull_request` (fork → upstream) | Upstream | `ghcr.io/<fork-owner>/...` | No — validates locally; image is published on fork `push` |
 
-There is **no `pushed` output**. Do not add one, and do not gate deploy on builder. Use `build → image-tracker → deploy` and skip deploy when `steps.tracker.outputs.digest` is empty.
+There is **no `pushed` output**. Do not add one, and do not gate deploy on builder. Use `build → image-tracker → deploy`. `image-tracker` fails the job when the image is missing.
 
 On a fork pull request, `image_path` and `source_sha` name the fork image (`ghcr.io/<fork-owner>/...:<head.sha>`). Images publish on `push` to the fork.
 
