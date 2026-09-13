@@ -56,7 +56,12 @@ inputs:
     description: Sonar token, provide unpopulated token for pre-setup (will skip)
 
   triggers:
-    description: Paths (array) used to trigger a build; e.g. ('./backend/' './frontend/)
+    description: |
+      Paths used to trigger a build. Prefer multiline:
+        triggers: |
+          backend/
+          frontend/
+      Legacy parenthesized lists are still accepted; see diff-triggers.
   debug:
     description: Enable debug logging
     default: "false"

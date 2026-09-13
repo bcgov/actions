@@ -54,7 +54,8 @@ jobs:
         with:
           package: ${{ matrix.package }}
           tag_fallback: test
-          triggers: ('${{ matrix.package }}/')
+          triggers: |
+            ${{ matrix.package }}/
 ```
 
 **GHCR visibility:** images pushed to a fork's GHCR are **private by default**. The action emits this warning after a fork `push`:
@@ -103,11 +104,12 @@ Only GitHub Container Registry (`ghcr.io`) is supported.
       pr123
       demo
 
-    # Bash array to diff for build triggering
+    # Paths to diff for build triggering (multiline recommended)
     # Optional, defaults to nothing, which forces a build
-    triggers: ('frontend/' 'backend/' 'database/')
-
-
+    triggers: |
+      frontend/
+      backend/
+      database/
     ### Usually a bad idea / not recommended
 
     # Sets a list of [build-time variables](https://docs.docker.com/engine/reference/commandline/buildx_build/#build-arg)
@@ -205,7 +207,8 @@ builds:
       with:
         package: frontend
         tag_fallback: test
-        triggers: ('frontend/')
+        triggers: |
+          frontend/
 ```
 
 # Example, Single Build with build_context, build_file and multiple tags
@@ -228,7 +231,8 @@ builds:
           latest
         tag_fallback: test
         token: ${{ secrets.GITHUB_TOKEN }}
-        triggers: ('frontend/')
+        triggers: |
+          frontend/
 ```
 
 # Example, Matrix Build
@@ -243,9 +247,11 @@ builds:
       package: [backend, frontend]
       include:
         - package: backend
-          triggers: ('backend/')
+          triggers: |
+            backend/
         - package: frontend
-          triggers: ('frontend/')
+          triggers: |
+            frontend/
   steps:
     - uses: actions/checkout@v7
     - name: Test Builds
@@ -273,7 +279,8 @@ builds:
       with:
         package: frontend
         tag_fallback: test
-        triggers: ('frontend/')
+        triggers: |
+          frontend/
         # Override flavor (optional)
         metadata_flavor: |
           latest=true

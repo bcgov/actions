@@ -18,7 +18,7 @@ permissions:
 - ✅ **Push Event Support**: Works with push events for deployer workflows
 - ✅ **Flexible Ref Comparison**: Compare against any ref (branch, commit SHA, HEAD^, etc.)
 - ✅ **Smart Path Matching**: Uses git pathspec matching for accurate trigger detection
-- ✅ **Multiple Trigger Formats**: JSON arrays, comma/semicolon/space-separated, and bash-style parenthesized lists
+- ✅ **Multiple Trigger Formats**: Multiline (recommended); JSON arrays supported; legacy delimited / parenthesized still accepted through v1.0
 - ✅ **Visible Logging**: Prominent banners and collapsible details in step logs, plus notice annotations in workflow summary and annotations views
 
 ## Trigger Formats
@@ -27,11 +27,13 @@ The action supports multiple formats for the `triggers` input:
 
 | Format | Example | Description |
 |---|---|---|
-| **Multiline string (recommended)** | `triggers: \|\n  backend/\n  frontend/` | True GitHub Actions standard. Supports spaces in paths without quotes. |
+| **Multiline string (recommended)** | `triggers: \|` then one path per line | Preferred for new workflows. Supports spaces in paths without quotes. |
 | **JSON array** | `triggers: '["backend/", "frontend/"]'` | Inline list. Requires quotes to escape YAML parsing. |
-| **Comma-separated** | `triggers: backend/,frontend/` | Quick inline format for simple paths. |
-| **Semicolon-separated** | `triggers: backend/;frontend/` | Quick inline format for simple paths. |
-| **Parenthesized (legacy)** | `triggers: ('backend/' 'frontend/')` | Legacy bash-style format (deprecated). |
+| **Comma-separated (legacy)** | `triggers: backend/,frontend/` | Still accepted through v1.0; do not use for new workflows. |
+| **Semicolon-separated (legacy)** | `triggers: backend/;frontend/` | Still accepted through v1.0; do not use for new workflows. |
+| **Parenthesized (legacy)** | `triggers: ('backend/' 'frontend/')` | Still accepted through v1.0; do not use for new workflows. |
+
+> **Legacy note:** Parenthesized and delimiter forms remain parsed for compatibility ([#212](https://github.com/bcgov/actions/issues/212)). New suite examples and adopters should use multiline `triggers: |` only.
 
 # Usage
 
@@ -41,8 +43,7 @@ The action supports multiple formats for the `triggers` input:
     ### Recommended
 
       # Paths used to check against file change (diff)
-      # Supports multiple formats (see Trigger Formats above)
-      # If omitted, the action always fires
+      # Prefer multiline (see Trigger Formats). If omitted, the action always fires
       triggers: |
         backend/
         frontend/
@@ -187,5 +188,4 @@ jobs:
         with:
           triggers: |
             backend/
-```
 ```

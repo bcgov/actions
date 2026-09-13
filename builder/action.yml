@@ -34,7 +34,12 @@ inputs:
         demo
         test
   triggers:
-    description: Paths used to trigger a build; e.g. ('./backend/' './frontend/)
+    description: |
+      Paths used to trigger a build. Prefer multiline:
+        triggers: |
+          backend/
+          frontend/
+      Legacy parenthesized lists are still accepted; see diff-triggers.
 
   ### Usually a bad idea / not recommended
   build_args:
