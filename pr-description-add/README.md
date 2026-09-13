@@ -3,6 +3,34 @@
 
 This action adds to Pull Request descriptions using markdown.  It checks if the message is already present before adding.
 
+Prefer a sticky PR comment for deployment links and other bot-owned text.
+Mutating the description races with authors, pollutes squash commit
+messages, and posts links before deploy finishes. New consumers should
+not start here; existing ones can migrate with
+[`marocchino/sticky-pull-request-comment`](https://github.com/marocchino/sticky-pull-request-comment)
+after a successful deploy:
+
+```yaml
+# After deploy succeeds in pr-open.yml
+- name: Post deploy links
+  uses: marocchino/sticky-pull-request-comment@v2
+  with:
+    header: pr-deployment-links
+    message: |
+      ### Deployments
+      - [Frontend](https://${{ github.event.repository.name }}-${{ github.event.number }}.apps.silver.devops.gov.bc.ca)
+
+# On PR close
+- name: Remove deploy links
+  uses: marocchino/sticky-pull-request-comment@v2
+  with:
+    header: pr-deployment-links
+    delete: true
+```
+
+`pr-validate` should stay on `bcgov/actions/pr-validate@<release>` and
+should not take `markdown_links`. See #196.
+
 ## Input
 
 #### Required

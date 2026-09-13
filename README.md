@@ -34,6 +34,7 @@ Forensic history traversal to resolve stable image SHAs from Tags or SHAs.
 
 ### [pr-description-add](./pr-description-add/)
 Add markdown content to Pull Request descriptions dynamically.
+Prefer a sticky PR comment for deploy links; see the action README.
 
 ```yaml
 - name: Update PR Description
