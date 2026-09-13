@@ -464,6 +464,169 @@ jobs:
           fi
           echo "✅ ${PACKAGE}: resolved correctly"
 
+      # Live PR topology (#185): checkout refs/pull/N/merge and invoke the
+      # tracker with the PR head SHA. That is the hydrometric #383 case
+      # (image labeled with the synthetic merge SHA). No skip on miss.
+      - id: discover-pr
+        name: Discover live PR-tagged image
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_REPO: ${{ matrix.repo }}
+          PACKAGE: ${{ matrix.package }}
+        run: |
+          set -euo pipefail
+          lc_repo=$(echo "${TARGET_REPO}" | tr '[:upper:]' '[:lower:]')
+          image_path="${lc_repo}/${PACKAGE}"
+          accept='application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json'
+          accept_m='application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json'
+
+          http_status() {
+            printf '%s' "$1" | awk 'BEGIN{IGNORECASE=1}/^HTTP\//{code=$2} END{print code}'
+          }
+
+          probe_pr_tag() {
+            local tag="$1" b="$2"
+            local resp body mtype child cfg rev mdigest code
+            resp=$(curl -sS -i -H "Authorization: Bearer ${b}" -H "Accept: ${accept}" \
+              "https://ghcr.io/v2/${image_path}/manifests/${tag}")
+            code=$(http_status "$resp")
+            if [[ "$code" == "404" ]]; then
+              return 0
+            fi
+            if [[ "$code" != "200" ]]; then
+              echo "::error::GHCR probe of ${image_path}:${tag} failed HTTP ${code}"
+              exit 1
+            fi
+            mdigest=$(printf '%s' "$resp" \
+              | awk 'BEGIN{IGNORECASE=1}/^docker-content-digest:/{gsub(/\r/,""); print $2; exit}')
+            body=$(printf '%s' "$resp" | awk 'BEGIN{p=0}/^\r?$/{p=1;next}p{print}')
+            mtype=$(printf '%s' "$body" | jq -r '.mediaType // empty')
+            if [[ "$mtype" == *index* || "$mtype" == *manifest.list* ]]; then
+              child=$(printf '%s' "$body" | jq -r '
+                (.manifests[] | select(.platform.architecture=="amd64" and (.platform.os//"")!="unknown") | .digest),
+                (.manifests[0].digest)' | head -1)
+              body=$(curl -sS -H "Authorization: Bearer ${b}" -H "Accept: ${accept_m}" \
+                "https://ghcr.io/v2/${image_path}/manifests/${child}")
+            fi
+            cfg=$(printf '%s' "$body" | jq -r '.config.digest // empty')
+            [[ -z "$cfg" ]] && return 0
+            rev=$(curl -sSL -H "Authorization: Bearer ${b}" \
+              "https://ghcr.io/v2/${image_path}/blobs/${cfg}" \
+              | jq -r '.config.Labels["org.opencontainers.image.revision"] // empty')
+            [[ -z "$rev" || "$rev" == "null" ]] && return 0
+            printf '%s\t%s' "$rev" "$mdigest"
+          }
+
+          bearer=$(curl -sS -f -u "x:${GH_TOKEN}" \
+            "https://ghcr.io/token?scope=repository:${image_path}:pull" | jq -r '.token')
+          if [[ -z "$bearer" || "$bearer" == "null" ]]; then
+            echo "::error::GHCR token request failed for ${image_path}"
+            exit 1
+          fi
+
+          mapfile -t pr_nums < <(
+            {
+              gh api "/repos/${TARGET_REPO}/pulls?state=open&per_page=20" --jq '.[].number'
+              gh api "/repos/${TARGET_REPO}/pulls?state=closed&per_page=20" \
+                --jq '.[] | select(.merged_at != null) | .number'
+            } | awk 'NF && !seen[$0]++'
+          )
+
+          found_rev=""
+          found_digest=""
+          found_pr=""
+          found_head=""
+
+          for pr_num in "${pr_nums[@]}"; do
+            result=$(probe_pr_tag "pr-${pr_num}" "$bearer")
+            if [[ -z "$result" ]]; then
+              continue
+            fi
+            found_head=$(gh api "/repos/${TARGET_REPO}/pulls/${pr_num}" --jq '.head.sha')
+            if [[ -z "$found_head" ]]; then
+              echo "::error::GitHub API returned empty head SHA for ${TARGET_REPO}#${pr_num}"
+              exit 1
+            fi
+            found_rev="${result%%$'\t'*}"
+            found_digest="${result##*$'\t'}"
+            found_pr="${pr_num}"
+            break
+          done
+
+          if [[ -z "$found_pr" ]]; then
+            echo "::error::No live pr-* image found for ${PACKAGE} in ${TARGET_REPO} (open + recently merged PRs)"
+            exit 1
+          fi
+
+          echo "PR topology: pkg=${PACKAGE} pr=${found_pr} head=${found_head} label=${found_rev} digest=${found_digest}"
+          {
+            echo "pr=${found_pr}"
+            echo "head_sha=${found_head}"
+            echo "revision=${found_rev}"
+            echo "digest=${found_digest}"
+            echo "ref=refs/pull/${found_pr}/merge"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Checkout PR merge ref
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ matrix.repo }}
+          ref: ${{ steps.discover-pr.outputs.ref }}
+          path: target-pr
+          fetch-depth: 0
+
+      - id: track-pr
+        name: Resolve PR head SHA via image-tracker
+        uses: ./image-tracker
+        with:
+          package: ${{ matrix.package }}
+          revision: ${{ steps.discover-pr.outputs.head_sha }}
+          repository: ${{ matrix.repo }}
+          dir: target-pr
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify PR topology outputs
+        env:
+          TARGET_REPO: ${{ matrix.repo }}
+          PACKAGE: ${{ matrix.package }}
+          EXPECTED_DIGEST: ${{ steps.discover-pr.outputs.digest }}
+          EXPECTED_PR: ${{ steps.discover-pr.outputs.pr }}
+          HEAD_SHA: ${{ steps.discover-pr.outputs.head_sha }}
+          LABEL_REV: ${{ steps.discover-pr.outputs.revision }}
+          GOT_DIGEST: ${{ steps.track-pr.outputs.digest }}
+          GOT_IMAGE: ${{ steps.track-pr.outputs.image }}
+          GOT_IMAGES: ${{ steps.track-pr.outputs.images }}
+          GOT_PR: ${{ steps.track-pr.outputs.pr }}
+        run: |
+          set -euo pipefail
+          lc_repo=$(echo "$TARGET_REPO" | tr '[:upper:]' '[:lower:]')
+          image_path="${lc_repo}/${PACKAGE}"
+
+          echo "PR head SHA: ${HEAD_SHA}"
+          echo "Image label: ${LABEL_REV}"
+          echo "Got digest:  ${GOT_DIGEST}"
+          echo "Got image:   ${GOT_IMAGE}"
+          echo "Got pr:      ${GOT_PR}"
+          echo "Expected:    ${EXPECTED_DIGEST}"
+
+          if [[ "$GOT_DIGEST" != "$EXPECTED_DIGEST" ]]; then
+            echo "::error::${PACKAGE}: PR topology digest mismatch: got ${GOT_DIGEST} expected ${EXPECTED_DIGEST}"
+            exit 1
+          fi
+          if [[ "$GOT_IMAGE" != "ghcr.io/${image_path}@${EXPECTED_DIGEST}" ]]; then
+            echo "::error::${PACKAGE}: PR topology image ref wrong: got ${GOT_IMAGE}"
+            exit 1
+          fi
+          if ! echo "$GOT_IMAGES" | jq -e --arg k "$PACKAGE" '.[$k]' >/dev/null 2>&1; then
+            echo "::error::${PACKAGE}: PR topology images JSON missing key ${PACKAGE}"
+            exit 1
+          fi
+          if [[ "$GOT_PR" != "$EXPECTED_PR" ]]; then
+            echo "::error::${PACKAGE}: PR topology pr mismatch: got '${GOT_PR}' expected '${EXPECTED_PR}'"
+            exit 1
+          fi
+          echo "✅ ${PACKAGE}: PR topology resolved (head ${HEAD_SHA:0:7}, label ${LABEL_REV:0:7})"
+
   # ─── PR DESCRIPTION ADD ────────────────────────────────────────────────────
   test-pr-description-add:
     name: Test PR Description Add
