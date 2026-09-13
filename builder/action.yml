@@ -348,9 +348,12 @@ runs:
         META_TAGS: ${{ steps.meta.outputs.tags || '' }}
         META_LABELS: ${{ steps.meta.outputs.labels || '' }}
         META_ANNOTATIONS: ${{ steps.meta.outputs.annotations || '' }}
+        SOURCE_SHA: ${{ steps.resolved_sha.outputs.source_sha || steps.vars.outputs.source_sha }}
       run: |
         # Merge metadata tags with custom tags
         set -euo pipefail
+        # shellcheck source=context.sh
+        source "${{ github.action_path }}/context.sh"
 
         # Start with custom tags (convert from multiline to comma-separated)
         # Handle empty inputs gracefully
@@ -381,20 +384,21 @@ runs:
             final_tags="${custom_tags}"
           fi
           
-          # Pass through labels and annotations from metadata-action (even if no tags were generated)
-          # Use heredoc to safely handle multiline/special characters
-          echo "labels<<EOF" >> $GITHUB_OUTPUT
-          echo "${META_LABELS}" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
           echo "annotations<<EOF" >> $GITHUB_OUTPUT
           echo "${META_ANNOTATIONS}" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
         else
           final_tags="${custom_tags}"
-          # Empty labels and annotations when metadata_tags is disabled
-          echo "labels=" >> $GITHUB_OUTPUT
           echo "annotations=" >> $GITHUB_OUTPUT
         fi
+
+        # Stamp revision with source_sha (PR head / push SHA), not GITHUB_SHA.
+        # metadata-action uses GITHUB_SHA, which on pull_request is the throwaway
+        # merge ref — gone after squash, so image-tracker cannot find the image.
+        labels="$(apply_revision_label "${META_LABELS}" "${SOURCE_SHA}")"
+        echo "labels<<EOF" >> $GITHUB_OUTPUT
+        printf '%s\n' "${labels}" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
 
         # Ensure at least one tag is present; fallback to :latest if empty
         if [ -z "${final_tags}" ]; then

@@ -26,6 +26,28 @@ source_sha() {
   fi
 }
 
+# apply_revision_label LABELS SHA
+# Prints labels with org.opencontainers.image.revision set to SHA (the commit
+# we tagged and checked out). Drops any existing revision line so metadata-action
+# cannot stamp GITHUB_SHA (the throwaway PR merge ref). Empty SHA: labels unchanged.
+apply_revision_label() {
+  local labels="$1"
+  local sha="$2"
+  local line
+  while IFS= read -r line || [ -n "$line" ]; do
+    [ -z "$line" ] && continue
+    case "$line" in
+      org.opencontainers.image.revision=*) continue ;;
+    esac
+    printf '%s\n' "$line"
+  done <<EOF
+${labels}
+EOF
+  if [ -n "$sha" ]; then
+    printf 'org.opencontainers.image.revision=%s\n' "$sha"
+  fi
+}
+
 # merge_sha_tag TAGS_MULTILINE SHA
 # Prints tags with SHA appended if missing. Drops empty lines. Lowercases.
 merge_sha_tag() {
