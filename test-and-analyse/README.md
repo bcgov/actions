@@ -63,11 +63,17 @@ permissions:
     # node_version: "24"
     # node_version_file: ".nvmrc"  # Optional explicit version file
     
-    # Java version (for Java projects). Default: "21"
-    java_version: "21"
+    # Java version (for Java projects). If omitted, automatically detected.
+    # Resolution order: java_version; java_version_file; .java-version /
+    # .sdkmanrc / .tool-versions; pom.xml / Gradle; Dockerfile; then default: "21".
+    # java_version: "21"
+    # java_version_file: ".java-version"
 
-    # Python version (for Python projects). Default: "3.12"
-    python_version: "3.12"
+    # Python version (for Python projects). If omitted, automatically detected.
+    # Resolution order: python_version; python_version_file; .python-version;
+    # pyproject.toml (requires-python / Poetry); Dockerfile; Pipfile; then default: "3.12".
+    # python_version: "3.12"
+    # python_version_file: ".python-version"
 
     ### Typical / recommended
     # Sonar token available from sonarcloud.io
