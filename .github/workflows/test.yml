@@ -52,9 +52,9 @@ jobs:
               - '.github/workflows/test.yml'
               - '.tool-versions'
 
-  # ─── BUILDER GHCR ───────────────────────────────────────────────────────────
+  # ─── BUILDER ───────────────────────────────────────────────────────────────
   test-builder-build:
-    name: Test Builder GHCR (Build)
+    name: Test Builder (Build)
     needs: [filter]
     if: contains(fromJSON(needs.filter.outputs.changes), 'builder') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
@@ -95,7 +95,7 @@ jobs:
           echo "Verified registry_host and image_path: ${{ steps.build.outputs.registry_host }} and ${{ steps.build.outputs.image_path }}"
 
   test-builder-matrix:
-    name: Test Builder GHCR (No Attestation / Advanced / Single Package / Metadata / Self)
+    name: Test Builder (No Attestation / Advanced / Single Package / Metadata / Self)
     needs: [filter]
     if: contains(fromJSON(needs.filter.outputs.changes), 'builder') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
