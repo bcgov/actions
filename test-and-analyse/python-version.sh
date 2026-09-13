@@ -12,8 +12,16 @@ OUTPUT_VERSION=""
 OUTPUT_VERSION_FILE=""
 
 extract_py_from_spec() {
-    # ">=3.12,<4" / "^3.11" / "~=3.10.1" / "3.12" -> 3.12 / 3.11 / 3.10
-    echo "$1" | grep -oE '[0-9]+\.[0-9]+' | head -1 || true
+    # Prefer a lower bound so "<3.13,>=3.10" / "^3.11" -> 3.10 / 3.11, not 3.13
+    local spec="$1"
+    local from_min
+    from_min=$(echo "$spec" | grep -oE '(>=|\^|~=)[[:space:]]*[0-9]+\.[0-9]+' | grep -oE '[0-9]+\.[0-9]+' | head -1 || true)
+    if [ -n "$from_min" ]; then
+        echo "$from_min"
+        return
+    fi
+    # Bare "3.12" (no comparison)
+    echo "$spec" | grep -oE '(^|[[:space:]])[0-9]+\.[0-9]+' | grep -oE '[0-9]+\.[0-9]+' | head -1 || true
 }
 
 # 1. Explicit version input
@@ -45,23 +53,25 @@ else
         fi
     done
 
-    # 4. pyproject.toml requires-python (PEP 621) or Poetry python
+    # 4. pyproject.toml — delegate requires-python to setup-python; Poetry python = extracted
     if [ -z "$OUTPUT_VERSION" ] && [ -z "$OUTPUT_VERSION_FILE" ]; then
         for pyproject in "$DIR/pyproject.toml" "$ROOT/pyproject.toml"; do
             if [ -f "$pyproject" ]; then
-                spec=$(grep -E '^[[:space:]]*requires-python[[:space:]]*=' "$pyproject" | head -1 | sed -E 's/.*=[[:space:]]*["'\'']?([^"'\'']+)["'\'']?.*/\1/' || true)
-                if [ -z "$spec" ]; then
-                    spec=$(awk '
-                        /^\[tool\.poetry\.dependencies\]/ { in_deps=1; next }
-                        /^\[/ { in_deps=0 }
-                        in_deps && /^[[:space:]]*python[[:space:]]*=/ {
-                            sub(/^[^=]*=[[:space:]]*/, "")
-                            gsub(/["'\'']/, "")
-                            print
-                            exit
-                        }
-                    ' "$pyproject" || true)
+                if grep -qE '^[[:space:]]*requires-python[[:space:]]*=' "$pyproject"; then
+                    OUTPUT_VERSION_FILE="$pyproject"
+                    echo "Auto-discovered Python version file: '$OUTPUT_VERSION_FILE'"
+                    break
                 fi
+                spec=$(awk '
+                    /^\[tool\.poetry\.dependencies\]/ { in_deps=1; next }
+                    /^\[/ { in_deps=0 }
+                    in_deps && /^[[:space:]]*python[[:space:]]*=/ {
+                        sub(/^[^=]*=[[:space:]]*/, "")
+                        gsub(/["'\'']/, "")
+                        print
+                        exit
+                    }
+                ' "$pyproject" || true)
                 DETECTED=$(extract_py_from_spec "$spec")
                 if [ -n "$DETECTED" ]; then
                     OUTPUT_VERSION="$DETECTED"
@@ -86,14 +96,14 @@ else
         done
     fi
 
-    # 6. Pipfile [requires] python_version
+    # 6. Pipfile [requires] python_version — real assignment only
     if [ -z "$OUTPUT_VERSION" ] && [ -z "$OUTPUT_VERSION_FILE" ]; then
         for pipfile in "$DIR/Pipfile" "$ROOT/Pipfile"; do
             if [ -f "$pipfile" ]; then
                 spec=$(awk '
                     /^\[requires\]/ { in_req=1; next }
                     /^\[/ { in_req=0 }
-                    in_req && /python_version/ {
+                    in_req && /^[[:space:]]*python_version[[:space:]]*=/ {
                         gsub(/["'\'']/, "")
                         sub(/^[^=]*=[[:space:]]*/, "")
                         print

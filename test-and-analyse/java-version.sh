@@ -12,7 +12,13 @@ OUTPUT_VERSION=""
 OUTPUT_VERSION_FILE=""
 
 extract_java_major() {
-    echo "$1" | grep -oE '[0-9]+' | head -1 || true
+    local s="$1"
+    # Legacy Java 8: 1.8 / 1.8.0 / VERSION_1_8
+    if echo "$s" | grep -qE '(^|[^0-9])1[._]8([^0-9]|$)'; then
+        echo 8
+        return
+    fi
+    echo "$s" | grep -oE '[0-9]+' | head -1 || true
 }
 
 # 1. Explicit version input
@@ -35,22 +41,30 @@ elif [ -n "$JAVA_VER_FILE" ]; then
     echo "Using explicit java_version_file: '$OUTPUT_VERSION_FILE'"
 
 else
-    # 3. .java-version, .sdkmanrc, .tool-versions in DIR then ROOT
+    # 3. Version files in DIR then ROOT. .tool-versions / .sdkmanrc only if they name java.
     for candidate in "$DIR/.java-version" "$DIR/.sdkmanrc" "$DIR/.tool-versions" \
                      "$ROOT/.java-version" "$ROOT/.sdkmanrc" "$ROOT/.tool-versions"; do
-        if [ -f "$candidate" ]; then
-            base=$(basename "$candidate")
-            if [ "$base" = ".java-version" ] || [ "$base" = ".tool-versions" ]; then
+        if [ ! -f "$candidate" ]; then
+            continue
+        fi
+        base=$(basename "$candidate")
+        if [ "$base" = ".java-version" ]; then
+            OUTPUT_VERSION_FILE="$candidate"
+            echo "Auto-discovered Java version file: '$OUTPUT_VERSION_FILE'"
+            break
+        fi
+        if [ "$base" = ".tool-versions" ]; then
+            if grep -qE '^[[:space:]]*java[[:space:]]+' "$candidate"; then
                 OUTPUT_VERSION_FILE="$candidate"
                 echo "Auto-discovered Java version file: '$OUTPUT_VERSION_FILE'"
                 break
             fi
-            # .sdkmanrc: java=21.0.2-tem
-            spec=$(grep -E '^[[:space:]]*java=' "$candidate" | head -1 | cut -d= -f2- || true)
-            DETECTED=$(extract_java_major "$spec")
-            if [ -n "$DETECTED" ]; then
-                OUTPUT_VERSION="$DETECTED"
-                echo "Auto-discovered Java version '$OUTPUT_VERSION' from '$candidate'"
+            continue
+        fi
+        if [ "$base" = ".sdkmanrc" ]; then
+            if grep -qE '^[[:space:]]*java=' "$candidate"; then
+                OUTPUT_VERSION_FILE="$candidate"
+                echo "Auto-discovered Java version file: '$OUTPUT_VERSION_FILE'"
                 break
             fi
         fi
@@ -60,11 +74,15 @@ else
     if [ -z "$OUTPUT_VERSION" ] && [ -z "$OUTPUT_VERSION_FILE" ]; then
         for pom in "$DIR/pom.xml" "$ROOT/pom.xml"; do
             if [ -f "$pom" ]; then
-                spec=$(grep -E '<(java.version|maven.compiler.(release|target|source))>' "$pom" | head -1 | sed -E 's/.*>([^<]+)<.*/\1/' || true)
-                DETECTED=$(extract_java_major "$spec")
-                if [ -n "$DETECTED" ]; then
-                    OUTPUT_VERSION="$DETECTED"
-                    echo "Auto-discovered Java version '$OUTPUT_VERSION' from '$pom'"
+                while IFS= read -r spec; do
+                    DETECTED=$(extract_java_major "$spec")
+                    if [ -n "$DETECTED" ]; then
+                        OUTPUT_VERSION="$DETECTED"
+                        echo "Auto-discovered Java version '$OUTPUT_VERSION' from '$pom'"
+                        break
+                    fi
+                done < <(grep -E '<(java.version|maven.compiler.(release|target|source))>' "$pom" | sed -E 's/.*>([^<]+)<.*/\1/' || true)
+                if [ -n "$OUTPUT_VERSION" ]; then
                     break
                 fi
             fi
@@ -73,24 +91,27 @@ else
     if [ -z "$OUTPUT_VERSION" ] && [ -z "$OUTPUT_VERSION_FILE" ]; then
         for gradle in "$DIR/build.gradle" "$DIR/build.gradle.kts" "$ROOT/build.gradle" "$ROOT/build.gradle.kts"; do
             if [ -f "$gradle" ]; then
-                spec=$(grep -E 'jvmToolchain|sourceCompatibility|targetCompatibility|JavaVersion' "$gradle" | head -1 || true)
-                DETECTED=$(extract_java_major "$spec")
-                if [ -n "$DETECTED" ]; then
-                    OUTPUT_VERSION="$DETECTED"
-                    echo "Auto-discovered Java version '$OUTPUT_VERSION' from '$gradle'"
+                while IFS= read -r spec; do
+                    DETECTED=$(extract_java_major "$spec")
+                    if [ -n "$DETECTED" ]; then
+                        OUTPUT_VERSION="$DETECTED"
+                        echo "Auto-discovered Java version '$OUTPUT_VERSION' from '$gradle'"
+                        break
+                    fi
+                done < <(grep -E 'jvmToolchain|sourceCompatibility|targetCompatibility|JavaVersion' "$gradle" || true)
+                if [ -n "$OUTPUT_VERSION" ]; then
                     break
                 fi
             fi
         done
     fi
 
-    # 5. Dockerfile / Containerfile
+    # 5. Dockerfile / Containerfile — first Java image FROM, not the first FROM
     if [ -z "$OUTPUT_VERSION" ] && [ -z "$OUTPUT_VERSION_FILE" ]; then
         for dockerfile in "$DIR/Dockerfile" "$DIR/Containerfile" "$ROOT/Dockerfile" "$ROOT/Containerfile"; do
             if [ -f "$dockerfile" ]; then
-                # eclipse-temurin:21-jdk, openjdk:17-slim, amazoncorretto:21, ibm-semeru-runtimes:open-17
-                line=$(grep -im 1 -E '^[[:space:]]*FROM[[:space:]]+' "$dockerfile" || true)
-                DETECTED=$(echo "$line" | grep -oE '(temurin|openjdk|amazoncorretto|semeru-runtimes:open-)[^[:space:]]*' | grep -oE '[0-9]+' | head -1 || true)
+                line=$(grep -im 1 -E '^[[:space:]]*FROM[[:space:]].*(temurin|openjdk|amazoncorretto|semeru)' "$dockerfile" || true)
+                DETECTED=$(extract_java_major "$line")
                 if [ -n "$DETECTED" ]; then
                     OUTPUT_VERSION="$DETECTED"
                     echo "Auto-discovered Java version '$OUTPUT_VERSION' from '$dockerfile'"
