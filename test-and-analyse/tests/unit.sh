@@ -462,3 +462,22 @@ echo "Unit tests finished: ${passed} passed, ${failed} failed."
 if [[ "$failed" -gt 0 ]]; then
     exit 1
 fi
+
+# ── Dist freshness (#99 slice) ───────────────────────────────────────────────
+# Committed dist/ must match a fresh ncc build (same as package.json "build").
+echo ""
+echo "── Dist freshness ──"
+ACTION_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+(
+  set -euo pipefail
+  cd "$ACTION_ROOT"
+  npm ci
+  npm run build
+  git diff --ignore-space-at-eol --exit-code dist/
+  untracked="$(git ls-files --others --exclude-standard -- dist/)"
+  if [ -n "$untracked" ]; then
+    printf '%s\n' "$untracked" >&2
+    exit 1
+  fi
+)
+echo "✅ dist/ matches fresh build"
