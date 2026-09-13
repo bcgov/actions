@@ -350,7 +350,7 @@ jobs:
           probe_tag() {
             local tag="$1" b="$2"
             local resp body mtype child cfg rev mdigest
-            resp=$(curl -sS -i -H "Authorization: Bearer ${b}" -H "Accept: ${accept}" \
+            resp=$(curl -sS -L -i -H "Authorization: Bearer ${b}" -H "Accept: ${accept}" \
               "https://ghcr.io/v2/${image_path}/manifests/${tag}")
             mdigest=$(printf '%s' "$resp" \
               | awk 'BEGIN{IGNORECASE=1}/^docker-content-digest:/{gsub(/\r/,""); print $2; exit}')
@@ -463,6 +463,32 @@ jobs:
             exit 1
           fi
           echo "✅ ${PACKAGE}: resolved correctly"
+
+      # Walk ancestry for the newest labeled digest. A miss, fork, or gap
+      # is exit 1 — no skip, no retag, no PR-tag hunting.
+      - id: walk
+        name: Walk history for latest digest
+        uses: $/image-tracker
+        with:
+          package: ${{ matrix.package }}
+          revision: HEAD
+          repository: ${{ matrix.repo }}
+          dir: target
+          max_depth: '100'
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify walk resolved
+        env:
+          PACKAGE: ${{ matrix.package }}
+          GOT_DIGEST: ${{ steps.walk.outputs.digest }}
+          GOT_IMAGE: ${{ steps.walk.outputs.image }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$GOT_DIGEST" ]]; then
+            echo "::error::${PACKAGE}: history walk produced no digest" >&2
+            exit 1
+          fi
+          echo "✅ ${PACKAGE}: ${GOT_IMAGE}"
 
   # ─── PR DESCRIPTION ADD ────────────────────────────────────────────────────
   test-pr-description-add:
