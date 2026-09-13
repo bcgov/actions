@@ -25,16 +25,29 @@ inputs:
     default: ""
 
   java_version:
-    description: Java version to use (e.g., '21')
-    default: "21"
+    description: >-
+      Java version to use (e.g., '21', '17'). If omitted, automatically
+      detected from project files (.java-version, .sdkmanrc, .tool-versions,
+      pom.xml, Gradle, Dockerfile).
+    default: ""
+
+  java_version_file:
+    description: Explicit file to resolve Java version from (.java-version, .sdkmanrc, .tool-versions). Optional.
+    default: ""
 
   java_distribution:
     description: Java distribution to use (e.g., temurin)
     default: "temurin"
 
   python_version:
-    description: Python version to use (e.g., '3.12')
-    default: "3.12"
+    description: >-
+      Python version to use (e.g., '3.12', '3.14'). If omitted, automatically
+      detected from project files (.python-version, pyproject.toml, Dockerfile, Pipfile).
+    default: ""
+
+  python_version_file:
+    description: Explicit file to resolve Python version from (.python-version, pyproject.toml). Optional.
+    default: ""
 
   language:
     description: "Primary language of the project. Options: node (default), java, python"
@@ -234,12 +247,25 @@ runs:
           ${{ inputs.dir }}/${{ steps.cache_logic.outputs.cache == 'yarn' && 'yarn.lock' || (steps.cache_logic.outputs.cache == 'pnpm' && 'pnpm-lock.yaml' || 'package-lock.json') }}
           ${{ inputs.checkout_path }}/${{ steps.cache_logic.outputs.cache == 'yarn' && 'yarn.lock' || (steps.cache_logic.outputs.cache == 'pnpm' && 'pnpm-lock.yaml' || 'package-lock.json') }}
 
+    - name: Determine Java Version
+      id: java_version_logic
+      if: steps.final_triggered.outputs.triggered == 'true' && inputs.language == 'java'
+      shell: bash
+      env:
+        INPUT_JAVA_VERSION: ${{ inputs.java_version }}
+        INPUT_JAVA_VERSION_FILE: ${{ inputs.java_version_file }}
+        INPUT_DIR: ${{ inputs.dir }}
+        INPUT_CHECKOUT_PATH: ${{ inputs.checkout_path }}
+      run: |
+        "${{ github.action_path }}/java-version.sh"
+
     # Condition 2: Java Project Setup
     - name: Setup Java
       uses: actions/setup-java@v6
       if: steps.final_triggered.outputs.triggered == 'true' && inputs.language == 'java'
       with:
-        java-version: ${{ inputs.java_version }}
+        java-version: ${{ steps.java_version_logic.outputs.java_version }}
+        java-version-file: ${{ steps.java_version_logic.outputs.java_version_file }}
         distribution: ${{ inputs.java_distribution }}
         cache: ${{ steps.cache_logic.outputs.cache }}
         cache-dependency-path: |
@@ -247,12 +273,25 @@ runs:
           ${{ inputs.dir }}/**/*.gradle*
           ${{ inputs.dir }}/**/sbt
 
+    - name: Determine Python Version
+      id: python_version_logic
+      if: steps.final_triggered.outputs.triggered == 'true' && inputs.language == 'python'
+      shell: bash
+      env:
+        INPUT_PYTHON_VERSION: ${{ inputs.python_version }}
+        INPUT_PYTHON_VERSION_FILE: ${{ inputs.python_version_file }}
+        INPUT_DIR: ${{ inputs.dir }}
+        INPUT_CHECKOUT_PATH: ${{ inputs.checkout_path }}
+      run: |
+        "${{ github.action_path }}/python-version.sh"
+
     # Condition 3: Python Project Setup
     - name: Setup Python
       uses: actions/setup-python@v7
       if: steps.final_triggered.outputs.triggered == 'true' && inputs.language == 'python'
       with:
-        python-version: ${{ inputs.python_version }}
+        python-version: ${{ steps.python_version_logic.outputs.python_version }}
+        python-version-file: ${{ steps.python_version_logic.outputs.python_version_file }}
         cache: ${{ steps.cache_logic.outputs.cache }}
         cache-dependency-path: |
           ${{ inputs.dir }}/**/requirements*.txt
