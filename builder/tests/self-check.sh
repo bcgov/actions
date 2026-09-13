@@ -50,6 +50,10 @@ assert_eq "$(image_path_for Backend BcGov/Actions Actions)" "bcgov/actions/backe
 assert_eq "$(source_sha abcdef githubsha)" "abcdef" "source_sha prefers PR head"
 assert_eq "$(source_sha '' githubsha)" "githubsha" "source_sha falls back to github.sha"
 
+assert_eq "$(apply_revision_label $'org.opencontainers.image.revision=merge\norg.opencontainers.image.title=app\n' headsha)" $'org.opencontainers.image.title=app\norg.opencontainers.image.revision=headsha' "apply_revision_label replaces merge SHA"
+assert_eq "$(apply_revision_label '' headsha)" "org.opencontainers.image.revision=headsha" "apply_revision_label sets revision when labels empty"
+assert_eq "$(apply_revision_label $'org.opencontainers.image.title=app\n' '')" "org.opencontainers.image.title=app" "apply_revision_label leaves labels when sha empty"
+
 assert_eq "$(merge_sha_tag $'123\n' abcdef)" $'123\nabcdef' "merge_sha_tag appends SHA"
 assert_eq "$(merge_sha_tag $'abcdef\n123\n' abcdef)" $'abcdef\n123' "merge_sha_tag does not duplicate SHA"
 assert_eq "$(merge_sha_tag '' abcdef)" "abcdef" "merge_sha_tag works when tags are empty (push)"

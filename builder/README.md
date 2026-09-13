@@ -30,6 +30,8 @@ Use the **same workflow** on upstream and fork (`on: [push, pull_request]`). The
 
 There is **no `pushed` output**. Do not add one, and do not gate deploy on builder. Use `build → image-tracker → deploy`. `image-tracker` fails the job when the image is missing.
 
+`org.opencontainers.image.revision` is always `source_sha` (PR `head.sha`, or `github.sha` on push) — never the `pull_request` merge ref. That is what lets merge workflows resolve the PR image with `image-tracker` without rebuilding.
+
 On a fork pull request, `image_path` and `source_sha` name the fork image (`ghcr.io/<fork-owner>/...:<head.sha>`). Images publish on `push` to the fork.
 
 **Do not use `pull_request_target` for builds or deploys.** That event runs the workflow file from the upstream default branch, not from the contributor's PR. This action refuses fork `pull_request_target` outright.
