@@ -397,7 +397,7 @@ runs:
         # merge ref — gone after squash, so image-tracker cannot find the image.
         labels="$(apply_revision_label "${META_LABELS}" "${SOURCE_SHA}")"
         echo "labels<<EOF" >> $GITHUB_OUTPUT
-        printf '%s\n' "${labels}"
+        printf '%s\n' "${labels}" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
 
         # Ensure at least one tag is present; fallback to :latest if empty
