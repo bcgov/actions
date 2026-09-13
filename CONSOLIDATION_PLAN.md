@@ -64,7 +64,7 @@ actions-openshift/
 
 **Phase 3: Update Workflows & Deprecation**
 1. [x] Update internal suite workflows to sibling `uses: $/…` paths.
-2. [ ] Before `v1.0.0`: soak early-adopter / owned repos on an RC or `main` SHA (#214).
+2. [ ] After a release that includes the `builder-ghcr` → `builder` rename: notify soak-group adopters (#214). Never pin consumers to `@main` or a commit SHA.
 3. [ ] After `v1.0.0`: archive old standalone repos and drive Renovate replacements.
 4. [ ] OpenShift actions → `bcgov/actions-openshift` (separate epic).
 
