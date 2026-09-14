@@ -56,6 +56,7 @@ jobs:
               - 'tsconfig.base.json'
               - 'eslint.config.mjs'
               - '.prettierrc.json'
+              - '.prettierignore'
 
   # ─── BUILDER ───────────────────────────────────────────────────────────────
   test-builder-build:
