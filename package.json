@@ -1,0 +1,46 @@
+{
+  "name": "actions",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": "^24.0.0"
+  },
+  "workspaces": [
+    "pr-description-add",
+    "test-and-analyse"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace=pr-description-add && npm run package --workspace=pr-description-add && npm run build --workspace=test-and-analyse",
+    "lint": "npm run lint --workspaces",
+    "format": "npm run format --workspaces",
+    "format:check": "npm run format:check --workspaces",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@eslint/compat": "^2.1.0",
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "@vercel/ncc": "^0.45.0",
+    "@vitest/coverage-v8": "^5.0.0",
+    "eslint": "^10.2.0",
+    "eslint-plugin-github": "^6.0.0",
+    "eslint-plugin-prettier": "^5.0.0",
+    "knip": "^6.0.0",
+    "prettier": "^3.3.3",
+    "typescript": "^6.0.0",
+    "vitest": "^5.0.0"
+  },
+  "overrides": {
+    "eslint-plugin-github": {
+      "eslint": "$eslint"
+    },
+    "@eslint/compat": "^2.1.0",
+    "@octokit/plugin-paginate-rest@<11.4.1": "11.4.1",
+    "@octokit/request@<9.2.1": "9.2.1",
+    "undici": "^6.27.0",
+    "js-yaml": "^5.2.2",
+    "@humanfs/node": "^0.16.8"
+  }
+}
