@@ -468,10 +468,13 @@ fi
 echo ""
 echo "── Dist freshness ──"
 ACTION_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+REPO_ROOT="$(cd "${ACTION_ROOT}/.." && pwd)"
 (
   set -euo pipefail
+  if [ ! -d "${REPO_ROOT}/node_modules" ]; then
+    (cd "$REPO_ROOT" && npm ci)
+  fi
   cd "$ACTION_ROOT"
-  npm ci
   npm run build
   git diff --ignore-space-at-eol --exit-code dist/
   untracked="$(git ls-files --others --exclude-standard -- dist/)"

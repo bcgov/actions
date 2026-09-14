@@ -1,13 +1,12 @@
 import github from 'eslint-plugin-github'
 import { fixupPluginRules } from '@eslint/compat'
+import { baseConfig } from '../eslint.config.js'
 
 const recommendedConfig = github.getFlatConfigs().recommended
 recommendedConfig.plugins['eslint-comments'] = fixupPluginRules(recommendedConfig.plugins['eslint-comments'])
 
 export default [
-  {
-    ignores: ['dist/**', 'lib/**', 'node_modules/**']
-  },
+  ...baseConfig,
   recommendedConfig,
   ...github.getFlatConfigs().typescript,
   {
@@ -15,6 +14,7 @@ export default [
     languageOptions: {
       parserOptions: {
         project: './tsconfig.json',
+        tsconfigRootDir: import.meta.dirname,
       },
     },
     rules: {
