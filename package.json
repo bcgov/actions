@@ -29,7 +29,7 @@
     "eslint-plugin-prettier": "^5.0.0",
     "knip": "^6.0.0",
     "prettier": "^3.3.3",
-    "typescript": "^6.0.0",
+    "typescript": "^7.0.0",
     "vitest": "^5.0.0"
   },
   "overrides": {
