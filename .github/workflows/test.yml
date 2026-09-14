@@ -54,7 +54,7 @@ jobs:
               - 'package.json'
               - 'package-lock.json'
               - 'tsconfig.base.json'
-              - 'eslint.config.js'
+              - 'eslint.config.mjs'
               - '.prettierrc.json'
 
   # ─── BUILDER ───────────────────────────────────────────────────────────────
