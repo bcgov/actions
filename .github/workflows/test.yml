@@ -52,11 +52,14 @@ jobs:
               - '.github/workflows/test.yml'
               - '.tool-versions'
               - 'package.json'
-              - 'package-lock.json'
               - 'tsconfig.base.json'
               - 'eslint.config.mjs'
               - '.prettierrc.json'
               - '.prettierignore'
+            # Lock refresh must rebuild bundled dist, not re-run path-match jobs
+            # that assert against this PR's changed files.
+            lockfile:
+              - 'package-lock.json'
 
   # ─── BUILDER ───────────────────────────────────────────────────────────────
   test-builder-build:
@@ -500,7 +503,7 @@ jobs:
   test-pr-description-add:
     name: Test PR Description Add
     needs: [filter]
-    if: contains(fromJSON(needs.filter.outputs.changes), 'pr-description-add') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    if: contains(fromJSON(needs.filter.outputs.changes), 'pr-description-add') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || contains(fromJSON(needs.filter.outputs.changes), 'lockfile') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -687,7 +690,7 @@ jobs:
   test-test-and-analyse:
     name: Test Test and Analyse (${{ matrix.name }})
     needs: [filter]
-    if: contains(fromJSON(needs.filter.outputs.changes), 'test-and-analyse') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    if: contains(fromJSON(needs.filter.outputs.changes), 'test-and-analyse') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || contains(fromJSON(needs.filter.outputs.changes), 'lockfile') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -788,7 +791,7 @@ jobs:
   test-test-and-analyse-shallow:
     name: Test Test and Analyse (Existing Shallow Checkout)
     needs: [filter]
-    if: contains(fromJSON(needs.filter.outputs.changes), 'test-and-analyse') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    if: contains(fromJSON(needs.filter.outputs.changes), 'test-and-analyse') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || contains(fromJSON(needs.filter.outputs.changes), 'lockfile') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
