@@ -1,6 +1,6 @@
 import {debug, error, getInput, info, notice, setFailed} from '@actions/core'
 import {context, getOctokit} from '@actions/github'
-import {normalizeCheckboxState, normalizeText} from './compare'
+import {normalizeCheckboxState, normalizeText} from './compare.js'
 
 const markdown = getInput('add_markdown', {required: true})
 const token = getInput('token', {required: true})

@@ -28975,14 +28975,6 @@ class DecodedURL extends URL {
 
 /***/ }),
 
-/***/ 5235:
-/***/ ((module) => {
-
-module.exports = eval("require")("./compare");
-
-
-/***/ }),
-
 /***/ 2613:
 /***/ ((module) => {
 
@@ -36637,8 +36629,28 @@ function getOctokit(token, options, ...additionalPlugins) {
     return new GitHubWithPlugins(getOctokitOptions(token, options));
 }
 //# sourceMappingURL=github.js.map
-// EXTERNAL MODULE: ../node_modules/@vercel/ncc/dist/ncc/@@notfound.js?./compare
-var _notfoundcompare = __nccwpck_require__(5235);
+;// CONCATENATED MODULE: ./lib/compare.js
+/**
+ * Normalizes text for comparison by trimming and normalizing whitespace.
+ * This helps detect duplicates even with minor whitespace differences.
+ */
+function normalizeText(text) {
+    return text
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n')
+        .split('\n')
+        .map(line => line.trimEnd())
+        .join('\n')
+        .trim();
+}
+/**
+ * Canonicalizes GFM task-list markers so [x]/[X]/[ ] do not count as a
+ * different block. Task labels are preserved.
+ */
+function normalizeCheckboxState(text) {
+    return text.replace(/^(\s*-?\s*)\[(?: |x|X)\]/gm, '$1[ ]');
+}
+
 ;// CONCATENATED MODULE: ./lib/main.js
 
 
@@ -36677,8 +36689,8 @@ async function action() {
         setFailed(`Failed to fetch PR from API: ${err instanceof Error ? err.message : String(err)}. Aborting update to avoid overwriting the current description.`);
         return;
     }
-    const bodyForComparison = (0,_notfoundcompare.normalizeCheckboxState)((0,_notfoundcompare.normalizeText)(currentBody));
-    const markdownForComparison = (0,_notfoundcompare.normalizeCheckboxState)((0,_notfoundcompare.normalizeText)(markdown));
+    const bodyForComparison = normalizeCheckboxState(normalizeText(currentBody));
+    const markdownForComparison = normalizeCheckboxState(normalizeText(markdown));
     logDebug(`Normalized add_markdown length: ${markdownForComparison.length}`);
     if (bodyForComparison.includes(markdownForComparison)) {
         info('Markdown message is already present (excluding checkbox state). Exiting.');
