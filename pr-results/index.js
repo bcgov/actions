@@ -84,7 +84,7 @@ function evaluateResults(needs) {
     } else if (normalized === 'skipped') {
       skipped.push(key)
       details.push({key, status: rawStatus || 'skipped', normalized: 'skipped'})
-    } else if (normalized === 'cancelled' || normalized === 'canceled') {
+    } else if (normalized === 'cancelled') {
       cancelled.push(key)
       details.push({
         key,

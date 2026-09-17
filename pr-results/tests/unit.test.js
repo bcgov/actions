@@ -71,20 +71,13 @@ test('evaluateResults: fails on failure', () => {
   assert.deepEqual(evalResult.successes, ['unit'])
 })
 
-test('evaluateResults: catches cancelled (double-l) and canceled (single-l)', () => {
-  const needs1 = {
+test('evaluateResults: catches cancelled', () => {
+  const needs = {
     lint: {result: 'cancelled'}
   }
-  const eval1 = evaluateResults(needs1)
-  assert.equal(eval1.passed, false)
-  assert.deepEqual(eval1.cancelled, ['lint'])
-
-  const needs2 = {
-    lint: {result: 'canceled'}
-  }
-  const eval2 = evaluateResults(needs2)
-  assert.equal(eval2.passed, false)
-  assert.deepEqual(eval2.cancelled, ['lint'])
+  const evalResult = evaluateResults(needs)
+  assert.equal(evalResult.passed, false)
+  assert.deepEqual(evalResult.cancelled, ['lint'])
 })
 
 test('evaluateResults: handles case insensitivity and whitespace', () => {
@@ -207,7 +200,7 @@ test('run: end-to-end failure emits annotations and exitCode 1', () => {
     needsInput: JSON.stringify({
       build: {result: 'success'},
       test: {result: 'failure'},
-      deploy: {result: 'canceled'}
+      deploy: {result: 'cancelled'}
     }),
     title: 'Deploy Gate',
     outputPath,
