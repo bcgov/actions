@@ -245,3 +245,176 @@ test('run: end-to-end failure emits annotations and exitCode 1', () => {
 
   fs.rmSync(tmpDir, {recursive: true, force: true})
 })
+
+test('buildSummary: escapes pipe characters in job names to preserve markdown table integrity', () => {
+  const evaluation = {
+    passed: true,
+    successes: ['test | unit'],
+    skipped: [],
+    failed: [],
+    cancelled: [],
+    unknown: [],
+    total: 1,
+    details: [{key: 'test | unit', status: 'success', normalized: 'success'}]
+  }
+
+  const md = buildSummary('Pipeline Gate', evaluation)
+  assert.ok(md.includes('| `test \\| unit` | ✅ Succeeded |'))
+})
+
+test('evaluateResults: rejects non-canonical single-l canceled as failure/unknown', () => {
+  const needs = {
+    test: {result: 'canceled'}
+  }
+  const evalResult = evaluateResults(needs)
+  assert.equal(evalResult.passed, false)
+  assert.equal(evalResult.unknown.length, 1)
+  assert.equal(evalResult.unknown[0].key, 'test')
+  assert.equal(evalResult.unknown[0].status, 'canceled')
+})
+
+test('evaluateResults: handles non-standard, null, or malformed job entries safely', () => {
+  const needs = {
+    nullJob: null,
+    numberJob: 42,
+    booleanJob: false,
+    undefinedJob: undefined
+  }
+  const evalResult = evaluateResults(needs)
+  assert.equal(evalResult.passed, false)
+  assert.equal(evalResult.total, 4)
+  assert.equal(evalResult.unknown.length, 4)
+})
+
+test('evaluateResults: accurately handles real GitHub Actions matrix job graphs', () => {
+  const matrixNeeds = {
+    filter: {result: 'success', outputs: {changes: '["frontend"]'}},
+    'test (18, ubuntu-24.04)': {result: 'success', outputs: {}},
+    'test (20, ubuntu-24.04)': {result: 'success', outputs: {}},
+    'test (22, ubuntu-24.04)': {result: 'skipped', outputs: {}},
+    'deploy (dev)': {
+      result: 'success',
+      outputs: {url: 'https://dev.example.com'}
+    },
+    'deploy (prod)': {result: 'skipped', outputs: {}}
+  }
+
+  const evalResult = evaluateResults(matrixNeeds)
+  assert.equal(evalResult.passed, true)
+  assert.equal(evalResult.total, 6)
+  assert.deepEqual(evalResult.successes, [
+    'filter',
+    'test (18, ubuntu-24.04)',
+    'test (20, ubuntu-24.04)',
+    'deploy (dev)'
+  ])
+  assert.deepEqual(evalResult.skipped, [
+    'test (22, ubuntu-24.04)',
+    'deploy (prod)'
+  ])
+})
+
+test('run: honors annotations=false toggle by suppressing ::error:: annotations', () => {
+  const errors = []
+  const mockLogger = {
+    log: () => {},
+    error: msg => errors.push(msg),
+    warn: () => {}
+  }
+
+  const {exitCode, evaluation} = run({
+    needsInput: JSON.stringify({
+      failJob: {result: 'failure'}
+    }),
+    annotations: 'false',
+    summary: 'false',
+    logger: mockLogger
+  })
+
+  assert.equal(exitCode, 1)
+  assert.equal(evaluation.passed, false)
+  // No workflow annotations should have been emitted
+  assert.equal(errors.length, 0)
+})
+
+test('run: honors summary=false toggle by skipping file write', () => {
+  const tmpDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'workflow-results-no-summary-')
+  )
+  const summaryPath = path.join(tmpDir, 'summary.md')
+
+  const {exitCode} = run({
+    needsInput: JSON.stringify({
+      job1: {result: 'success'}
+    }),
+    summary: 'false',
+    summaryPath,
+    logger: {log: () => {}, error: () => {}, warn: () => {}}
+  })
+
+  assert.equal(exitCode, 0)
+  assert.equal(fs.existsSync(summaryPath), false)
+
+  fs.rmSync(tmpDir, {recursive: true, force: true})
+})
+
+test('run: executes seamlessly when invoked purely via runner environment variables', () => {
+  const tmpDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'workflow-results-env-test-')
+  )
+  const outputPath = path.join(tmpDir, 'output.txt')
+  const summaryPath = path.join(tmpDir, 'summary.md')
+
+  const origEnv = {...process.env}
+  try {
+    process.env.INPUT_NEEDS = JSON.stringify({
+      ci: {result: 'success'},
+      lint: {result: 'skipped'}
+    })
+    process.env.INPUT_TITLE = 'Native Runner Contract Test'
+    process.env.INPUT_SUMMARY = 'true'
+    process.env.INPUT_ANNOTATIONS = 'true'
+    process.env.GITHUB_OUTPUT = outputPath
+    process.env.GITHUB_STEP_SUMMARY = summaryPath
+
+    const {exitCode, evaluation, markdown} = run()
+
+    assert.equal(exitCode, 0)
+    assert.equal(evaluation.passed, true)
+    assert.ok(markdown.includes('### Native Runner Contract Test'))
+
+    const summaryContent = fs.readFileSync(summaryPath, 'utf8')
+    assert.ok(summaryContent.includes('### Native Runner Contract Test'))
+    assert.ok(summaryContent.includes('| `ci` | ✅ Succeeded |'))
+    assert.ok(summaryContent.includes('| `lint` | ⊘ Skipped |'))
+
+    const outputContent = fs.readFileSync(outputPath, 'utf8')
+    assert.ok(outputContent.includes('passed=true'))
+    assert.ok(outputContent.includes('total=2'))
+  } finally {
+    process.env = origEnv
+    fs.rmSync(tmpDir, {recursive: true, force: true})
+  }
+})
+
+test('run: gracefully handles execution outside GitHub Actions when env vars are unset', () => {
+  const logs = []
+  const mockLogger = {
+    log: msg => logs.push(msg),
+    error: () => {},
+    warn: () => {}
+  }
+
+  const {exitCode, evaluation} = run({
+    needsInput: JSON.stringify({
+      offlineJob: {result: 'success'}
+    }),
+    outputPath: undefined,
+    summaryPath: undefined,
+    logger: mockLogger
+  })
+
+  assert.equal(exitCode, 0)
+  assert.equal(evaluation.passed, true)
+  assert.ok(logs.some(l => l.includes('=== Workflow Results ===')))
+})

@@ -145,7 +145,8 @@ function buildSummary(title, evaluation) {
         badge = `⚠️ Unknown (${item.status || 'missing'})`
         break
     }
-    lines.push(`| \`${item.key}\` | ${badge} |`)
+    const safeKey = item.key.replace(/\|/g, '\\|')
+    lines.push(`| \`${safeKey}\` | ${badge} |`)
   }
 
   lines.push('')
