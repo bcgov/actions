@@ -37,6 +37,8 @@ jobs:
               - 'image-tracker/**'
             pr-description-add:
               - 'pr-description-add/**'
+            pr-results:
+              - 'pr-results/**'
             pr-validate:
               - 'pr-validate/**'
               - '.github/workflows/pr-validate.yml'
@@ -551,6 +553,44 @@ jobs:
           conventional_commits: "false"
           add_markdown: "pr-validate wrapper integration test"
 
+  # ─── PR RESULTS ────────────────────────────────────────────────────────────
+  test-pr-results:
+    name: Test PR Results
+    needs: [filter]
+    if: contains(fromJSON(needs.filter.outputs.changes), 'pr-results') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Validate action.yml
+        run: |
+          test -f pr-results/action.yml
+          pip install pyyaml -q
+          python3 -c "
+          import yaml
+          with open('pr-results/action.yml') as f:
+              action = yaml.safe_load(f)
+          assert isinstance(action, dict), 'action.yml must be a mapping'
+          for key in ['name', 'description', 'inputs', 'outputs', 'runs']:
+              assert key in action and action[key], f'Missing required action field: {key}'
+          assert action['runs'].get('using') == 'node24', 'runs.using must be node24'
+          assert action['runs'].get('main') == 'index.js', 'runs.main must be index.js'
+          assert 'needs' in action['inputs'], 'inputs must declare needs'
+          assert action['inputs']['needs'].get('required') is True, 'needs must be required'
+          assert 'passed' in action['outputs'], 'missing passed output'
+          "
+
+      - name: Run Unit Tests
+        run: node --test pr-results/tests/unit.test.js
+
+      - name: Test PR Results Self Action (All Succeeded & Skipped)
+        uses: $/pr-results
+        with:
+          needs: '{"job1":{"result":"success"},"job2":{"result":"skipped"}}'
+          title: "PR Results Self-Check"
+
   # ─── WORKFLOW NOTIFIER ──────────────────────────────────────────────────────
   test-notifier:
     name: Test Workflow Notifier
@@ -840,6 +880,7 @@ jobs:
       - test-diff-triggers
       - test-image-tracker
       - test-pr-description-add
+      - test-pr-results
       - test-pr-validate
       - test-notifier
       - test-sysdig-monitor
@@ -848,10 +889,7 @@ jobs:
     if: always()
     runs-on: ubuntu-24.04
     steps:
-      - name: Check Results
-        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
-        run: |
-          echo "CI validation failed."
-          exit 1
-      - name: Success
-        run: echo "All test suites completed successfully."
+      - name: PR Results Check
+        uses: $/pr-results
+        with:
+          needs: ${{ toJson(needs) }}

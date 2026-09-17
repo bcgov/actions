@@ -1,0 +1,38 @@
+name: PR Results
+description: Consolidate upstream job results into a single merge gate with summary table and annotations.
+branding:
+  icon: check-square
+  color: blue
+
+inputs:
+  needs:
+    description: Context from upstream jobs, passed via toJson(needs)
+    required: true
+  title:
+    description: Header title for step summary and log output
+    required: false
+    default: 'PR Results'
+  summary:
+    description: Write markdown summary table to GITHUB_STEP_SUMMARY
+    required: false
+    default: 'true'
+  annotations:
+    description: Emit workflow annotations for failures or cancellations
+    required: false
+    default: 'true'
+
+outputs:
+  passed:
+    description: Whether all upstream jobs passed or were skipped ('true' or 'false')
+  failed:
+    description: JSON array of failed job keys
+  cancelled:
+    description: JSON array of cancelled job keys
+  skipped:
+    description: JSON array of skipped job keys
+  total:
+    description: Total number of evaluated jobs
+
+runs:
+  using: node24
+  main: index.js

@@ -48,6 +48,16 @@ Validate Pull Request metadata and apply organizational guardrails.
   uses: bcgov/actions/pr-validate@vX.Y.Z # Replace with latest release tag
 ```
 
+### [pr-results](./pr-results/)
+Consolidate upstream job results into a single merge gate with summary tables and error annotations.
+
+```yaml
+- name: PR Results
+  uses: bcgov/actions/pr-results@vX.Y.Z # Replace with latest release tag
+  with:
+    needs: ${{ toJson(needs) }}
+```
+
 ### [sysdig-monitor](./sysdig-monitor/)
 Create or update Sysdig email alerts for an app on PROD deploy. Idempotent, additive and non-blocking.
 
