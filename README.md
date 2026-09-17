@@ -48,16 +48,6 @@ Validate Pull Request metadata and apply organizational guardrails.
   uses: bcgov/actions/pr-validate@vX.Y.Z # Replace with latest release tag
 ```
 
-### [pr-results](./pr-results/)
-Consolidate upstream job results into a single merge gate with summary tables and error annotations.
-
-```yaml
-- name: PR Results
-  uses: bcgov/actions/pr-results@vX.Y.Z # Replace with latest release tag
-  with:
-    needs: ${{ toJson(needs) }}
-```
-
 ### [sysdig-monitor](./sysdig-monitor/)
 Create or update Sysdig email alerts for an app on PROD deploy. Idempotent, additive and non-blocking.
 
@@ -89,6 +79,16 @@ Find `CODEOWNERS` and coordinate notifications (GitHub Issues) on job failures.
   uses: bcgov/actions/workflow-notifier@vX.Y.Z # Replace with latest release tag
 ```
 
+### [workflow-results](./workflow-results/)
+Consolidate upstream job results into a single merge gate or workflow rollup with summary tables and error annotations.
+
+```yaml
+- name: Workflow Results
+  uses: bcgov/actions/workflow-results@vX.Y.Z # Replace with latest release tag
+  with:
+    needs: ${{ toJson(needs) }}
+```
+
 ## Security & Token Permissions
 
 In alignment with security best practices, you should always declare minimum explicit permissions for the `GITHUB_TOKEN` in your workflows rather than granting wildcard/admin permissions. 
@@ -102,6 +102,7 @@ Refer to each action's directory for its exact minimum required permissions bloc
 - **[sysdig-monitor](./sysdig-monitor/)**: `contents: read` (alert templates are read from the consuming repo's checkout)
 - **[test-and-analyse](./test-and-analyse/)**: `contents: read`, `actions: write` (optional, for caching)
 - **[workflow-notifier](./workflow-notifier/)**: `contents: read`, `issues: write`, `pull-requests: read` (optional, for PR merge author resolution)
+- **[workflow-results](./workflow-results/)**: `permissions: {}` (no permissions required)
 
 ## Fork pull requests
 

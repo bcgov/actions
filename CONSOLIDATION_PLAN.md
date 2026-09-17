@@ -31,11 +31,11 @@ actions/
 ├── diff-triggers/
 ├── image-tracker/
 ├── pr-description-add/
-├── pr-results/
 ├── pr-validate/
 ├── sysdig-monitor/
 ├── test-and-analyse/
 ├── workflow-notifier/  # (Formerly report-failures)
+├── workflow-results/
 ├── README.md
 └── LICENSE
 ```

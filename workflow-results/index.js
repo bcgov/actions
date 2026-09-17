@@ -188,8 +188,8 @@ function buildSummary(title, evaluation) {
 function run(opts = {}) {
   const rawNeeds = opts.needsInput ?? process.env.INPUT_NEEDS
   const title =
-    (opts.title ?? process.env.INPUT_TITLE ?? 'PR Results').trim() ||
-    'PR Results'
+    (opts.title ?? process.env.INPUT_TITLE ?? 'Workflow Results').trim() ||
+    'Workflow Results'
   const enableSummary =
     (opts.summary ?? process.env.INPUT_SUMMARY ?? 'true') !== 'false'
   const enableAnnotations =

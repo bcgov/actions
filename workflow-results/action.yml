@@ -1,4 +1,4 @@
-name: PR Results
+name: Workflow Results
 description: Consolidate upstream job results into a single merge gate with summary table and annotations.
 branding:
   icon: check-square
@@ -11,7 +11,7 @@ inputs:
   title:
     description: Header title for step summary and log output
     required: false
-    default: 'PR Results'
+    default: 'Workflow Results'
   summary:
     description: Write markdown summary table to GITHUB_STEP_SUMMARY
     required: false

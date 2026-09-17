@@ -184,6 +184,29 @@ test('run: end-to-end success writes outputs and step summary with exitCode 0', 
   fs.rmSync(tmpDir, {recursive: true, force: true})
 })
 
+test('run: defaults title to Workflow Results when omitted', () => {
+  const tmpDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'workflow-results-test-')
+  )
+  const outputPath = path.join(tmpDir, 'output.txt')
+  const summaryPath = path.join(tmpDir, 'summary.md')
+
+  const {exitCode} = run({
+    needsInput: JSON.stringify({
+      build: {result: 'success'}
+    }),
+    outputPath,
+    summaryPath,
+    logger: {log: () => {}, error: () => {}, warn: () => {}}
+  })
+
+  assert.equal(exitCode, 0)
+  const summaryContent = fs.readFileSync(summaryPath, 'utf8')
+  assert.ok(summaryContent.includes('### Workflow Results'))
+
+  fs.rmSync(tmpDir, {recursive: true, force: true})
+})
+
 test('run: end-to-end failure emits annotations and exitCode 1', () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pr-results-test-fail-'))
   const outputPath = path.join(tmpDir, 'output.txt')

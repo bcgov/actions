@@ -37,13 +37,13 @@ jobs:
               - 'image-tracker/**'
             pr-description-add:
               - 'pr-description-add/**'
-            pr-results:
-              - 'pr-results/**'
             pr-validate:
               - 'pr-validate/**'
               - '.github/workflows/pr-validate.yml'
             workflow-notifier:
               - 'workflow-notifier/**'
+            workflow-results:
+              - 'workflow-results/**'
             sysdig-monitor:
               - 'sysdig-monitor/**'
             test-and-analyse:
@@ -553,11 +553,11 @@ jobs:
           conventional_commits: "false"
           add_markdown: "pr-validate wrapper integration test"
 
-  # ─── PR RESULTS ────────────────────────────────────────────────────────────
-  test-pr-results:
-    name: Test PR Results
+  # ─── WORKFLOW RESULTS ───────────────────────────────────────────────────────
+  test-workflow-results:
+    name: Test Workflow Results
     needs: [filter]
-    if: contains(fromJSON(needs.filter.outputs.changes), 'pr-results') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    if: contains(fromJSON(needs.filter.outputs.changes), 'workflow-results') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -566,11 +566,11 @@ jobs:
 
       - name: Validate action.yml
         run: |
-          test -f pr-results/action.yml
+          test -f workflow-results/action.yml
           pip install pyyaml -q
           python3 -c "
           import yaml
-          with open('pr-results/action.yml') as f:
+          with open('workflow-results/action.yml') as f:
               action = yaml.safe_load(f)
           assert isinstance(action, dict), 'action.yml must be a mapping'
           for key in ['name', 'description', 'inputs', 'outputs', 'runs']:
@@ -583,13 +583,13 @@ jobs:
           "
 
       - name: Run Unit Tests
-        run: node --test pr-results/tests/unit.test.js
+        run: node --test workflow-results/tests/unit.test.js
 
-      - name: Test PR Results Self Action (All Succeeded & Skipped)
-        uses: $/pr-results
+      - name: Test Workflow Results Self Action (All Succeeded & Skipped)
+        uses: $/workflow-results
         with:
           needs: '{"job1":{"result":"success"},"job2":{"result":"skipped"}}'
-          title: "PR Results Self-Check"
+          title: "Workflow Results Self-Check"
 
   # ─── WORKFLOW NOTIFIER ──────────────────────────────────────────────────────
   test-notifier:
@@ -880,9 +880,9 @@ jobs:
       - test-diff-triggers
       - test-image-tracker
       - test-pr-description-add
-      - test-pr-results
       - test-pr-validate
       - test-notifier
+      - test-workflow-results
       - test-sysdig-monitor
       - test-test-and-analyse
       - test-test-and-analyse-shallow
@@ -890,6 +890,6 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: PR Results Check
-        uses: $/pr-results
+        uses: $/workflow-results
         with:
           needs: ${{ toJson(needs) }}
