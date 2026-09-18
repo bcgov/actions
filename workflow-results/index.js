@@ -199,6 +199,10 @@ function run(opts = {}) {
     String(opts.annotations ?? process.env.INPUT_ANNOTATIONS ?? 'true')
       .trim()
       .toLowerCase() !== 'false'
+  const debug =
+    String(opts.debug ?? process.env.INPUT_DEBUG ?? 'false')
+      .trim()
+      .toLowerCase() === 'true' || process.env.RUNNER_DEBUG === '1'
   const outputPath = opts.outputPath ?? process.env.GITHUB_OUTPUT
   const summaryPath = opts.summaryPath ?? process.env.GITHUB_STEP_SUMMARY
   const logger = opts.logger ?? console
@@ -206,6 +210,12 @@ function run(opts = {}) {
   const needs = parseNeeds(rawNeeds)
   const evaluation = evaluateResults(needs)
   const markdown = buildSummary(title, evaluation)
+
+  if (debug) {
+    logger.log(`::debug::Workflow Results debug enabled`)
+    logger.log(`::debug::Raw needs input: ${rawNeeds}`)
+    logger.log(`::debug::Evaluation: ${JSON.stringify(evaluation)}`)
+  }
 
   // 1. Log overview
   if (process.env.GITHUB_ACTIONS === 'true') {

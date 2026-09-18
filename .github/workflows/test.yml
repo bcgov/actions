@@ -166,7 +166,7 @@ jobs:
           tag_fallback: test
           triggers: |
             frontend/
-          metadata_tags: "true"
+          metadata_tags: 'true'
           metadata_flavor: |
             latest=true
           metadata_tag_rules: |
@@ -182,7 +182,7 @@ jobs:
           build_context: builder/tests
           build_file: builder/tests/Dockerfile
           tags: ${{ github.event.number || github.run_id }}-selftest
-          sbom: "false"
+          sbom: 'false'
           triggers: |
             builder/
             .github/workflows/
@@ -529,7 +529,7 @@ jobs:
         if: github.event_name == 'pull_request'
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          add_markdown: "Automated Integration Test Verification"
+          add_markdown: 'Automated Integration Test Verification'
 
   # ─── PR VALIDATE ───────────────────────────────────────────────────────────
   test-pr-validate:
@@ -550,8 +550,8 @@ jobs:
         if: github.event_name == 'pull_request'
         uses: $/pr-validate
         with:
-          conventional_commits: "false"
-          add_markdown: "pr-validate wrapper integration test"
+          conventional_commits: 'false'
+          add_markdown: 'pr-validate wrapper integration test'
 
   # ─── WORKFLOW RESULTS ───────────────────────────────────────────────────────
   test-workflow-results:
@@ -586,10 +586,89 @@ jobs:
         run: node --test workflow-results/tests/unit.test.js
 
       - name: Test Workflow Results Self Action (All Succeeded & Skipped)
+        id: self_check_pass
         uses: $/workflow-results
         with:
           needs: '{"job1":{"result":"success"},"job2":{"result":"skipped"}}'
-          title: "Workflow Results Self-Check"
+          title: 'Workflow Results Self-Check'
+          debug: 'true'
+
+      - name: Verify Pass Outputs
+        run: |
+          echo "passed: ${{ steps.self_check_pass.outputs.passed }}"
+          echo "total: ${{ steps.self_check_pass.outputs.total }}"
+          echo "failed: ${{ steps.self_check_pass.outputs.failed }}"
+          echo "cancelled: ${{ steps.self_check_pass.outputs.cancelled }}"
+          echo "skipped: ${{ steps.self_check_pass.outputs.skipped }}"
+          if [ "${{ steps.self_check_pass.outputs.passed }}" != "true" ] || \
+             [ "${{ steps.self_check_pass.outputs.total }}" != "2" ] || \
+             [ '${{ steps.self_check_pass.outputs.failed }}' != '[]' ] || \
+             [ '${{ steps.self_check_pass.outputs.cancelled }}' != '[]' ] || \
+             [ '${{ steps.self_check_pass.outputs.skipped }}' != '["job2"]' ]; then
+            echo "::error::Output assertions failed for passing gate"
+            exit 1
+          fi
+
+      - name: Test Workflow Results Self Action (Simulate Failure)
+        id: self_check_fail
+        continue-on-error: true
+        uses: $/workflow-results
+        with:
+          needs: '{"test":{"result":"failure"},"build":{"result":"success"}}'
+          title: 'Failure Simulation Gate'
+
+      - name: Verify Failure Gate Behaved Correctly
+        run: |
+          if [ "${{ steps.self_check_fail.outcome }}" != "failure" ]; then
+            echo "::error::Failure simulation should have failed the step"
+            exit 1
+          fi
+          if [ "${{ steps.self_check_fail.outputs.passed }}" != "false" ]; then
+            echo "::error::passed output should be false on failure"
+            exit 1
+          fi
+          if [ '${{ steps.self_check_fail.outputs.failed }}' != '["test"]' ]; then
+            echo "::error::failed output does not contain expected failed job"
+            exit 1
+          fi
+
+      - name: Test Workflow Results Self Action (Simulate Cancelled)
+        id: self_check_cancel
+        continue-on-error: true
+        uses: $/workflow-results
+        with:
+          needs: '{"deploy":{"result":"cancelled"},"build":{"result":"success"}}'
+          title: 'Cancelled Simulation Gate'
+
+      - name: Verify Cancelled Gate Behaved Correctly
+        run: |
+          if [ "${{ steps.self_check_cancel.outcome }}" != "failure" ]; then
+            echo "::error::Cancelled simulation should have failed the step"
+            exit 1
+          fi
+          if [ "${{ steps.self_check_cancel.outputs.passed }}" != "false" ]; then
+            echo "::error::passed output should be false on cancellation"
+            exit 1
+          fi
+          if [ '${{ steps.self_check_cancel.outputs.cancelled }}' != '["deploy"]' ]; then
+            echo "::error::cancelled output does not contain expected cancelled job"
+            exit 1
+          fi
+
+      - name: Test Workflow Results Self Action (Simulate Empty Needs Guard)
+        id: self_check_empty
+        continue-on-error: true
+        uses: $/workflow-results
+        with:
+          needs: '{}'
+          title: 'Empty Needs Simulation'
+
+      - name: Verify Empty Needs Failed Fast
+        run: |
+          if [ "${{ steps.self_check_empty.outcome }}" != "failure" ]; then
+            echo "::error::Empty needs should have failed fast"
+            exit 1
+          fi
 
   # ─── WORKFLOW NOTIFIER ──────────────────────────────────────────────────────
   test-notifier:
@@ -637,8 +716,8 @@ jobs:
         uses: $/workflow-notifier
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          title: "[DRY RUN] Simulating a failure for testing"
-          body: "This is a dry run test of the notifier action."
+          title: '[DRY RUN] Simulating a failure for testing'
+          body: 'This is a dry run test of the notifier action.'
           dry_run: true
 
       - name: Dry Run - Simulate Failure with Author Disabled
@@ -646,8 +725,8 @@ jobs:
         uses: $/workflow-notifier
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          title: "[DRY RUN] Simulating a failure without author"
-          body: "This is a dry run test without author."
+          title: '[DRY RUN] Simulating a failure without author'
+          body: 'This is a dry run test without author.'
           notify_author: false
           dry_run: true
 
@@ -656,8 +735,8 @@ jobs:
         uses: $/workflow-notifier
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          title: "[DRY RUN] Simulating a failure without codeowners"
-          body: "This is a dry run test without codeowners."
+          title: '[DRY RUN] Simulating a failure without codeowners'
+          body: 'This is a dry run test without codeowners.'
           notify_codeowners: false
           dry_run: true
 
@@ -666,9 +745,9 @@ jobs:
         uses: $/workflow-notifier
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          title: "[DRY RUN] Simulating a failure with codeowners always"
-          body: "This is a dry run test with codeowners always."
-          notify_codeowners: "true"
+          title: '[DRY RUN] Simulating a failure with codeowners always'
+          body: 'This is a dry run test with codeowners always.'
+          notify_codeowners: 'true'
           dry_run: true
 
       - name: Verify Outputs
@@ -693,7 +772,6 @@ jobs:
             exit 1
           fi
           echo "All notifier tests passed."
-
 
   # ─── SYSDIG MONITOR ────────────────────────────────────────────────────────
   test-sysdig-monitor:
@@ -738,11 +816,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        name: [backend-triggered, backend-not-triggered, frontend-basic, frontend-no-triggers, waste-frontend, java-basic, fom-autodiscover]
+        name:
+          [
+            backend-triggered,
+            backend-not-triggered,
+            frontend-basic,
+            frontend-no-triggers,
+            waste-frontend,
+            java-basic,
+            fom-autodiscover
+          ]
         include:
           - name: backend-triggered
             dir: backend
-            triggers: ""
+            triggers: ''
             expected_triggered: true
             repository: bcgov/quickstart-openshift
             test_command: npm install --no-package-lock && npm run test:cov
@@ -755,7 +842,7 @@ jobs:
             test_command: npm install --no-package-lock && npm run test:cov
           - name: frontend-basic
             dir: frontend
-            triggers: ""
+            triggers: ''
             expected_triggered: true
             repository: bcgov/quickstart-openshift
             test_command: npm install --no-package-lock && npm run test:cov
@@ -774,19 +861,19 @@ jobs:
           - name: java-basic
             dir: backend
             language: java
-            java_version: "17"
-            triggers: ""
+            java_version: '17'
+            triggers: ''
             expected_triggered: true
             repository: bcgov/nr-forest-client
             test_command: timeout 10m mvn -B verify -P all-tests -DskipTests
-            cache: "none"
+            cache: 'none'
           - name: fom-autodiscover
-            dir: ""
-            triggers: ""
+            dir: ''
+            triggers: ''
             expected_triggered: true
             repository: bcgov/nr-fom
             test_command: echo "Testing autodiscover on nr-fom"
-            expected_config: ".github/knip.json"
+            expected_config: '.github/knip.json'
     steps:
       - id: action
         uses: $/test-and-analyse
@@ -795,7 +882,7 @@ jobs:
           commands: |
             ${{ matrix.test_command }}
           dir: test-project/${{ matrix.dir }}
-          node_version: "24"
+          node_version: '24'
           language: ${{ matrix.language || 'node' }}
           java_version: ${{ matrix.java_version || '21' }}
           repository: ${{ matrix.repository }}

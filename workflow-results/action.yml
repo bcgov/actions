@@ -20,6 +20,10 @@ inputs:
     description: Emit workflow annotations for failures or cancellations
     required: false
     default: 'true'
+  debug:
+    description: Enable debug logging
+    required: false
+    default: 'false'
 
 outputs:
   passed:

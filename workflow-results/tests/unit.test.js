@@ -485,11 +485,49 @@ test('run: gracefully handles execution outside GitHub Actions when env vars are
       offlineJob: {result: 'success'}
     }),
     outputPath: undefined,
-    summaryPath: undefined,
     logger: mockLogger
   })
-
   assert.equal(exitCode, 0)
   assert.equal(evaluation.passed, true)
   assert.ok(logs.some(l => l.includes('=== Workflow Results ===')))
+})
+
+test('run: emits ::debug:: logs when debug is enabled or RUNNER_DEBUG is set', () => {
+  const logs = []
+  const mockLogger = {
+    log: msg => logs.push(msg),
+    error: () => {},
+    warn: () => {}
+  }
+
+  // 1. debug option
+  run({
+    needsInput: JSON.stringify({jobA: {result: 'success'}}),
+    debug: 'true',
+    summary: 'false',
+    annotations: 'false',
+    logger: mockLogger
+  })
+  assert.ok(
+    logs.some(l => l.includes('::debug::Workflow Results debug enabled'))
+  )
+
+  // 2. RUNNER_DEBUG env var
+  logs.length = 0
+  const origRunnerDebug = process.env.RUNNER_DEBUG
+  try {
+    process.env.RUNNER_DEBUG = '1'
+    run({
+      needsInput: JSON.stringify({jobA: {result: 'success'}}),
+      debug: 'false',
+      summary: 'false',
+      annotations: 'false',
+      logger: mockLogger
+    })
+    assert.ok(
+      logs.some(l => l.includes('::debug::Workflow Results debug enabled'))
+    )
+  } finally {
+    process.env.RUNNER_DEBUG = origRunnerDebug
+  }
 })
