@@ -246,20 +246,26 @@ test('run: end-to-end failure emits annotations and exitCode 1', () => {
   fs.rmSync(tmpDir, {recursive: true, force: true})
 })
 
-test('buildSummary: escapes pipe characters in job names to preserve markdown table integrity', () => {
+test('buildSummary: escapes backslashes and pipes in job names to preserve markdown table integrity', () => {
   const evaluation = {
     passed: true,
-    successes: ['test | unit'],
+    successes: ['test \\ path | unit'],
     skipped: [],
     failed: [],
     cancelled: [],
     unknown: [],
     total: 1,
-    details: [{key: 'test | unit', status: 'success', normalized: 'success'}]
+    details: [
+      {
+        key: 'test \\ path | unit',
+        status: 'success',
+        normalized: 'success'
+      }
+    ]
   }
 
   const md = buildSummary('Pipeline Gate', evaluation)
-  assert.ok(md.includes('| `test \\| unit` | ✅ Succeeded |'))
+  assert.ok(md.includes('| `test \\\\ path \\| unit` | ✅ Succeeded |'))
 })
 
 test('evaluateResults: rejects non-canonical single-l canceled as failure/unknown', () => {
@@ -356,6 +362,75 @@ test('run: honors summary=false toggle by skipping file write', () => {
   assert.equal(fs.existsSync(summaryPath), false)
 
   fs.rmSync(tmpDir, {recursive: true, force: true})
+})
+
+test('run: honors case-insensitive and boolean false toggles', () => {
+  const errors = []
+  const mockLogger = {
+    log: () => {},
+    error: msg => errors.push(msg),
+    warn: () => {}
+  }
+
+  const tmpDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'workflow-results-toggles-')
+  )
+  const summaryPath = path.join(tmpDir, 'summary.md')
+
+  // Test boolean false
+  const run1 = run({
+    needsInput: JSON.stringify({failJob: {result: 'failure'}}),
+    annotations: false,
+    summary: false,
+    summaryPath,
+    logger: mockLogger
+  })
+  assert.equal(run1.exitCode, 1)
+  assert.equal(errors.length, 0)
+  assert.equal(fs.existsSync(summaryPath), false)
+
+  // Test "FALSE" and "False" strings
+  const run2 = run({
+    needsInput: JSON.stringify({failJob: {result: 'failure'}}),
+    annotations: 'FALSE',
+    summary: 'False',
+    summaryPath,
+    logger: mockLogger
+  })
+  assert.equal(run2.exitCode, 1)
+  assert.equal(errors.length, 0)
+  assert.equal(fs.existsSync(summaryPath), false)
+
+  fs.rmSync(tmpDir, {recursive: true, force: true})
+})
+
+test('run: emits ::group:: and ::endgroup:: commands when running under GITHUB_ACTIONS', () => {
+  const logs = []
+  const mockLogger = {
+    log: msg => logs.push(msg),
+    error: () => {},
+    warn: () => {}
+  }
+
+  const origAction = process.env.GITHUB_ACTIONS
+  try {
+    process.env.GITHUB_ACTIONS = 'true'
+    const {exitCode} = run({
+      needsInput: JSON.stringify({
+        jobA: {result: 'success'}
+      }),
+      title: 'Rollup Group',
+      summary: 'false',
+      annotations: 'false',
+      logger: mockLogger
+    })
+
+    assert.equal(exitCode, 0)
+    assert.ok(logs.some(l => l === '::group::=== Rollup Group ==='))
+    assert.ok(logs.some(l => l === '::endgroup::'))
+  } finally {
+    process.env.GITHUB_ACTIONS = origAction
+  }
 })
 
 test('run: executes seamlessly when invoked purely via runner environment variables', () => {

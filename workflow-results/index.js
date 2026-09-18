@@ -145,7 +145,7 @@ function buildSummary(title, evaluation) {
         badge = `⚠️ Unknown (${item.status || 'missing'})`
         break
     }
-    const safeKey = item.key.replace(/\|/g, '\\|')
+    const safeKey = item.key.replace(/\\/g, '\\\\').replace(/\|/g, '\\|')
     lines.push(`| \`${safeKey}\` | ${badge} |`)
   }
 
@@ -192,9 +192,13 @@ function run(opts = {}) {
     (opts.title ?? process.env.INPUT_TITLE ?? 'Workflow Results').trim() ||
     'Workflow Results'
   const enableSummary =
-    (opts.summary ?? process.env.INPUT_SUMMARY ?? 'true') !== 'false'
+    String(opts.summary ?? process.env.INPUT_SUMMARY ?? 'true')
+      .trim()
+      .toLowerCase() !== 'false'
   const enableAnnotations =
-    (opts.annotations ?? process.env.INPUT_ANNOTATIONS ?? 'true') !== 'false'
+    String(opts.annotations ?? process.env.INPUT_ANNOTATIONS ?? 'true')
+      .trim()
+      .toLowerCase() !== 'false'
   const outputPath = opts.outputPath ?? process.env.GITHUB_OUTPUT
   const summaryPath = opts.summaryPath ?? process.env.GITHUB_STEP_SUMMARY
   const logger = opts.logger ?? console
@@ -204,12 +208,12 @@ function run(opts = {}) {
   const markdown = buildSummary(title, evaluation)
 
   // 1. Log overview
-  if (logger.group && process.env.GITHUB_ACTIONS === 'true') {
-    logger.group(`=== ${title} ===`)
+  if (process.env.GITHUB_ACTIONS === 'true') {
+    logger.log(`::group::=== ${title} ===`)
     for (const item of evaluation.details) {
       logger.log(`  [${item.normalized}] ${item.key}`)
     }
-    logger.groupEnd()
+    logger.log('::endgroup::')
   } else {
     logger.log(`\n=== ${title} ===`)
     for (const item of evaluation.details) {
