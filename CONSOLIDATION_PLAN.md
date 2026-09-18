@@ -35,6 +35,7 @@ actions/
 ├── sysdig-monitor/
 ├── test-and-analyse/
 ├── workflow-notifier/  # (Formerly report-failures)
+├── workflow-results/
 ├── README.md
 └── LICENSE
 ```
