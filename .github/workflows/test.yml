@@ -153,8 +153,8 @@ jobs:
             ${{ github.event.number || github.run_id }}
             single-package-test
 
-      - name: Test Metadata Tags
-        id: metadata-tags
+      - name: Test Custom Tags
+        id: custom-tags
         uses: $/builder
         with:
           package: frontend
@@ -166,13 +166,6 @@ jobs:
           tag_fallback: test
           triggers: |
             frontend/
-          metadata_tags: 'true'
-          metadata_flavor: |
-            latest=true
-          metadata_tag_rules: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha
 
       - name: Test Self Repo
         id: self-repo
