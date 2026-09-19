@@ -94,8 +94,8 @@ Only GitHub Container Registry (`ghcr.io`) is supported.
     build_file: ./frontend/Dockerfile
 
     # Fallback tag, used if no build was generated
-    # Optional, defaults to nothing, which forces a build
-    # Non-matching or malformed tags are rejected, which also forced a build
+    # Optional, defaults to test
+    # Non-matching or malformed tags are rejected, which forces a build
     tag_fallback: test
 
     # Tags to apply to the image
@@ -154,9 +154,9 @@ Only GitHub Container Registry (`ghcr.io`) is supported.
     metadata_tags: 'true'
 
     # Flavor configuration for metadata-action (optional)
-    # Only used when metadata_tags is enabled
+    # Only used when metadata_tags is enabled; defaults to latest=false
     metadata_flavor: |
-        latest=true
+        latest=false
 
     # Custom tag rules for metadata-action (optional)
     # Only used when metadata_tags is enabled
@@ -165,7 +165,6 @@ Only GitHub Container Registry (`ghcr.io`) is supported.
         type=sha,format=short
         type=ref,event=branch
         type=ref,event=pr
-        type=raw,value=latest,enable={{is_default_branch}}
         type=semver,pattern={{version}}
         type=semver,pattern={{major}}.{{minor}}
         type=semver,pattern={{major}}
@@ -224,7 +223,7 @@ builds:
         tags: |
           ${{ github.event.number }}
           ${{ github.sha }}
-          latest
+          test
         tag_fallback: test
         token: ${{ secrets.GITHUB_TOKEN }}
         triggers: |
@@ -277,7 +276,7 @@ builds:
         tag_fallback: test
         triggers: |
           frontend/
-        # Override flavor (optional)
+        # Override flavor (e.g. opt in to latest)
         metadata_flavor: |
           latest=true
         # Override tag rules (optional - sensible defaults are used if omitted)
@@ -293,7 +292,7 @@ builds:
 Default tag rules generate tags like:
 - For branch pushes: `main`, `develop`, etc.
 - For PRs: `pr-123`
-- For semver tags: `v1.2.3`, `1.2`, `1`, `latest`
+- For semver tags: `v1.2.3`, `1.2`, `1`
 - For all commits: `sha-abc1234`
 
 # Security Features

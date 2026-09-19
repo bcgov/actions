@@ -22,6 +22,7 @@ inputs:
     default: "true"
     description: Generate a Software Bill of Materials (SBOM) for the container image. Enabled by default for better security practices.
   tag_fallback:
+    default: test
     description: Where to pull default images from; e.g. prod, test
   tags:
     default: ${{ github.event.number }}
@@ -73,8 +74,10 @@ inputs:
       When enabled, generates tags and labels using the default rules in 'metadata_tag_rules', which you can override.
       String value, not boolean. Set to 'true' to enable (default).
   metadata_flavor:
+    default: |
+      latest=false
     description: |
-      Flavor configuration for metadata-action (e.g., 'latest=true').
+      Flavor configuration for metadata-action (e.g., 'latest=false').
       Only used when metadata_tags is enabled.
       See: https://github.com/docker/metadata-action#flavor-input
   metadata_tag_rules:
@@ -82,7 +85,6 @@ inputs:
       type=sha,format=short
       type=ref,event=branch
       type=ref,event=pr
-      type=raw,value=latest,enable={{is_default_branch}}
       type=semver,pattern={{version}}
       type=semver,pattern={{major}}.{{minor}}
       type=semver,pattern={{major}}
@@ -400,13 +402,13 @@ runs:
         printf '%s\n' "${labels}" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
 
-        # Ensure at least one tag is present; fallback to :latest if empty
+        # Ensure at least one tag is present; fallback to :test if empty
         if [ -z "${final_tags}" ]; then
           # Warn if metadata_tags is enabled but no tags were generated (likely configuration error)
           if [ "${{ inputs.metadata_tags }}" == "true" ]; then
-            echo "::warning::metadata_tags is enabled but no tags were generated. This may indicate missing or invalid metadata_tag_rules. Falling back to :latest tag."
+            echo "::warning::metadata_tags is enabled but no tags were generated. This may indicate missing or invalid metadata_tag_rules. Falling back to :test tag."
           fi
-          final_tags="${{ steps.vars.outputs.registry_host }}/${{ steps.vars.outputs.image_path }}:latest"
+          final_tags="${{ steps.vars.outputs.registry_host }}/${{ steps.vars.outputs.image_path }}:test"
         fi
 
         echo "final_tags=${final_tags}" >> $GITHUB_OUTPUT
@@ -539,7 +541,7 @@ runs:
           # For retagged images, use the first tag from inputs.tags or fallback
           tag=$(printf '%s\n' "${{ steps.vars.outputs.tags }}" | grep -v '^$' | head -n 1 | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]._-' || true)
           tag="${tag:-${{ steps.resolved_sha.outputs.source_sha || steps.vars.outputs.source_sha }}}"
-          tag="${tag:-latest}"
+          tag="${tag:-test}"
           image_path="/${{ steps.vars.outputs.image_path }}:${tag}"
         fi
         echo "image_path=${image_path}" >> $GITHUB_OUTPUT
