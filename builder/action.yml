@@ -22,12 +22,12 @@ inputs:
     default: "true"
     description: Generate a Software Bill of Materials (SBOM) for the container image. Enabled by default for better security practices.
   tag_fallback:
-    default: test
-    description: Where to pull default images from; e.g. prod, test
+    description: Where to pull default images from; e.g. prod, test. Omit to always build fresh if triggers do not match.
   tags:
     default: ${{ github.event.number }}
     description: |
-      Default tag(s); e.g. pr#, test, prod.
+      Tag(s) to apply to the image. Defaults to PR number in pull_request workflows.
+      Required when running outside pull_request events (push, workflow_dispatch, schedule).
       Supports multiline input for multiple tags.
       The source commit SHA is always added so deploy can pull by git SHA.
       Example: |
@@ -67,35 +67,6 @@ inputs:
       Example: |
         MY_SECRET=secret_value
         ANOTHER_SECRET=another_value
-  metadata_tags:
-    default: "true"
-    description: |
-      Enable automatic tag and label generation using docker/metadata-action.
-      When enabled, generates tags and labels using the default rules in 'metadata_tag_rules', which you can override.
-      String value, not boolean. Set to 'true' to enable (default).
-  metadata_flavor:
-    default: |
-      latest=false
-    description: |
-      Flavor configuration for metadata-action (e.g., 'latest=false').
-      Only used when metadata_tags is enabled.
-      See: https://github.com/docker/metadata-action#flavor-input
-  metadata_tag_rules:
-    default: |
-      type=sha,format=short
-      type=ref,event=branch
-      type=ref,event=pr
-      type=semver,pattern={{version}}
-      type=semver,pattern={{major}}.{{minor}}
-      type=semver,pattern={{major}}
-    description: |
-      Custom tag rules for metadata-action.
-      Only used when metadata_tags is enabled.
-      Example: |
-        type=ref,event=branch
-        type=semver,pattern={{version}}
-      See: https://github.com/docker/metadata-action#tags-input
-
 outputs:
   digest:
     description: "Immutable digest of the image (resolved from fallback or built fresh)"
@@ -106,11 +77,11 @@ outputs:
     value: ${{ steps.build.outputs.triggered }}
 
   labels:
-    description: "Generated OCI labels from metadata-action (only when metadata_tags is enabled)"
+    description: "Generated OCI labels"
     value: ${{ steps.tags.outputs.labels }}
 
   annotations:
-    description: "Generated OCI annotations from metadata-action (only when metadata_tags is enabled)"
+    description: "Generated OCI annotations"
     value: ${{ steps.tags.outputs.annotations }}
 
   registry_host:
@@ -152,6 +123,13 @@ runs:
         reason="$(refuse_reason "${EVENT_NAME}" "${GH_REPOSITORY}" "${HEAD_REPO}")"
         if [ -n "${reason}" ]; then
           echo "::error::${reason}"
+          exit 1
+        fi
+
+        # Validate tags: in a pull_request, default is the PR number.
+        # Outside a pull_request, tags must be explicitly provided.
+        if [ -z "${INPUT_TAGS}" ]; then
+          echo "::error::Required input 'tags' was not provided (and no pull request number is available for event '${EVENT_NAME}'). Please provide explicit 'tags'."
           exit 1
         fi
 
@@ -332,84 +310,53 @@ runs:
       if: steps.build.outputs.triggered == 'true'
       uses: docker/setup-buildx-action@v4
 
-    - name: Prepare Container Metadata tags
+    - name: Prepare Container Metadata labels
       id: meta
-      if: steps.build.outputs.triggered == 'true' && inputs.metadata_tags == 'true'
+      if: steps.build.outputs.triggered == 'true'
       uses: docker/metadata-action@v6
       with:
         images: ${{ steps.vars.outputs.image_name }}
-        flavor: ${{ inputs.metadata_flavor }}
-        tags: ${{ inputs.metadata_tag_rules }}
+        flavor: |
+          latest=false
+        tags: ""
 
-    - name: Merge tags
+    - name: Format tags and labels
       id: tags
       if: steps.build.outputs.triggered == 'true'
       shell: bash
       env:
         INPUT_TAGS: ${{ steps.resolved_sha.outputs.tags }}
-        META_TAGS: ${{ steps.meta.outputs.tags || '' }}
         META_LABELS: ${{ steps.meta.outputs.labels || '' }}
         META_ANNOTATIONS: ${{ steps.meta.outputs.annotations || '' }}
         SOURCE_SHA: ${{ steps.resolved_sha.outputs.source_sha || steps.vars.outputs.source_sha }}
       run: |
-        # Merge metadata tags with custom tags
         set -euo pipefail
         # shellcheck source=context.sh
         source "${{ github.action_path }}/context.sh"
 
-        # Start with custom tags (convert from multiline to comma-separated)
-        # Handle empty inputs gracefully
-        custom_tags=""
+        # Format custom tags from multiline to comma-separated full registry image URLs
+        final_tags=""
         if [ -n "${INPUT_TAGS}" ]; then
-          # Filter out empty lines and process tags; use printf to safely handle multiline input
           filtered_tags=$(printf '%s\n' "${INPUT_TAGS}" | grep -v '^$' || true)
           if [ -n "${filtered_tags}" ]; then
-            custom_tags=$(printf '%s\n' "${filtered_tags}" | sed "s|^|${{ steps.vars.outputs.registry_host }}/${{ steps.vars.outputs.image_path }}:|" | tr '[:upper:]' '[:lower:]' | paste -sd,)
+            final_tags=$(printf '%s\n' "${filtered_tags}" | sed "s|^|${{ steps.vars.outputs.registry_host }}/${{ steps.vars.outputs.image_path }}:|" | tr '[:upper:]' '[:lower:]' | paste -sd,)
           fi
         fi
 
-        # If metadata tags are enabled, merge them
-        if [ "${{ inputs.metadata_tags }}" == "true" ]; then
-          # Convert metadata tags from newline-separated to comma-separated (if any)
-          # Use printf to safely handle multiline output from metadata-action
-          meta_tags=""
-          if [ -n "${META_TAGS}" ]; then
-            meta_tags=$(printf '%s\n' "${META_TAGS}" | tr '\n' ',' | sed 's/,$//')
-          fi
-          
-          # Combine tags (prefer custom tags first, then metadata tags)
-          if [ -n "${custom_tags}" ] && [ -n "${meta_tags}" ]; then
-            final_tags="${custom_tags},${meta_tags}"
-          elif [ -n "${meta_tags}" ]; then
-            final_tags="${meta_tags}"
-          else
-            final_tags="${custom_tags}"
-          fi
-          
-          echo "annotations<<EOF" >> $GITHUB_OUTPUT
-          echo "${META_ANNOTATIONS}" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-        else
-          final_tags="${custom_tags}"
-          echo "annotations=" >> $GITHUB_OUTPUT
+        if [ -z "${final_tags}" ]; then
+          echo "::error::No valid tags were resolved for image. Please provide explicit 'tags'."
+          exit 1
         fi
+
+        echo "annotations<<EOF" >> $GITHUB_OUTPUT
+        echo "${META_ANNOTATIONS}" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
 
         # Stamp revision with source_sha (PR head / push SHA), not GITHUB_SHA.
-        # metadata-action uses GITHUB_SHA, which on pull_request is the throwaway
-        # merge ref — gone after squash, so image-tracker cannot find the image.
         labels="$(apply_revision_label "${META_LABELS}" "${SOURCE_SHA}")"
         echo "labels<<EOF" >> $GITHUB_OUTPUT
         printf '%s\n' "${labels}" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
-
-        # Ensure at least one tag is present; fallback to :test if empty
-        if [ -z "${final_tags}" ]; then
-          # Warn if metadata_tags is enabled but no tags were generated (likely configuration error)
-          if [ "${{ inputs.metadata_tags }}" == "true" ]; then
-            echo "::warning::metadata_tags is enabled but no tags were generated. This may indicate missing or invalid metadata_tag_rules. Falling back to :test tag."
-          fi
-          final_tags="${{ steps.vars.outputs.registry_host }}/${{ steps.vars.outputs.image_path }}:test"
-        fi
 
         echo "final_tags=${final_tags}" >> $GITHUB_OUTPUT
 
@@ -541,7 +488,10 @@ runs:
           # For retagged images, use the first tag from inputs.tags or fallback
           tag=$(printf '%s\n' "${{ steps.vars.outputs.tags }}" | grep -v '^$' | head -n 1 | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]._-' || true)
           tag="${tag:-${{ steps.resolved_sha.outputs.source_sha || steps.vars.outputs.source_sha }}}"
-          tag="${tag:-test}"
+          if [ -z "${tag}" ]; then
+            echo "::error::Could not determine primary tag for retagged image."
+            exit 1
+          fi
           image_path="/${{ steps.vars.outputs.image_path }}:${tag}"
         fi
         echo "image_path=${image_path}" >> $GITHUB_OUTPUT
