@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+concurrency:
+  group: release-dist-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  dist:
+    name: Rebuild dist on release tag
+    if: github.repository == 'bcgov/actions' && github.event.release.draft == false
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .tool-versions
+          cache: npm
+
+      - name: Rebuild ncc bundles and retarget tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          if [ -z "$TAG" ]; then
+            echo "release tag is empty" >&2
+            exit 1
+          fi
+          subject=$(git log -1 --format=%s)
+          if [ "$subject" = "chore(dist): rebuild ncc bundles for release" ]; then
+            echo "tag ${TAG} already points at the dist rebuild"
+            exit 0
+          fi
+          npm ci
+          npm run build
+          untracked="$(git ls-files --others --exclude-standard -- pr-description-add/dist test-and-analyse/dist)"
+          if git diff --ignore-space-at-eol --quiet -- pr-description-add/dist test-and-analyse/dist && [ -z "$untracked" ]; then
+            echo "committed dist already matches ${TAG}"
+            exit 0
+          fi
+          branch="dist-${GITHUB_RUN_ID}"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git checkout -b "$branch"
+          git add -A -- pr-description-add/dist test-and-analyse/dist
+          git commit -m "chore(dist): rebuild ncc bundles for release"
+          git push -u origin "HEAD:${branch}"
+          git tag -f "$TAG"
+          git push --force origin "refs/tags/${TAG}"
+          gh release edit "$TAG" --target "$(git rev-parse HEAD)" --verify-tag
+          git push origin --delete "$branch"

@@ -121,7 +121,7 @@ On a fork `pull_request` into upstream, GitHub grants a **read-only** `GITHUB_TO
 
 Never pin `@main`. Pin a [release](../../releases) tag (`@v1.2.3`) or that tag’s commit SHA.
 
-`pr-description-add` and `test-and-analyse` execute committed `dist/` from ncc. That bundle is rebuilt and committed **only when a suite release is cut**. Merges to `main` (including lockfile PRs) do not refresh it. `uses: bcgov/actions/pr-description-add@main` and `uses: bcgov/actions/test-and-analyse@main` therefore do not run current source; they load whatever `dist/` last landed on a release. Composite actions in this repo are YAML, but still must not be pinned to `@main`.
+`pr-description-add` and `test-and-analyse` execute committed `dist/` from ncc. Pull requests compile that bundle in the job and do not commit it. Publishing a release from the Releases page runs [`.github/workflows/release.yml`](./.github/workflows/release.yml): it checks out the new tag, runs `npm ci` and `npm run build`, and when `pr-description-add/dist/` or `test-and-analyse/dist/` differ it commits them on `dist-$RUN_ID`, force-updates **that tag only**, points the GitHub Release at the new commit, and deletes the branch. It does not push `main`. Copy the pin SHA after that workflow succeeds. A failed run leaves the tag on the commit you selected, without a fresh bundle. `@main` does not contain this rebuild. Composite actions in this repo are YAML, but still must not be pinned to `@main`.
 
 Usage examples use `@vX.Y.Z` — a placeholder that will not resolve — so copy-paste fails until you pick a real tag. All actions are versioned and released together as a single suite.
 
