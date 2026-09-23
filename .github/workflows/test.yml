@@ -58,8 +58,8 @@ jobs:
               - 'eslint.config.mjs'
               - '.prettierrc.json'
               - '.prettierignore'
-            # Lock refresh must rebuild bundled dist, not re-run path-match jobs
-            # that assert against this PR's changed files.
+            # Lock refresh must ncc-compile JS actions in-job; do not run
+            # path-match jobs that assert against this PR's changed files.
             lockfile:
               - 'package-lock.json'
 
@@ -518,7 +518,7 @@ jobs:
         run: node --experimental-strip-types --no-warnings tests/self-check.ts
         working-directory: pr-description-add
 
-      - uses: $/pr-description-add
+      - uses: ./pr-description-add
         if: github.event_name == 'pull_request'
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -868,8 +868,21 @@ jobs:
             test_command: echo "Testing autodiscover on nr-fom"
             expected_config: '.github/knip.json'
     steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .tool-versions
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build ncc bundle
+        run: npm run build --workspace=test-and-analyse
+
       - id: action
-        uses: $/test-and-analyse
+        uses: ./test-and-analyse
         with:
           checkout_path: test-project
           commands: |
@@ -931,7 +944,7 @@ jobs:
 
       - run: echo sentinel >> README.md
 
-      - uses: $/test-and-analyse
+      - uses: ./test-and-analyse
         with:
           commands: echo "Nothing to run; this cell is about the checkout."
           dir: .

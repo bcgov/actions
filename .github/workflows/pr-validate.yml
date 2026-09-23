@@ -31,12 +31,5 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Verify build freshness
-        run: |
-          npm run build
-          git diff --ignore-space-at-eol --exit-code pr-description-add/dist/ test-and-analyse/dist/
-          untracked="$(git ls-files --others --exclude-standard -- pr-description-add/dist/ test-and-analyse/dist/)"
-          if [ -n "$untracked" ]; then
-            printf 'Untracked files in dist/:\n%s\n' "$untracked" >&2
-            exit 1
-          fi
+      - name: Verify ncc build
+        run: npm run build
