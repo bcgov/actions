@@ -119,11 +119,11 @@ On a fork `pull_request` into upstream, GitHub grants a **read-only** `GITHUB_TO
 
 ## Releases and Version Pinning
 
-> **Never reference these actions with `@main`.** Always pin to a release tag (e.g. `@v1.2.3`) or, better yet, a full commit SHA.
->
-> Usage examples in this repo intentionally use a placeholder that **will not resolve** (`@vX.Y.Z`).  Copy-paste should fail until you look up the [latest release](../../releases) and pick a real version.
->
-> All actions in this repository are versioned and released together as a single suite.
+Never pin `@main`. Pin a [release](../../releases) tag (`@v1.2.3`) or that tag’s commit SHA.
+
+`pr-description-add` and `test-and-analyse` execute committed `dist/` from ncc. That bundle is rebuilt and committed **only when a suite release is cut**. Merges to `main` (including lockfile PRs) do not refresh it. `uses: bcgov/actions/pr-description-add@main` and `uses: bcgov/actions/test-and-analyse@main` therefore do not run current source; they load whatever `dist/` last landed on a release. Composite actions in this repo are YAML, but still must not be pinned to `@main`.
+
+Usage examples use `@vX.Y.Z` — a placeholder that will not resolve — so copy-paste fails until you pick a real tag. All actions are versioned and released together as a single suite.
 
 ## Developing in this repository
 

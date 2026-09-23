@@ -15,6 +15,8 @@
  
  This action runs tests and analysis across the BC Gov ecosystem, optionally sending results and coverage to [SonarCloud](https://sonarcloud.io). It supports **Node.js, Java, and Python** projects with unified reporting, supply chain scanning, and dependency analysis.
 
+The reporter script is committed `dist/index.js` from ncc. That bundle is rebuilt and committed **only on suite release**. Pin a release tag (`@vX.Y.Z` in examples — replace with a real tag). `@main` does not run current source.
+
 ## Permissions
 
 To run this action, the calling workflow job must have the following minimum permissions:
