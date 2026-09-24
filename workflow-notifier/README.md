@@ -21,7 +21,7 @@ The action reads `CODEOWNERS` from the **job workspace**, not from the action bu
 |---|---|---|---|
 | `token` | GitHub token | `${{ github.token }}` | No |
 | `debug` | Enable debug logging | `"false"` | No |
-| `title` | Issue title | | **Yes** |
+| `title` | Issue title. An open issue with this exact title is updated and each later run is appended under `Reported at`. A closed issue is not reused. | | **Yes** |
 | `body` | Issue body (pre-filled with workflow run URL if omitted) | | No |
 | `labels` | Comma-separated list of labels to add to the issue | `"bug,failure"` | No |
 | `assign` | Whether to assign owners to the issue | `"true"` | No |
@@ -33,7 +33,7 @@ The action reads `CODEOWNERS` from the **job workspace**, not from the action bu
 
 | Output | Description |
 |---|---|
-| `issue_number` | The created issue number (0 if dry run) |
+| `issue_number` | The created or updated issue number (0 if dry run) |
 | `assignees` | Comma-separated list of assigned owners |
 
 ## Usage
@@ -59,6 +59,8 @@ export INPUT_BODY="Testing action script locally"
 export INPUT_LABELS="bug,test"
 export INPUT_ASSIGN="false"
 export INPUT_DRY_RUN="true"
+export GITHUB_REPOSITORY="owner/repo"
+export GITHUB_RUN_ID="0"
 
 # Execute the shell script directly
 ./action.sh

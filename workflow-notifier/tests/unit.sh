@@ -22,6 +22,22 @@ exit 0
 EOF
 chmod +x "${MOCK_BIN}/sleep"
 
+cat << 'EOF' > "${MOCK_BIN}/date"
+#!/usr/bin/env bash
+set -euo pipefail
+if [ "${1:-}" = "-u" ] && [ "${2:-}" = "+%Y-%m-%dT%H:%M:%SZ" ]; then
+  printf '%s\n' "2026-09-22T20:39:12Z"
+  exit 0
+fi
+if [ "$#" -eq 0 ]; then
+  printf '%s\n' "Wed Sep 23 04:00:00 UTC 2026"
+  exit 0
+fi
+echo "mock-date: unexpected args: $*" >&2
+exit 1
+EOF
+chmod +x "${MOCK_BIN}/date"
+
 cat << 'EOF' > "${MOCK_BIN}/gh"
 #!/usr/bin/env bash
 set -euo pipefail
@@ -80,6 +96,81 @@ if [[ "$*" == *"commits/"*"/pulls"* ]]; then
   exit 0
 fi
 
+if [ "${1:-}" = "issue" ] && [ "${2:-}" = "list" ]; then
+  printf '%s\n' "$@" > "${TMP_DIR}/gh_issue_list_args"
+  state=""
+  prev=""
+  for arg in "$@"; do
+    if [ "$prev" = "--state" ]; then
+      state="$arg"
+    fi
+    prev="$arg"
+  done
+  if [ "$state" = "open" ]; then
+    if [ -f "${TMP_DIR}/mock_open_issues" ]; then
+      cat "${TMP_DIR}/mock_open_issues"
+    fi
+    exit 0
+  fi
+  if [ "$state" = "all" ]; then
+    if [ -f "${TMP_DIR}/mock_open_issues" ]; then
+      cat "${TMP_DIR}/mock_open_issues"
+    fi
+    if [ -f "${TMP_DIR}/mock_closed_issues" ]; then
+      cat "${TMP_DIR}/mock_closed_issues"
+    fi
+    exit 0
+  fi
+  echo "mock-gh: issue list requires --state open" >&2
+  exit 1
+fi
+
+if [ "${1:-}" = "issue" ] && [ "${2:-}" = "view" ]; then
+  body_file="${TMP_DIR}/mock_issue_body_${3:-}"
+  if [ ! -f "$body_file" ]; then
+    echo "mock-gh: no body for issue ${3:-}" >&2
+    exit 1
+  fi
+  cat "$body_file"
+  exit 0
+fi
+
+if [ "${1:-}" = "issue" ] && [ "${2:-}" = "edit" ]; then
+  num="${3:-}"
+  body=""
+  prev=""
+  for arg in "$@"; do
+    if [ "$prev" = "--body" ]; then
+      body="$arg"
+    fi
+    if [ "$arg" = "--assignee" ] || [ "$arg" = "--label" ]; then
+      echo "mock-gh: edit must not set ${arg}" >&2
+      exit 1
+    fi
+    prev="$arg"
+  done
+  printf '%s' "$body" > "${TMP_DIR}/mock_issue_body_${num}"
+  printf '%s' "$body" > "${TMP_DIR}/gh_edit_body"
+  printf '%s\n' "$@" > "${TMP_DIR}/gh_edit_args"
+  echo "https://github.com/${GITHUB_REPOSITORY:-bcgov/actions}/issues/${num}"
+  exit 0
+fi
+
+if [ "${1:-}" = "issue" ] && [ "${2:-}" = "create" ]; then
+  body=""
+  prev=""
+  for arg in "$@"; do
+    if [ "$prev" = "--body" ]; then
+      body="$arg"
+    fi
+    prev="$arg"
+  done
+  printf '%s' "$body" > "${TMP_DIR}/gh_create_body"
+  printf '%s\n' "$@" > "${TMP_DIR}/gh_create_args"
+  echo "https://github.com/${GITHUB_REPOSITORY:-local/repo}/issues/77"
+  exit 0
+fi
+
 # Fallback for unexpected calls
 echo "mock-gh: $*" >&2
 exit 1
@@ -90,7 +181,12 @@ run_action() {
   local workdir="$1"
   shift
   local out_file="${TMP_DIR}/output.env"
-  rm -f "$out_file"
+  rm -f "$out_file" \
+    "${TMP_DIR}/gh_issue_list_args" \
+    "${TMP_DIR}/gh_create_args" \
+    "${TMP_DIR}/gh_create_body" \
+    "${TMP_DIR}/gh_edit_args" \
+    "${TMP_DIR}/gh_edit_body"
 
   (
     cd "$workdir"
@@ -526,6 +622,207 @@ test_ten_assignee_limit
 test_pr_api_retry_success
 test_pull_request_event
 test_push_to_branch_with_open_unmerged_pr
+
+# Run log: one open issue per exact title.
+reset_issue_fixtures() {
+  rm -f "${TMP_DIR}/mock_open_issues" \
+    "${TMP_DIR}/mock_closed_issues" \
+    "${TMP_DIR}"/mock_issue_body_*
+}
+
+run_line() {
+  local run_id="$1"
+  printf -- '- 2026-09-22T20:39:12Z — [run](https://github.com/bcgov/actions/actions/runs/%s)' "$run_id"
+}
+
+assert_file_contains() {
+  local file="$1" needle="$2" name="$3"
+  local haystack=""
+  if [ -f "$file" ]; then
+    haystack="$(cat "$file")"
+  fi
+  assert_contains "$haystack" "$needle" "$name"
+}
+
+assert_file_absent() {
+  local file="$1" name="$2"
+  if [ ! -f "$file" ]; then
+    echo "✓ $name"
+    passed=$((passed + 1))
+  else
+    echo "✗ $name"
+    echo "  Expected file to be absent: $file"
+    failed=$((failed + 1))
+  fi
+}
+
+test_create_starts_run_log() {
+  reset_issue_fixtures
+  local out
+  out=$(run_action "$FIXTURE_DIR" \
+    INPUT_TITLE="TEST Deployment Failure: api" \
+    INPUT_BODY="Boom" \
+    INPUT_LABELS="bug, failure" \
+    INPUT_ASSIGN="true" \
+    INPUT_TOKEN="dummy-token" \
+    INPUT_DRY_RUN="false" \
+    GITHUB_REPOSITORY="bcgov/actions" \
+    GITHUB_SERVER_URL="https://github.com" \
+    GITHUB_RUN_ID="123" \
+    GITHUB_TRIGGERING_ACTOR="charlie")
+
+  local body list_args create_args
+  body="$(cat "${TMP_DIR}/gh_create_body")"
+  list_args="$(cat "${TMP_DIR}/gh_issue_list_args")"
+  create_args="$(cat "${TMP_DIR}/gh_create_args")"
+
+  assert_contains "$out" "Issue:     #77" "create path returns the new issue number"
+  assert_contains "$list_args" "--state" "lists issues with an explicit state"
+  assert_contains "$list_args" "open" "lists open issues only"
+  assert_contains "$list_args" "--limit" "caps the open-issue scan"
+  assert_contains "$list_args" "100" "scans at most 100 open issues"
+  assert_contains "$create_args" "--label" "create adds labels"
+  assert_contains "$create_args" "bug" "create adds the bug label"
+  assert_contains "$create_args" "failure" "create adds the failure label"
+  assert_contains "$create_args" "--assignee" "create assigns owners"
+  assert_contains "$create_args" "charlie" "create assigns the resolved author"
+  assert_contains "$body" "Boom" "create keeps the caller body"
+  assert_contains "$body" "Pushed by @charlie" "create keeps the trigger note"
+  assert_contains "$body" "[View Workflow Run](https://github.com/bcgov/actions/actions/runs/123)" "create keeps the workflow link"
+  assert_contains "$body" "<!-- workflow-notifier:reported-at -->" "create opens the run-log marker"
+  assert_contains "$body" "### Reported at" "create starts the Reported at section"
+  assert_contains "$body" "$(run_line 123)" "create records the first run"
+  assert_contains "$body" "<!-- /workflow-notifier:reported-at -->" "create closes the run-log marker"
+  assert_file_absent "${TMP_DIR}/gh_edit_body" "create does not edit an issue"
+}
+
+test_append_open_issue_exact_title() {
+  reset_issue_fixtures
+  printf '%s\n' $'40\tTEST Deployment Failure: api extra' $'12\tTEST Deployment Failure: api' \
+    > "${TMP_DIR}/mock_open_issues"
+  cat > "${TMP_DIR}/mock_issue_body_12" << 'EOF'
+Keep this preamble.
+
+<!-- workflow-notifier:reported-at -->
+### Reported at
+- 2026-09-22T20:39:12Z — [run](https://github.com/bcgov/actions/actions/runs/123)
+<!-- /workflow-notifier:reported-at -->
+Trailing note.
+EOF
+  printf '%s\n' "other body" > "${TMP_DIR}/mock_issue_body_40"
+
+  local out
+  out=$(run_action "$FIXTURE_DIR" \
+    INPUT_TITLE="TEST Deployment Failure: api" \
+    INPUT_BODY="Boom" \
+    INPUT_LABELS="bug,failure" \
+    INPUT_ASSIGN="true" \
+    INPUT_TOKEN="dummy-token" \
+    INPUT_DRY_RUN="false" \
+    GITHUB_REPOSITORY="bcgov/actions" \
+    GITHUB_SERVER_URL="https://github.com" \
+    GITHUB_RUN_ID="456" \
+    GITHUB_TRIGGERING_ACTOR="charlie")
+
+  local body edit_args
+  body="$(cat "${TMP_DIR}/gh_edit_body")"
+  edit_args="$(cat "${TMP_DIR}/gh_edit_args")"
+
+  assert_contains "$out" "Issue:     #12" "update path returns the matched issue number"
+  assert_contains "$body" "Keep this preamble." "update leaves the preamble in place"
+  assert_contains "$body" "Trailing note." "update leaves text after the run log in place"
+  assert_contains "$body" "$(run_line 123)" "update keeps the earlier run line"
+  assert_contains "$body" "$(run_line 456)" "update appends the new run line"
+  assert_contains "$body" "### Reported at" "update keeps the Reported at heading"
+  assert_not_contains "$edit_args" "--assignee" "update does not assign again"
+  assert_not_contains "$edit_args" "--label" "update does not set labels again"
+  assert_file_absent "${TMP_DIR}/gh_create_body" "update does not create another issue"
+  assert_eq "$(cat "${TMP_DIR}/mock_issue_body_40")" "other body" "a longer title is not the match"
+}
+
+test_same_run_id_is_not_appended_twice() {
+  reset_issue_fixtures
+  printf '%s\n' $'12\tDrift Detected in Knowledge Base Sources' > "${TMP_DIR}/mock_open_issues"
+  cat > "${TMP_DIR}/mock_issue_body_12" << 'EOF'
+<!-- workflow-notifier:reported-at -->
+### Reported at
+- 2026-09-22T20:39:12Z — [run](https://github.com/bcgov/actions/actions/runs/456)
+<!-- /workflow-notifier:reported-at -->
+EOF
+
+  local out
+  out=$(run_action "$FIXTURE_DIR" \
+    INPUT_TITLE="Drift Detected in Knowledge Base Sources" \
+    INPUT_BODY="Drift remains" \
+    INPUT_ASSIGN="true" \
+    INPUT_TOKEN="dummy-token" \
+    INPUT_DRY_RUN="false" \
+    GITHUB_REPOSITORY="bcgov/actions" \
+    GITHUB_SERVER_URL="https://github.com" \
+    GITHUB_RUN_ID="456")
+
+  local body
+  body="$(cat "${TMP_DIR}/mock_issue_body_12")"
+  assert_contains "$out" "Issue:     #12" "duplicate run still reports the open issue"
+  assert_eq "$(grep -c -- '- 2026-09-22T20:39:12Z — \[run\]' <<< "$body" || true)" "1" "the same run id stays a single log line"
+  assert_file_absent "${TMP_DIR}/gh_edit_body" "duplicate run does not edit the issue"
+  assert_file_absent "${TMP_DIR}/gh_create_body" "duplicate run does not create an issue"
+}
+
+test_closed_issue_starts_a_new_log() {
+  reset_issue_fixtures
+  printf '%s\n' $'9\tDrift Detected in Knowledge Base Sources' > "${TMP_DIR}/mock_closed_issues"
+  printf '%s\n' "closed body with two old runs" > "${TMP_DIR}/mock_issue_body_9"
+
+  local out
+  out=$(run_action "$FIXTURE_DIR" \
+    INPUT_TITLE="Drift Detected in Knowledge Base Sources" \
+    INPUT_BODY="Drift is back" \
+    INPUT_LABELS="bug" \
+    INPUT_ASSIGN="true" \
+    INPUT_TOKEN="dummy-token" \
+    INPUT_DRY_RUN="false" \
+    GITHUB_REPOSITORY="bcgov/actions" \
+    GITHUB_SERVER_URL="https://github.com" \
+    GITHUB_RUN_ID="789" \
+    GITHUB_TRIGGERING_ACTOR="charlie")
+
+  local body
+  body="$(cat "${TMP_DIR}/gh_create_body")"
+  assert_contains "$out" "Issue:     #77" "a closed issue is not reused"
+  assert_contains "$body" "Drift is back" "new issue keeps the caller body"
+  assert_contains "$body" "$(run_line 789)" "new issue log starts at one run"
+  assert_not_contains "$body" "closed body with two old runs" "new issue does not copy the closed issue body"
+  assert_eq "$(grep -c -- '- 2026-09-22T20:39:12Z — \[run\]' <<< "$body" || true)" "1" "new issue has a single run line"
+  assert_file_absent "${TMP_DIR}/gh_edit_body" "closed issue is not edited"
+}
+
+test_missing_run_log_markers_are_appended() {
+  reset_issue_fixtures
+  printf '%s\n' $'12\tTEST Deployment Failure: api' > "${TMP_DIR}/mock_open_issues"
+  printf '%s\n' "Legacy body" > "${TMP_DIR}/mock_issue_body_12"
+
+  run_action "$FIXTURE_DIR" \
+    INPUT_TITLE="TEST Deployment Failure: api" \
+    INPUT_BODY="ignored on update" \
+    INPUT_TOKEN="dummy-token" \
+    INPUT_DRY_RUN="false" \
+    GITHUB_REPOSITORY="bcgov/actions" \
+    GITHUB_SERVER_URL="https://github.com" \
+    GITHUB_RUN_ID="456" >/dev/null
+
+  local body
+  body="$(cat "${TMP_DIR}/gh_edit_body")"
+  assert_contains "$body" "Legacy body" "a body without markers keeps its text"
+  assert_contains "$body" "<!-- workflow-notifier:reported-at -->" "a body without markers gains the run log"
+  assert_contains "$body" "$(run_line 456)" "the first tracked run is appended to a legacy body"
+}
+
+test_create_starts_run_log
+test_append_open_issue_exact_title
+test_same_run_id_is_not_appended_twice
+test_closed_issue_starts_a_new_log
+test_missing_run_log_markers_are_appended
 
 echo ""
 echo "Unit tests finished: ${passed} passed, ${failed} failed."

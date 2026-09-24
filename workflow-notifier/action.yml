@@ -13,7 +13,7 @@ inputs:
     description: "Enable debug logging"
     default: "false"
   title:
-    description: "Issue title"
+    description: "Issue title. An open issue with this exact title is updated and each later run is appended under Reported at. A closed issue is not reused."
     required: true
   body:
     description: "Issue body (pre-filled with run URL if omitted)"
@@ -36,7 +36,7 @@ inputs:
 
 outputs:
   issue_number:
-    description: "The created issue number (0 if dry run)"
+    description: "The created or updated issue number (0 if dry run)"
     value: "${{ steps.run_script.outputs.issue_number }}"
   assignees:
     description: "Comma-separated list of assigned owners"
