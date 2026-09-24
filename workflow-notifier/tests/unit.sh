@@ -112,30 +112,11 @@ if [ "${1:-}" = "issue" ] && [ "${2:-}" = "list" ]; then
     fi
     exit 0
   fi
-  if [ "$state" = "all" ]; then
-    if [ -f "${TMP_DIR}/mock_open_issues" ]; then
-      cat "${TMP_DIR}/mock_open_issues"
-    fi
-    if [ -f "${TMP_DIR}/mock_closed_issues" ]; then
-      cat "${TMP_DIR}/mock_closed_issues"
-    fi
-    exit 0
-  fi
   echo "mock-gh: issue list requires --state open" >&2
   exit 1
 fi
 
-if [ "${1:-}" = "issue" ] && [ "${2:-}" = "view" ]; then
-  body_file="${TMP_DIR}/mock_issue_body_${3:-}"
-  if [ ! -f "$body_file" ]; then
-    echo "mock-gh: no body for issue ${3:-}" >&2
-    exit 1
-  fi
-  cat "$body_file"
-  exit 0
-fi
-
-if [ "${1:-}" = "issue" ] && [ "${2:-}" = "edit" ]; then
+if [ "${1:-}" = "issue" ] && [ "${2:-}" = "comment" ]; then
   num="${3:-}"
   body=""
   prev=""
@@ -144,15 +125,14 @@ if [ "${1:-}" = "issue" ] && [ "${2:-}" = "edit" ]; then
       body="$arg"
     fi
     if [ "$arg" = "--assignee" ] || [ "$arg" = "--label" ]; then
-      echo "mock-gh: edit must not set ${arg}" >&2
+      echo "mock-gh: comment must not set ${arg}" >&2
       exit 1
     fi
     prev="$arg"
   done
-  printf '%s' "$body" > "${TMP_DIR}/mock_issue_body_${num}"
-  printf '%s' "$body" > "${TMP_DIR}/gh_edit_body"
-  printf '%s\n' "$@" > "${TMP_DIR}/gh_edit_args"
-  echo "https://github.com/${GITHUB_REPOSITORY:-bcgov/actions}/issues/${num}"
+  printf '%s' "$body" > "${TMP_DIR}/gh_comment_body"
+  printf '%s\n' "$@" > "${TMP_DIR}/gh_comment_args"
+  echo "https://github.com/${GITHUB_REPOSITORY:-bcgov/actions}/issues/${num}#issuecomment-1"
   exit 0
 fi
 
@@ -185,8 +165,8 @@ run_action() {
     "${TMP_DIR}/gh_issue_list_args" \
     "${TMP_DIR}/gh_create_args" \
     "${TMP_DIR}/gh_create_body" \
-    "${TMP_DIR}/gh_edit_args" \
-    "${TMP_DIR}/gh_edit_body"
+    "${TMP_DIR}/gh_comment_args" \
+    "${TMP_DIR}/gh_comment_body"
 
   (
     cd "$workdir"
@@ -623,25 +603,14 @@ test_pr_api_retry_success
 test_pull_request_event
 test_push_to_branch_with_open_unmerged_pr
 
-# Run log: one open issue per exact title.
+# One open issue per exact title. Later runs comment; they do not edit the body.
 reset_issue_fixtures() {
-  rm -f "${TMP_DIR}/mock_open_issues" \
-    "${TMP_DIR}/mock_closed_issues" \
-    "${TMP_DIR}"/mock_issue_body_*
+  rm -f "${TMP_DIR}/mock_open_issues"
 }
 
 run_line() {
   local run_id="$1"
   printf -- '- 2026-09-22T20:39:12Z — [run](https://github.com/bcgov/actions/actions/runs/%s)' "$run_id"
-}
-
-assert_file_contains() {
-  local file="$1" needle="$2" name="$3"
-  local haystack=""
-  if [ -f "$file" ]; then
-    haystack="$(cat "$file")"
-  fi
-  assert_contains "$haystack" "$needle" "$name"
 }
 
 assert_file_absent() {
@@ -656,7 +625,7 @@ assert_file_absent() {
   fi
 }
 
-test_create_starts_run_log() {
+test_create_when_no_open_match() {
   reset_issue_fixtures
   local out
   out=$(run_action "$FIXTURE_DIR" \
@@ -677,10 +646,8 @@ test_create_starts_run_log() {
   create_args="$(cat "${TMP_DIR}/gh_create_args")"
 
   assert_contains "$out" "Issue:     #77" "create path returns the new issue number"
-  assert_contains "$list_args" "--state" "lists issues with an explicit state"
-  assert_contains "$list_args" "open" "lists open issues only"
-  assert_contains "$list_args" "--limit" "caps the open-issue scan"
-  assert_contains "$list_args" "100" "scans at most 100 open issues"
+  assert_contains "$list_args" $'--state\nopen' "lists open issues only"
+  assert_contains "$list_args" $'--limit\n100' "scans at most 100 open issues"
   assert_contains "$create_args" "--label" "create adds labels"
   assert_contains "$create_args" "bug" "create adds the bug label"
   assert_contains "$create_args" "failure" "create adds the failure label"
@@ -689,27 +656,14 @@ test_create_starts_run_log() {
   assert_contains "$body" "Boom" "create keeps the caller body"
   assert_contains "$body" "Pushed by @charlie" "create keeps the trigger note"
   assert_contains "$body" "[View Workflow Run](https://github.com/bcgov/actions/actions/runs/123)" "create keeps the workflow link"
-  assert_contains "$body" "<!-- workflow-notifier:reported-at -->" "create opens the run-log marker"
-  assert_contains "$body" "### Reported at" "create starts the Reported at section"
-  assert_contains "$body" "$(run_line 123)" "create records the first run"
-  assert_contains "$body" "<!-- /workflow-notifier:reported-at -->" "create closes the run-log marker"
-  assert_file_absent "${TMP_DIR}/gh_edit_body" "create does not edit an issue"
+  assert_file_absent "${TMP_DIR}/gh_comment_body" "create does not comment"
 }
 
-test_append_open_issue_exact_title() {
+test_comment_on_exact_title() {
   reset_issue_fixtures
-  printf '%s\n' $'40\tTEST Deployment Failure: api extra' $'12\tTEST Deployment Failure: api' \
+  printf '%s\n' $'40\tTEST Deployment Failure: api' $'12\tTEST Deployment Failure: api' \
+    $'99\tTEST Deployment Failure: api extra' \
     > "${TMP_DIR}/mock_open_issues"
-  cat > "${TMP_DIR}/mock_issue_body_12" << 'EOF'
-Keep this preamble.
-
-<!-- workflow-notifier:reported-at -->
-### Reported at
-- 2026-09-22T20:39:12Z — [run](https://github.com/bcgov/actions/actions/runs/123)
-<!-- /workflow-notifier:reported-at -->
-Trailing note.
-EOF
-  printf '%s\n' "other body" > "${TMP_DIR}/mock_issue_body_40"
 
   local out
   out=$(run_action "$FIXTURE_DIR" \
@@ -724,105 +678,19 @@ EOF
     GITHUB_RUN_ID="456" \
     GITHUB_TRIGGERING_ACTOR="charlie")
 
-  local body edit_args
-  body="$(cat "${TMP_DIR}/gh_edit_body")"
-  edit_args="$(cat "${TMP_DIR}/gh_edit_args")"
+  local body comment_args
+  body="$(cat "${TMP_DIR}/gh_comment_body")"
+  comment_args="$(cat "${TMP_DIR}/gh_comment_args")"
 
-  assert_contains "$out" "Issue:     #12" "update path returns the matched issue number"
-  assert_contains "$body" "Keep this preamble." "update leaves the preamble in place"
-  assert_contains "$body" "Trailing note." "update leaves text after the run log in place"
-  assert_contains "$body" "$(run_line 123)" "update keeps the earlier run line"
-  assert_contains "$body" "$(run_line 456)" "update appends the new run line"
-  assert_contains "$body" "### Reported at" "update keeps the Reported at heading"
-  assert_not_contains "$edit_args" "--assignee" "update does not assign again"
-  assert_not_contains "$edit_args" "--label" "update does not set labels again"
-  assert_file_absent "${TMP_DIR}/gh_create_body" "update does not create another issue"
-  assert_eq "$(cat "${TMP_DIR}/mock_issue_body_40")" "other body" "a longer title is not the match"
+  assert_contains "$out" "Issue:     #40" "comment path returns the first exact title match"
+  assert_eq "$body" "$(run_line 456)" "comment body is the run line"
+  assert_not_contains "$comment_args" "--assignee" "comment does not assign"
+  assert_not_contains "$comment_args" "--label" "comment does not set labels"
+  assert_file_absent "${TMP_DIR}/gh_create_body" "comment does not create another issue"
 }
 
-test_same_run_id_is_not_appended_twice() {
-  reset_issue_fixtures
-  printf '%s\n' $'12\tDrift Detected in Knowledge Base Sources' > "${TMP_DIR}/mock_open_issues"
-  cat > "${TMP_DIR}/mock_issue_body_12" << 'EOF'
-<!-- workflow-notifier:reported-at -->
-### Reported at
-- 2026-09-22T20:39:12Z — [run](https://github.com/bcgov/actions/actions/runs/456)
-<!-- /workflow-notifier:reported-at -->
-EOF
-
-  local out
-  out=$(run_action "$FIXTURE_DIR" \
-    INPUT_TITLE="Drift Detected in Knowledge Base Sources" \
-    INPUT_BODY="Drift remains" \
-    INPUT_ASSIGN="true" \
-    INPUT_TOKEN="dummy-token" \
-    INPUT_DRY_RUN="false" \
-    GITHUB_REPOSITORY="bcgov/actions" \
-    GITHUB_SERVER_URL="https://github.com" \
-    GITHUB_RUN_ID="456")
-
-  local body
-  body="$(cat "${TMP_DIR}/mock_issue_body_12")"
-  assert_contains "$out" "Issue:     #12" "duplicate run still reports the open issue"
-  assert_eq "$(grep -c -- '- 2026-09-22T20:39:12Z — \[run\]' <<< "$body" || true)" "1" "the same run id stays a single log line"
-  assert_file_absent "${TMP_DIR}/gh_edit_body" "duplicate run does not edit the issue"
-  assert_file_absent "${TMP_DIR}/gh_create_body" "duplicate run does not create an issue"
-}
-
-test_closed_issue_starts_a_new_log() {
-  reset_issue_fixtures
-  printf '%s\n' $'9\tDrift Detected in Knowledge Base Sources' > "${TMP_DIR}/mock_closed_issues"
-  printf '%s\n' "closed body with two old runs" > "${TMP_DIR}/mock_issue_body_9"
-
-  local out
-  out=$(run_action "$FIXTURE_DIR" \
-    INPUT_TITLE="Drift Detected in Knowledge Base Sources" \
-    INPUT_BODY="Drift is back" \
-    INPUT_LABELS="bug" \
-    INPUT_ASSIGN="true" \
-    INPUT_TOKEN="dummy-token" \
-    INPUT_DRY_RUN="false" \
-    GITHUB_REPOSITORY="bcgov/actions" \
-    GITHUB_SERVER_URL="https://github.com" \
-    GITHUB_RUN_ID="789" \
-    GITHUB_TRIGGERING_ACTOR="charlie")
-
-  local body
-  body="$(cat "${TMP_DIR}/gh_create_body")"
-  assert_contains "$out" "Issue:     #77" "a closed issue is not reused"
-  assert_contains "$body" "Drift is back" "new issue keeps the caller body"
-  assert_contains "$body" "$(run_line 789)" "new issue log starts at one run"
-  assert_not_contains "$body" "closed body with two old runs" "new issue does not copy the closed issue body"
-  assert_eq "$(grep -c -- '- 2026-09-22T20:39:12Z — \[run\]' <<< "$body" || true)" "1" "new issue has a single run line"
-  assert_file_absent "${TMP_DIR}/gh_edit_body" "closed issue is not edited"
-}
-
-test_missing_run_log_markers_are_appended() {
-  reset_issue_fixtures
-  printf '%s\n' $'12\tTEST Deployment Failure: api' > "${TMP_DIR}/mock_open_issues"
-  printf '%s\n' "Legacy body" > "${TMP_DIR}/mock_issue_body_12"
-
-  run_action "$FIXTURE_DIR" \
-    INPUT_TITLE="TEST Deployment Failure: api" \
-    INPUT_BODY="ignored on update" \
-    INPUT_TOKEN="dummy-token" \
-    INPUT_DRY_RUN="false" \
-    GITHUB_REPOSITORY="bcgov/actions" \
-    GITHUB_SERVER_URL="https://github.com" \
-    GITHUB_RUN_ID="456" >/dev/null
-
-  local body
-  body="$(cat "${TMP_DIR}/gh_edit_body")"
-  assert_contains "$body" "Legacy body" "a body without markers keeps its text"
-  assert_contains "$body" "<!-- workflow-notifier:reported-at -->" "a body without markers gains the run log"
-  assert_contains "$body" "$(run_line 456)" "the first tracked run is appended to a legacy body"
-}
-
-test_create_starts_run_log
-test_append_open_issue_exact_title
-test_same_run_id_is_not_appended_twice
-test_closed_issue_starts_a_new_log
-test_missing_run_log_markers_are_appended
+test_create_when_no_open_match
+test_comment_on_exact_title
 
 echo ""
 echo "Unit tests finished: ${passed} passed, ${failed} failed."

@@ -168,55 +168,14 @@ fi
 # 4. Build the Issue Body
 FINAL_BODY="${INPUT_BODY:-"Workflow failure detected at $(date)."}"
 RUN_URL="${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-local/repo}/actions/runs/${GITHUB_RUN_ID:-0}"
-RUN_ID="${GITHUB_RUN_ID:-0}"
-RUN_TS="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-RUN_LINE="- ${RUN_TS} — [run](${RUN_URL})"
-RUN_MARKER_BEGIN="<!-- workflow-notifier:reported-at -->"
-RUN_MARKER_END="<!-- /workflow-notifier:reported-at -->"
+RUN_LINE="- $(date -u +"%Y-%m-%dT%H:%M:%SZ") — [run](${RUN_URL})"
 
 if [ -n "$TRIGGER_NOTE" ]; then
   printf -v FINAL_BODY "%s\n\n%s\n\n[View Workflow Run](%s)" "$FINAL_BODY" "$TRIGGER_NOTE" "$RUN_URL"
 else
   printf -v FINAL_BODY "%s\n\n[View Workflow Run](%s)" "$FINAL_BODY" "$RUN_URL"
 fi
-
-render_run_log() {
-  printf '%s\n### Reported at\n%s\n%s\n' "$RUN_MARKER_BEGIN" "$1" "$RUN_MARKER_END"
-}
-
-# Sets UPDATED_BODY. Returns 2 when this run id is already in the log.
-apply_run_log() {
-  local body="$1"
-  local before="" mid="" after=""
-  local log_block
-
-  if [[ "$body" == *"${RUN_MARKER_BEGIN}"* && "$body" == *"${RUN_MARKER_END}"* ]]; then
-    before="${body%%"${RUN_MARKER_BEGIN}"*}"
-    after="${body#*"${RUN_MARKER_END}"}"
-    mid="${body#*"${RUN_MARKER_BEGIN}"}"
-    mid="${mid%%"${RUN_MARKER_END}"*}"
-    if [[ "$mid" == *"/actions/runs/${RUN_ID})"* ]]; then
-      UPDATED_BODY="$body"
-      return 2
-    fi
-    if [[ "$mid" != *"### Reported at"* ]]; then
-      mid=$'\n### Reported at'
-    fi
-    while [ -n "$mid" ] && [ "${mid: -1}" = $'\n' ]; do
-      mid="${mid%$'\n'}"
-    done
-    printf -v UPDATED_BODY '%s%s%s\n%s\n%s%s' \
-      "$before" "$RUN_MARKER_BEGIN" "$mid" "$RUN_LINE" "$RUN_MARKER_END" "$after"
-    return 0
-  fi
-
-  log_block="$(render_run_log "$RUN_LINE")"
-  if [ -z "$body" ]; then
-    printf -v UPDATED_BODY '%s\n' "$log_block"
-  else
-    printf -v UPDATED_BODY '%s\n\n%s\n' "$body" "$log_block"
-  fi
-}
+log_debug "Issue body: ${FINAL_BODY}"
 
 copy_redacted_gh_args() {
   local i
@@ -235,7 +194,7 @@ if [ -n "$ASSIGNEES" ]; then
 fi
 
 # 5. Reuse one open issue with this exact title, or create one.
-# ponytail: title match scans at most 100 open issues (`gh issue list` default order).
+# ponytail: title match scans at most 100 open issues (gh list order, first exact hit).
 # Two overlapping runs can both miss and both create. No lock.
 MATCHED_NUM=""
 ISSUE_ACTION="created"
@@ -250,9 +209,8 @@ if [ -n "${INPUT_TOKEN:-}" ]; then
   while IFS=$'\t' read -r num title; do
     [ -z "$num" ] && continue
     [ "$title" = "$INPUT_TITLE" ] || continue
-    if [ -z "$MATCHED_NUM" ] || [ "$num" -lt "$MATCHED_NUM" ]; then
-      MATCHED_NUM="$num"
-    fi
+    MATCHED_NUM="$num"
+    break
   done <<< "$LIST_OUT"
 elif [ "${INPUT_DRY_RUN:-}" != "true" ]; then
   echo "Missing required token (INPUT_TOKEN)" >&2
@@ -260,53 +218,21 @@ elif [ "${INPUT_DRY_RUN:-}" != "true" ]; then
 fi
 
 if [ -n "$MATCHED_NUM" ]; then
-  EXISTING_BODY="$(GH_TOKEN="${INPUT_TOKEN}" gh issue view "$MATCHED_NUM" \
-    --repo "$REPO" \
-    --json body \
-    --jq .body)"
-  apply_status=0
-  apply_run_log "$EXISTING_BODY" || apply_status=$?
-  if [ "$apply_status" -ne 0 ] && [ "$apply_status" -ne 2 ]; then
-    exit "$apply_status"
-  fi
-
+  ISSUE_ACTION="commented"
   ISSUE_NUM="$MATCHED_NUM"
   ISSUE_URL="${GITHUB_SERVER_URL:-https://github.com}/${REPO}/issues/${MATCHED_NUM}"
-  if [ "$apply_status" -eq 2 ]; then
-    ISSUE_ACTION="unchanged"
-    log_debug "Run ${RUN_ID} already recorded on issue #${MATCHED_NUM}"
-    if [ "${INPUT_DRY_RUN:-}" = "true" ]; then
-      echo "::notice ::[DRY RUN] Would leave issue #${MATCHED_NUM} unchanged (run ${RUN_ID} already recorded)"
-      ISSUE_NUM="0"
-      ISSUE_URL="${GITHUB_SERVER_URL:-https://github.com}/${REPO}/issues/dry-run"
-    fi
+  GH_ARGS=(issue comment "$MATCHED_NUM" --repo "$REPO" --body "$RUN_LINE")
+  copy_redacted_gh_args
+  log_debug "Constructed gh arguments: gh ${REDACTED_GH_ARGS[*]}"
+  if [ "${INPUT_DRY_RUN:-}" = "true" ]; then
+    echo "::notice ::[DRY RUN] Would comment on issue: gh ${REDACTED_GH_ARGS[*]}"
+    ISSUE_NUM="0"
+    ISSUE_URL="${GITHUB_SERVER_URL:-https://github.com}/${REPO}/issues/dry-run"
   else
-    ISSUE_ACTION="updated"
-    GH_ARGS=(issue edit "$MATCHED_NUM" --repo "$REPO" --body "$UPDATED_BODY")
-    copy_redacted_gh_args
-    log_debug "Constructed gh arguments: gh ${REDACTED_GH_ARGS[*]}"
-    if [ "${INPUT_DRY_RUN:-}" = "true" ]; then
-      echo "::notice ::[DRY RUN] Would update issue: gh ${REDACTED_GH_ARGS[*]}"
-      ISSUE_NUM="0"
-      ISSUE_URL="${GITHUB_SERVER_URL:-https://github.com}/${REPO}/issues/dry-run"
-    else
-      log_debug "Executing gh CLI to update issue #${MATCHED_NUM}"
-      ISSUE_URL="$(GH_TOKEN="${INPUT_TOKEN}" gh "${GH_ARGS[@]}")"
-      if [ -z "$ISSUE_URL" ]; then
-        echo "gh issue edit returned no issue URL" >&2
-        exit 1
-      fi
-      ISSUE_NUM="$MATCHED_NUM"
-    fi
+    log_debug "Executing gh CLI to comment on issue #${MATCHED_NUM}"
+    GH_TOKEN="${INPUT_TOKEN}" gh "${GH_ARGS[@]}"
   fi
 else
-  apply_status=0
-  apply_run_log "$FINAL_BODY" || apply_status=$?
-  if [ "$apply_status" -ne 0 ] && [ "$apply_status" -ne 2 ]; then
-    exit "$apply_status"
-  fi
-  FINAL_BODY="$UPDATED_BODY"
-  log_debug "Issue body: ${FINAL_BODY}"
   log_debug "Creating issue: $INPUT_TITLE"
 
   GH_ARGS=(issue create --title "$INPUT_TITLE" --body "$FINAL_BODY")
