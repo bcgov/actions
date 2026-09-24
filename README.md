@@ -104,19 +104,6 @@ Refer to each action's directory for its exact minimum required permissions bloc
 - **[workflow-notifier](./workflow-notifier/)**: `contents: read`, `issues: write`, `pull-requests: read` (optional, for PR merge author resolution)
 - **[workflow-results](./workflow-results/)**: `permissions: {}` (no permissions required)
 
-## Fork pull requests
-
-Use the **same workflow** on upstream and fork (`on: [push, pull_request]`). Individual actions adapt where they can — no `if: fork` guards required in consumer YAML.
-
-On a fork `pull_request` into upstream, GitHub grants a **read-only** `GITHUB_TOKEN` on the base repository. Steps that need write access (updating PR descriptions, creating issues, pushing packages to the base org's GHCR) are skipped or fail. That is expected platform behaviour, not a misconfiguration.
-
-| Concern | Where to read more |
-|---|---|
-| Container builds and GHCR | [builder — Fork builds](./builder/README.md#fork-builds) |
-| Image digest lookup | [image-tracker](./image-tracker/) — miss fails the step (`exit 1`), including fork PRs. There is no `pushed` output. |
-
-**Do not use `pull_request_target`** for builds or deploys from fork PRs.
-
 ## Releases and Version Pinning
 
 Never pin `@main`. Pin a [release](../../releases) tag (`@v1.2.3`) or that tag’s commit SHA.
@@ -124,22 +111,3 @@ Never pin `@main`. Pin a [release](../../releases) tag (`@v1.2.3`) or that tag�
 `pr-description-add` and `test-and-analyse` execute committed `dist/` from ncc. Pull requests compile that bundle in the job and do not commit it. Publishing a release from the Releases page runs [`.github/workflows/release.yml`](./.github/workflows/release.yml). Unless this run is the workflow republishing the tag, or the tag already points at the dist rebuild, the workflow deletes that release and its git tag before `npm ci`. It then builds. When `pr-description-add/dist/` or `test-and-analyse/dist/` differ, it commits `chore(dist): rebuild ncc bundles for release` and creates the tag on that commit. When they match, it creates the tag on the commit you released. The GitHub Release is recreated with the same title and notes. It does not push `main`. While the job runs, and if the job fails, the tag does not resolve. Copy the pin SHA after the workflow succeeds. `@main` does not contain this rebuild. Composite actions in this repo are YAML, but still must not be pinned to `@main`.
 
 Usage examples use `@vX.Y.Z` — a placeholder that will not resolve — so copy-paste fails until you pick a real tag. All actions are versioned and released together as a single suite.
-
-## Developing in this repository
-
-Workflows and composite actions in **this** repo reference sibling actions with GitHub's self-repository syntax (`$/`), not `./`:
-
-```yaml
-uses: $/diff-triggers          # action at the running commit — no checkout required
-uses: $/pr-validate             # action at the running commit — no checkout required
-```
-
-**Consumers** outside this repo still pin published actions normally:
-
-```yaml
-uses: bcgov/actions/diff-triggers@vX.Y.Z
-```
-
-Internal integration tests live under `.github/workflows/test-*.yml`. When a composite action calls a sibling (e.g. `test-and-analyse` → `$/diff-triggers`), the sibling resolves at the same SHA as the parent — even when downstream callers pin a full commit SHA.
-
-`./` is the trap: it resolves against `GITHUB_WORKSPACE`, not the action's own repo. A test job that checks this repo out at the workspace root makes `./sibling` resolve anyway, so the mistake passes CI and only breaks for consumers. Test jobs that exercise a sibling call must therefore leave the workspace root free of this repo — load the action under test with `$/`, and check any fixture repo out to a subdirectory (`path:`). Jobs whose action needs workspace content of its own (`diff-triggers`, `image-tracker`, `sysdig-monitor`, `workflow-notifier`) still check out at the root; that is fine only while those actions call no siblings.
