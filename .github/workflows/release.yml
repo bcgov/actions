@@ -22,13 +22,10 @@ jobs:
         with:
           ref: ${{ github.event.release.tag_name }}
 
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .tool-versions
-          cache: npm
-
-      - name: Rebuild ncc bundles and retarget tag
+      - name: Unpublish tag until dist is rebuilt
+        id: unpublish
         env:
+          ACTOR: ${{ github.actor }}
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name }}
         run: |
@@ -37,26 +34,57 @@ jobs:
             echo "release tag is empty" >&2
             exit 1
           fi
+          if [ "$ACTOR" = "github-actions[bot]" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "ignoring release published by github-actions[bot]"
+            exit 0
+          fi
           subject=$(git log -1 --format=%s)
           if [ "$subject" = "chore(dist): rebuild ncc bundles for release" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "tag ${TAG} already points at the dist rebuild"
             exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          git rev-parse HEAD > "$RUNNER_TEMP/release-base-sha"
+          gh release view "$TAG" --json name,body,isPrerelease > "$RUNNER_TEMP/release.json"
+          gh release delete "$TAG" --yes --cleanup-tag
+
+      - uses: actions/setup-node@v7
+        if: steps.unpublish.outputs.skip != 'true'
+        with:
+          node-version-file: .tool-versions
+          cache: npm
+
+      - name: Rebuild ncc bundles and republish tag
+        if: steps.unpublish.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          base=$(cat "$RUNNER_TEMP/release-base-sha")
+          title=$(jq -r '.name // empty' "$RUNNER_TEMP/release.json")
+          jq -r '.body // empty' "$RUNNER_TEMP/release.json" > "$RUNNER_TEMP/release-notes.md"
+          prerelease=$(jq -r '.isPrerelease' "$RUNNER_TEMP/release.json")
+          if [ -z "$title" ]; then
+            title="$TAG"
           fi
           npm ci
           npm run build
           untracked="$(git ls-files --others --exclude-standard -- pr-description-add/dist test-and-analyse/dist)"
           if git diff --ignore-space-at-eol --quiet -- pr-description-add/dist test-and-analyse/dist && [ -z "$untracked" ]; then
-            echo "committed dist already matches ${TAG}"
-            exit 0
+            git tag "$TAG" "$base"
+          else
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git config user.name "github-actions[bot]"
+            git add -A -- pr-description-add/dist test-and-analyse/dist
+            git commit -m "chore(dist): rebuild ncc bundles for release"
+            git tag "$TAG"
           fi
-          branch="dist-${GITHUB_RUN_ID}"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git config user.name "github-actions[bot]"
-          git checkout -b "$branch"
-          git add -A -- pr-description-add/dist test-and-analyse/dist
-          git commit -m "chore(dist): rebuild ncc bundles for release"
-          git push -u origin "HEAD:${branch}"
-          git tag -f "$TAG"
-          git push --force origin "refs/tags/${TAG}"
-          gh release edit "$TAG" --target "$(git rev-parse HEAD)" --verify-tag
-          git push origin --delete "$branch"
+          git push origin "refs/tags/${TAG}"
+          if [ "$prerelease" = "true" ]; then
+            gh release create "$TAG" --title "$title" --notes-file "$RUNNER_TEMP/release-notes.md" --prerelease --verify-tag
+          else
+            gh release create "$TAG" --title "$title" --notes-file "$RUNNER_TEMP/release-notes.md" --verify-tag
+          fi

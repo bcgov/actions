@@ -21,7 +21,7 @@ All actions in each repository are versioned and released together as a **single
 
 > **Consumers must never pin to `@main`.** README examples use `@vX.Y.Z` — a placeholder that will not resolve — to force consumers to look up the [latest release](../../releases) and pick a real version or SHA.
 >
-> `pr-description-add` and `test-and-analyse` run ncc `dist/`. That bundle is committed by `.github/workflows/release.yml` after a release is published, not on pull requests. `@main` for those two actions does not run current source.
+> `pr-description-add` and `test-and-analyse` run ncc `dist/`. Publishing a release deletes that tag until `.github/workflows/release.yml` recreates it on the dist commit. `@main` for those two actions does not run current source.
 
 ## Repository Structure
 
