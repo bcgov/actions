@@ -3,6 +3,8 @@
 
 This action adds to Pull Request descriptions using markdown.  It checks if the message is already present before adding.
 
+`runs.main` is committed `dist/index.js` from ncc. That bundle is rebuilt and committed **only on suite release**. Pin a release tag (`@vX.Y.Z` in examples — replace with a real tag). `@main` does not run current source.
+
 ## Input
 
 #### Required

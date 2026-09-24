@@ -20,6 +20,8 @@ sprint and is out of scope for the `v1.0.0` tag.
 All actions in each repository are versioned and released together as a **single suite**. A single semver tag (e.g. `v1.2.3`) on the repository applies to every action simultaneously.
 
 > **Consumers must never pin to `@main`.** README examples use `@vX.Y.Z` — a placeholder that will not resolve — to force consumers to look up the [latest release](../../releases) and pick a real version or SHA.
+>
+> `pr-description-add` and `test-and-analyse` run ncc `dist/`. Publishing a release deletes that tag until `.github/workflows/release.yml` recreates it on the dist commit. `@main` for those two actions does not run current source.
 
 ## Repository Structure
 

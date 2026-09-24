@@ -58,8 +58,8 @@ jobs:
               - 'eslint.config.mjs'
               - '.prettierrc.json'
               - '.prettierignore'
-            # Lock refresh must rebuild bundled dist, not re-run path-match jobs
-            # that assert against this PR's changed files.
+            # Lock refresh must ncc-compile JS actions in-job; do not run
+            # path-match jobs that assert against this PR's changed files.
             lockfile:
               - 'package-lock.json'
 
