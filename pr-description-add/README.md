@@ -30,7 +30,7 @@ permissions:
 
 ## Fork pull requests
 
-Fork PRs cannot update the upstream PR description — GitHub grants a read-only token on the base repo. The action detects fork PRs, emits a notice, and exits successfully. See the [fork pull requests guide](https://github.com/bcgov/actions/blob/main/README.md#fork-pull-requests).
+Fork PRs cannot update the upstream PR description — GitHub grants a read-only token on the base repo. The action detects fork PRs, emits a notice, and exits successfully.
 
 ## Example #1, minimal
 

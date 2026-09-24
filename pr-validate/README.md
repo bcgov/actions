@@ -45,4 +45,4 @@ If `add_markdown` is set, also grant `pull-requests: write`.
 
 ### Fork pull requests
 
-Fork PRs receive a workflow warning and continue validation. They use read-only tokens on the base repo; `pr-description-add` no-ops on forks. See the [fork pull requests guide](../README.md#fork-pull-requests).
+Fork PRs receive a workflow warning and continue validation. They use read-only tokens on the base repo; `pr-description-add` no-ops on forks.
