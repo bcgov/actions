@@ -3,6 +3,8 @@
 
 This action adds to Pull Request descriptions using markdown.  It checks if the message is already present before adding.
 
+`runs.main` is committed `dist/index.js` from ncc. That bundle is rebuilt and committed **only on suite release**. Pin a release tag (`@vX.Y.Z` in examples — replace with a real tag). `@main` does not run current source.
+
 ## Input
 
 #### Required
@@ -28,7 +30,7 @@ permissions:
 
 ## Fork pull requests
 
-Fork PRs cannot update the upstream PR description — GitHub grants a read-only token on the base repo. The action detects fork PRs, emits a notice, and exits successfully. See the [fork pull requests guide](https://github.com/bcgov/actions/blob/main/README.md#fork-pull-requests).
+Fork PRs cannot update the upstream PR description — GitHub grants a read-only token on the base repo. The action detects fork PRs, emits a notice, and exits successfully.
 
 ## Example #1, minimal
 

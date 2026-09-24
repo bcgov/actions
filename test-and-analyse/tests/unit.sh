@@ -463,10 +463,10 @@ if [[ "$failed" -gt 0 ]]; then
     exit 1
 fi
 
-# ── Dist freshness (#99 slice) ───────────────────────────────────────────────
-# Committed dist/ must match a fresh ncc build (same as package.json "build").
+# ── ncc compile ──────────────────────────────────────────────────────────────
+# Committed dist/ is refreshed at release. PRs only require a successful build.
 echo ""
-echo "── Dist freshness ──"
+echo "── ncc build ──"
 ACTION_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REPO_ROOT="$(cd "${ACTION_ROOT}/.." && pwd)"
 (
@@ -476,11 +476,5 @@ REPO_ROOT="$(cd "${ACTION_ROOT}/.." && pwd)"
   fi
   cd "$ACTION_ROOT"
   npm run build
-  git diff --ignore-space-at-eol --exit-code dist/
-  untracked="$(git ls-files --others --exclude-standard -- dist/)"
-  if [ -n "$untracked" ]; then
-    printf '%s\n' "$untracked" >&2
-    exit 1
-  fi
 )
-echo "✅ dist/ matches fresh build"
+echo "✅ ncc build succeeded"
