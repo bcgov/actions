@@ -13,7 +13,7 @@ inputs:
     description: "Enable debug logging"
     default: "false"
   title:
-    description: "Issue title"
+    description: "Issue title. An open issue with this exact title gets a comment for each later run. A closed issue is not reused."
     required: true
   body:
     description: "Issue body (pre-filled with run URL if omitted)"
@@ -31,12 +31,12 @@ inputs:
     description: "Whether to notify repository CODEOWNERS on failure ('fallback' only alerts when no actors found, 'true' always includes, 'false' never includes)"
     default: "fallback"
   dry_run:
-    description: "If true, logs the issue creation without actually creating it"
+    description: "If true, logs the issue create or comment without calling it"
     default: "false"
 
 outputs:
   issue_number:
-    description: "The created issue number (0 if dry run)"
+    description: "The created issue number, or the open issue that received the comment (0 if dry run)"
     value: "${{ steps.run_script.outputs.issue_number }}"
   assignees:
     description: "Comma-separated list of assigned owners"

@@ -22,6 +22,22 @@ exit 0
 EOF
 chmod +x "${MOCK_BIN}/sleep"
 
+cat << 'EOF' > "${MOCK_BIN}/date"
+#!/usr/bin/env bash
+set -euo pipefail
+if [ "${1:-}" = "-u" ] && [ "${2:-}" = "+%Y-%m-%dT%H:%M:%SZ" ]; then
+  printf '%s\n' "2026-09-22T20:39:12Z"
+  exit 0
+fi
+if [ "$#" -eq 0 ]; then
+  printf '%s\n' "Wed Sep 23 04:00:00 UTC 2026"
+  exit 0
+fi
+echo "mock-date: unexpected args: $*" >&2
+exit 1
+EOF
+chmod +x "${MOCK_BIN}/date"
+
 cat << 'EOF' > "${MOCK_BIN}/gh"
 #!/usr/bin/env bash
 set -euo pipefail
@@ -80,6 +96,61 @@ if [[ "$*" == *"commits/"*"/pulls"* ]]; then
   exit 0
 fi
 
+if [ "${1:-}" = "issue" ] && [ "${2:-}" = "list" ]; then
+  printf '%s\n' "$@" > "${TMP_DIR}/gh_issue_list_args"
+  state=""
+  prev=""
+  for arg in "$@"; do
+    if [ "$prev" = "--state" ]; then
+      state="$arg"
+    fi
+    prev="$arg"
+  done
+  if [ "$state" = "open" ]; then
+    if [ -f "${TMP_DIR}/mock_open_issues" ]; then
+      cat "${TMP_DIR}/mock_open_issues"
+    fi
+    exit 0
+  fi
+  echo "mock-gh: issue list requires --state open" >&2
+  exit 1
+fi
+
+if [ "${1:-}" = "issue" ] && [ "${2:-}" = "comment" ]; then
+  num="${3:-}"
+  body=""
+  prev=""
+  for arg in "$@"; do
+    if [ "$prev" = "--body" ]; then
+      body="$arg"
+    fi
+    if [ "$arg" = "--assignee" ] || [ "$arg" = "--label" ]; then
+      echo "mock-gh: comment must not set ${arg}" >&2
+      exit 1
+    fi
+    prev="$arg"
+  done
+  printf '%s' "$body" > "${TMP_DIR}/gh_comment_body"
+  printf '%s\n' "$@" > "${TMP_DIR}/gh_comment_args"
+  echo "https://github.com/${GITHUB_REPOSITORY:-bcgov/actions}/issues/${num}#issuecomment-1"
+  exit 0
+fi
+
+if [ "${1:-}" = "issue" ] && [ "${2:-}" = "create" ]; then
+  body=""
+  prev=""
+  for arg in "$@"; do
+    if [ "$prev" = "--body" ]; then
+      body="$arg"
+    fi
+    prev="$arg"
+  done
+  printf '%s' "$body" > "${TMP_DIR}/gh_create_body"
+  printf '%s\n' "$@" > "${TMP_DIR}/gh_create_args"
+  echo "https://github.com/${GITHUB_REPOSITORY:-local/repo}/issues/77"
+  exit 0
+fi
+
 # Fallback for unexpected calls
 echo "mock-gh: $*" >&2
 exit 1
@@ -90,7 +161,12 @@ run_action() {
   local workdir="$1"
   shift
   local out_file="${TMP_DIR}/output.env"
-  rm -f "$out_file"
+  rm -f "$out_file" \
+    "${TMP_DIR}/gh_issue_list_args" \
+    "${TMP_DIR}/gh_create_args" \
+    "${TMP_DIR}/gh_create_body" \
+    "${TMP_DIR}/gh_comment_args" \
+    "${TMP_DIR}/gh_comment_body"
 
   (
     cd "$workdir"
@@ -526,6 +602,95 @@ test_ten_assignee_limit
 test_pr_api_retry_success
 test_pull_request_event
 test_push_to_branch_with_open_unmerged_pr
+
+# One open issue per exact title. Later runs comment; they do not edit the body.
+reset_issue_fixtures() {
+  rm -f "${TMP_DIR}/mock_open_issues"
+}
+
+run_line() {
+  local run_id="$1"
+  printf -- '- 2026-09-22T20:39:12Z — [run](https://github.com/bcgov/actions/actions/runs/%s)' "$run_id"
+}
+
+assert_file_absent() {
+  local file="$1" name="$2"
+  if [ ! -f "$file" ]; then
+    echo "✓ $name"
+    passed=$((passed + 1))
+  else
+    echo "✗ $name"
+    echo "  Expected file to be absent: $file"
+    failed=$((failed + 1))
+  fi
+}
+
+test_create_when_no_open_match() {
+  reset_issue_fixtures
+  local out
+  out=$(run_action "$FIXTURE_DIR" \
+    INPUT_TITLE="TEST Deployment Failure: api" \
+    INPUT_BODY="Boom" \
+    INPUT_LABELS="bug, failure" \
+    INPUT_ASSIGN="true" \
+    INPUT_TOKEN="dummy-token" \
+    INPUT_DRY_RUN="false" \
+    GITHUB_REPOSITORY="bcgov/actions" \
+    GITHUB_SERVER_URL="https://github.com" \
+    GITHUB_RUN_ID="123" \
+    GITHUB_TRIGGERING_ACTOR="charlie")
+
+  local body list_args create_args
+  body="$(cat "${TMP_DIR}/gh_create_body")"
+  list_args="$(cat "${TMP_DIR}/gh_issue_list_args")"
+  create_args="$(cat "${TMP_DIR}/gh_create_args")"
+
+  assert_contains "$out" "Issue:     #77" "create path returns the new issue number"
+  assert_contains "$list_args" $'--state\nopen' "lists open issues only"
+  assert_contains "$list_args" $'--limit\n100' "scans at most 100 open issues"
+  assert_contains "$create_args" "--label" "create adds labels"
+  assert_contains "$create_args" "bug" "create adds the bug label"
+  assert_contains "$create_args" "failure" "create adds the failure label"
+  assert_contains "$create_args" "--assignee" "create assigns owners"
+  assert_contains "$create_args" "charlie" "create assigns the resolved author"
+  assert_contains "$body" "Boom" "create keeps the caller body"
+  assert_contains "$body" "Pushed by @charlie" "create keeps the trigger note"
+  assert_contains "$body" "[View Workflow Run](https://github.com/bcgov/actions/actions/runs/123)" "create keeps the workflow link"
+  assert_file_absent "${TMP_DIR}/gh_comment_body" "create does not comment"
+}
+
+test_comment_on_exact_title() {
+  reset_issue_fixtures
+  printf '%s\n' $'40\tTEST Deployment Failure: api' $'12\tTEST Deployment Failure: api' \
+    $'99\tTEST Deployment Failure: api extra' \
+    > "${TMP_DIR}/mock_open_issues"
+
+  local out
+  out=$(run_action "$FIXTURE_DIR" \
+    INPUT_TITLE="TEST Deployment Failure: api" \
+    INPUT_BODY="Boom" \
+    INPUT_LABELS="bug,failure" \
+    INPUT_ASSIGN="true" \
+    INPUT_TOKEN="dummy-token" \
+    INPUT_DRY_RUN="false" \
+    GITHUB_REPOSITORY="bcgov/actions" \
+    GITHUB_SERVER_URL="https://github.com" \
+    GITHUB_RUN_ID="456" \
+    GITHUB_TRIGGERING_ACTOR="charlie")
+
+  local body comment_args
+  body="$(cat "${TMP_DIR}/gh_comment_body")"
+  comment_args="$(cat "${TMP_DIR}/gh_comment_args")"
+
+  assert_contains "$out" "Issue:     #40" "comment path returns the first exact title match"
+  assert_eq "$body" "$(run_line 456)" "comment body is the run line"
+  assert_not_contains "$comment_args" "--assignee" "comment does not assign"
+  assert_not_contains "$comment_args" "--label" "comment does not set labels"
+  assert_file_absent "${TMP_DIR}/gh_create_body" "comment does not create another issue"
+}
+
+test_create_when_no_open_match
+test_comment_on_exact_title
 
 echo ""
 echo "Unit tests finished: ${passed} passed, ${failed} failed."

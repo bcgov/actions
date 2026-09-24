@@ -9,7 +9,7 @@ To run this action, the calling workflow job must have the following minimum per
 ```yaml
 permissions:
   contents: read       # Required to discover CODEOWNERS files in the repository
-  issues: write        # Required to create issues and assign owners
+  issues: write        # Required to create issues, comment on an open match, and assign owners
   pull-requests: read  # Optional: required to resolve author from pull request metadata on merge commits
 ```
 
@@ -21,19 +21,19 @@ The action reads `CODEOWNERS` from the **job workspace**, not from the action bu
 |---|---|---|---|
 | `token` | GitHub token | `${{ github.token }}` | No |
 | `debug` | Enable debug logging | `"false"` | No |
-| `title` | Issue title | | **Yes** |
+| `title` | Issue title. An open issue with this exact title gets a comment for each later run. A closed issue is not reused. | | **Yes** |
 | `body` | Issue body (pre-filled with workflow run URL if omitted) | | No |
 | `labels` | Comma-separated list of labels to add to the issue | `"bug,failure"` | No |
 | `assign` | Whether to assign owners to the issue | `"true"` | No |
 | `notify_author` | Whether to notify the triggering author/merger on failure | `"true"` | No |
 | `notify_codeowners` | Whether to notify repository CODEOWNERS on failure (`"fallback"`, `"true"`, `"false"`). By default (`"fallback"`), CODEOWNERS are only alerted if no human author/operator was resolved (e.g. scheduled cron runs). Set `"true"` to always include CODEOWNERS, or `"false"` to never include them. | `"fallback"` | No |
-| `dry_run` | If true, logs the issue creation without actually creating it | `"false"` | No |
+| `dry_run` | If true, logs the issue create or comment without calling it | `"false"` | No |
 
 ## Outputs
 
 | Output | Description |
 |---|---|
-| `issue_number` | The created issue number (0 if dry run) |
+| `issue_number` | The created issue number, or the open issue that received the comment (0 if dry run) |
 | `assignees` | Comma-separated list of assigned owners |
 
 ## Usage
@@ -59,6 +59,8 @@ export INPUT_BODY="Testing action script locally"
 export INPUT_LABELS="bug,test"
 export INPUT_ASSIGN="false"
 export INPUT_DRY_RUN="true"
+export GITHUB_REPOSITORY="owner/repo"
+export GITHUB_RUN_ID="0"
 
 # Execute the shell script directly
 ./action.sh

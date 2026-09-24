@@ -168,6 +168,7 @@ fi
 # 4. Build the Issue Body
 FINAL_BODY="${INPUT_BODY:-"Workflow failure detected at $(date)."}"
 RUN_URL="${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-local/repo}/actions/runs/${GITHUB_RUN_ID:-0}"
+RUN_LINE="- $(date -u +"%Y-%m-%dT%H:%M:%SZ") — [run](${RUN_URL})"
 
 if [ -n "$TRIGGER_NOTE" ]; then
   printf -v FINAL_BODY "%s\n\n%s\n\n[View Workflow Run](%s)" "$FINAL_BODY" "$TRIGGER_NOTE" "$RUN_URL"
@@ -176,55 +177,98 @@ else
 fi
 log_debug "Issue body: ${FINAL_BODY}"
 
-# 5. Create the Issue via gh CLI
-log_debug "Creating issue: $INPUT_TITLE"
-
-# Construct the command array
-GH_ARGS=(issue create --title "$INPUT_TITLE" --body "$FINAL_BODY")
-
-# Split labels on comma and add --label for each
-if [ -n "${INPUT_LABELS:-}" ]; then
-  # read -a returns 1 on empty input, so we use || true inside the condition or just trust the if -n
-  IFS=',' read -r -a LABELS_ARRAY <<< "$INPUT_LABELS" || true
-  for label in "${LABELS_ARRAY[@]}"; do
-    # Trim whitespace
-    label=$(echo "$label" | xargs)
-    if [ -n "$label" ]; then
-      GH_ARGS+=(--label "$label")
+copy_redacted_gh_args() {
+  local i
+  REDACTED_GH_ARGS=("${GH_ARGS[@]}")
+  for i in "${!REDACTED_GH_ARGS[@]}"; do
+    if [ "${REDACTED_GH_ARGS[$i]}" = "--body" ] && [ $((i + 1)) -lt ${#REDACTED_GH_ARGS[@]} ]; then
+      REDACTED_GH_ARGS[$((i + 1))]="[MASKED]"
     fi
   done
-fi
+}
 
-# Handle assignment (limit 10 for GitHub)
+# Handle assignment (limit 10 for GitHub). Applied on create only.
 CLEAN_ASSIGNEES=""
 if [ -n "$ASSIGNEES" ]; then
   CLEAN_ASSIGNEES=$(echo "$ASSIGNEES" | cut -d',' -f1-10)
 fi
 
-if [ "${INPUT_ASSIGN:-}" == "true" ] && [ -n "$CLEAN_ASSIGNEES" ]; then
-  GH_ARGS+=(--assignee "$CLEAN_ASSIGNEES")
+# 5. Reuse one open issue with this exact title, or create one.
+# ponytail: title match scans at most 100 open issues (gh list order, first exact hit).
+# Two overlapping runs can both miss and both create. No lock.
+MATCHED_NUM=""
+ISSUE_ACTION="created"
+if [ -n "${INPUT_TOKEN:-}" ]; then
+  REPO="${GITHUB_REPOSITORY:?Missing GITHUB_REPOSITORY}"
+  LIST_OUT="$(GH_TOKEN="${INPUT_TOKEN}" gh issue list \
+    --repo "$REPO" \
+    --state open \
+    --limit 100 \
+    --json number,title \
+    --jq '.[] | [.number, .title] | @tsv')"
+  while IFS=$'\t' read -r num title; do
+    [ -z "$num" ] && continue
+    [ "$title" = "$INPUT_TITLE" ] || continue
+    MATCHED_NUM="$num"
+    break
+  done <<< "$LIST_OUT"
+elif [ "${INPUT_DRY_RUN:-}" != "true" ]; then
+  echo "Missing required token (INPUT_TOKEN)" >&2
+  exit 1
 fi
 
-# Execute or Dry Run
-REDACTED_GH_ARGS=("${GH_ARGS[@]}")
-for i in "${!REDACTED_GH_ARGS[@]}"; do
-  if [ "${REDACTED_GH_ARGS[i]}" == "--body" ] && [ $((i + 1)) -lt ${#REDACTED_GH_ARGS[@]} ]; then
-    REDACTED_GH_ARGS[i+1]="[MASKED]"
+if [ -n "$MATCHED_NUM" ]; then
+  ISSUE_ACTION="commented"
+  ISSUE_NUM="$MATCHED_NUM"
+  ISSUE_URL="${GITHUB_SERVER_URL:-https://github.com}/${REPO}/issues/${MATCHED_NUM}"
+  GH_ARGS=(issue comment "$MATCHED_NUM" --repo "$REPO" --body "$RUN_LINE")
+  copy_redacted_gh_args
+  log_debug "Constructed gh arguments: gh ${REDACTED_GH_ARGS[*]}"
+  if [ "${INPUT_DRY_RUN:-}" = "true" ]; then
+    echo "::notice ::[DRY RUN] Would comment on issue: gh ${REDACTED_GH_ARGS[*]}"
+    ISSUE_NUM="0"
+    ISSUE_URL="${GITHUB_SERVER_URL:-https://github.com}/${REPO}/issues/dry-run"
+  else
+    log_debug "Executing gh CLI to comment on issue #${MATCHED_NUM}"
+    GH_TOKEN="${INPUT_TOKEN}" gh "${GH_ARGS[@]}"
   fi
-done
-
-log_debug "Constructed gh arguments: gh ${REDACTED_GH_ARGS[*]}"
-if [ "${INPUT_DRY_RUN:-}" == "true" ]; then
-  echo "::notice ::[DRY RUN] Would create issue: gh ${REDACTED_GH_ARGS[*]}"
-  ISSUE_NUM="0"
-  ISSUE_URL="${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-local/repo}/issues/dry-run"
 else
-  log_debug "Executing gh CLI to create issue"
-  ISSUE_URL=$(GH_TOKEN="${INPUT_TOKEN:?Missing required token (INPUT_TOKEN)}" gh "${GH_ARGS[@]}")
-  ISSUE_NUM=$(echo "$ISSUE_URL" | grep -oE '[0-9]+$' || echo "0")
+  log_debug "Creating issue: $INPUT_TITLE"
+
+  GH_ARGS=(issue create --title "$INPUT_TITLE" --body "$FINAL_BODY")
+  if [ -n "${GITHUB_REPOSITORY:-}" ]; then
+    GH_ARGS+=(--repo "$GITHUB_REPOSITORY")
+  fi
+
+  if [ -n "${INPUT_LABELS:-}" ]; then
+    IFS=',' read -r -a LABELS_ARRAY <<< "$INPUT_LABELS" || true
+    for label in "${LABELS_ARRAY[@]}"; do
+      label=$(echo "$label" | xargs)
+      if [ -n "$label" ]; then
+        GH_ARGS+=(--label "$label")
+      fi
+    done
+  fi
+
+  if [ "${INPUT_ASSIGN:-}" = "true" ] && [ -n "$CLEAN_ASSIGNEES" ]; then
+    GH_ARGS+=(--assignee "$CLEAN_ASSIGNEES")
+  fi
+
+  copy_redacted_gh_args
+  log_debug "Constructed gh arguments: gh ${REDACTED_GH_ARGS[*]}"
+  if [ "${INPUT_DRY_RUN:-}" = "true" ]; then
+    echo "::notice ::[DRY RUN] Would create issue: gh ${REDACTED_GH_ARGS[*]}"
+    ISSUE_NUM="0"
+    ISSUE_URL="${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-local/repo}/issues/dry-run"
+  else
+    log_debug "Executing gh CLI to create issue"
+    ISSUE_URL="$(GH_TOKEN="${INPUT_TOKEN:?Missing required token (INPUT_TOKEN)}" gh "${GH_ARGS[@]}")"
+    ISSUE_NUM="$(echo "$ISSUE_URL" | grep -oE '[0-9]+$' || echo "0")"
+  fi
 fi
 
 echo "Summary ---"
+printf "\tAction:    %s\n" "${ISSUE_ACTION}"
 printf "\tIssue:     #%s\n" "${ISSUE_NUM}"
 printf "\tURL:       %s\n" "${ISSUE_URL}"
 for author in "${AUTHORS_LIST[@]}"; do
