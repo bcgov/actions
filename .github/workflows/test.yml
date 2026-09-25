@@ -31,6 +31,8 @@ jobs:
           filters: |
             builder:
               - 'builder/**'
+            dast:
+              - 'dast/**'
             diff-triggers:
               - 'diff-triggers/**'
             image-tracker:
@@ -179,6 +181,49 @@ jobs:
           triggers: |
             builder/
             .github/workflows/
+
+  # ─── DAST ───────────────────────────────────────────────────────────────────
+  test-dast:
+    name: Test DAST
+    needs: [filter]
+    if: contains(fromJSON(needs.filter.outputs.changes), 'dast') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Run Unit Tests
+        run: bash dast/tests/unit.sh
+
+      - name: Validate action.yml
+        run: |
+          test -f dast/action.yml
+          pip install pyyaml -q
+          python3 -c "import yaml; yaml.safe_load(open('dast/action.yml'))"
+
+      - name: Empty target fails fast
+        id: empty_target
+        continue-on-error: true
+        uses: $/dast
+        with:
+          target: ''
+
+      - name: Invalid target fails fast
+        id: invalid_target
+        continue-on-error: true
+        uses: $/dast
+        with:
+          target: 'not-a-url'
+
+      - name: Verify target guards failed
+        run: |
+          if [ "${{ steps.empty_target.outcome }}" != "failure" ] || \
+             [ "${{ steps.invalid_target.outcome }}" != "failure" ]; then
+            echo "::error::dast must fail on an empty or invalid target"
+            exit 1
+          fi
+          echo "Target guards failed fast as expected."
 
   # ─── DIFF TRIGGERS ──────────────────────────────────────────────────────────
   test-diff-triggers:
@@ -957,6 +1002,7 @@ jobs:
       - filter
       - test-builder-build
       - test-builder-matrix
+      - test-dast
       - test-diff-triggers
       - test-image-tracker
       - test-pr-description-add
