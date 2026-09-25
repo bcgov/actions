@@ -1,15 +1,22 @@
-name: DAST
-description: Run ZAP and Nuclei against one URL and upload SARIF to the Security tab
+name: Scan URL
+description: Scan a running site's URL with ZAP and Nuclei and upload SARIF to the Security tab
 branding:
   icon: shield
   color: blue
 
 inputs:
-  target:
+  url:
     description: |
-      URL to scan with both ZAP and Nuclei.
+      URL to scan.
       Defaults to the repository's Silver test route.
     default: https://${{ github.event.repository.name }}-test.apps.silver.devops.gov.bc.ca
+  # What to scan: each scanner is on by default; at least one must stay on
+  zap:
+    description: Run the ZAP full scan ('true' or 'false')
+    default: 'true'
+  nuclei:
+    description: Run the Nuclei scan ('true' or 'false')
+    default: 'true'
 
 outputs:
   zap_json:
@@ -26,12 +33,27 @@ runs:
       id: preflight
       shell: bash
       env:
-        TARGET: ${{ inputs.target }}
+        URL: ${{ inputs.url }}
+        ZAP: ${{ inputs.zap }}
+        NUCLEI: ${{ inputs.nuclei }}
       run: |
-        if [[ ! "$TARGET" =~ ^https?://[[:alnum:]][[:alnum:].-]*(:[0-9]+)?(/[^[:space:]]*)?$ ]]; then
-          echo "::error::target must be http(s)://host[:port][/path], got '${TARGET}'"
+        for toggle in "zap=${ZAP}" "nuclei=${NUCLEI}"; do
+          if [[ "${toggle#*=}" != true && "${toggle#*=}" != false ]]; then
+            echo "::error::${toggle%%=*} must be 'true' or 'false', got '${toggle#*=}'"
+            exit 1
+          fi
+        done
+        if [[ "$ZAP" == false && "$NUCLEI" == false ]]; then
+          echo "::error::zap and nuclei are both 'false'; enable at least one scanner"
           exit 1
         fi
+        if [[ ! "$URL" =~ ^https?://[[:alnum:]][[:alnum:].-]*(:[0-9]+)?(/[^[:space:]]*)?$ ]]; then
+          echo "::error::url must be http(s)://host[:port][/path], got '${URL}'"
+          exit 1
+        fi
+        # Per-URL names keep a caller matrix from sharing SARIF categories, artifacts and issues
+        slug="$(sed -E 's#^https?://##; s#[^[:alnum:]]+#-#g; s#^-|-$##g' <<<"$URL")"
+        echo "slug=${slug}" >> "$GITHUB_OUTPUT"
         # Stale reports from an earlier run would make a broken scan look clean
         rm -f report_json.json zap-results.sarif nuclei-results.jsonl nuclei-results.sarif
         if [[ -f tests/.zap/rules.tsv ]]; then
@@ -40,34 +62,38 @@ runs:
 
     - name: ZAP Full Scan
       id: zap
+      if: inputs.zap == 'true'
       continue-on-error: true
       uses: zaproxy/action-full-scan@3c58388149901b9a03b7718852c5ba889646c27c # v0.13.0
       with:
-        target: ${{ inputs.target }}
+        target: ${{ inputs.url }}
         rules_file_name: ${{ steps.preflight.outputs.zap_rules }}
+        artifact_name: zap_scan-${{ steps.preflight.outputs.slug }}
+        issue_title: 'ZAP Full Scan Report: ${{ inputs.url }}'
 
     - name: Nuclei Scan
       id: nuclei
+      if: inputs.nuclei == 'true'
       continue-on-error: true
       uses: projectdiscovery/nuclei-action@cc153d0541e1adf8a42bbe31c0a4fb2376147538 # v3.1.1
       with:
-        args: -u ${{ inputs.target }} -jsonl-export nuclei-results.jsonl -sarif-export nuclei-results.sarif
+        args: -u ${{ inputs.url }} -jsonl-export nuclei-results.jsonl -sarif-export nuclei-results.sarif
 
     - name: Convert ZAP Report to SARIF
-      if: hashFiles('report_json.json') != ''
+      if: inputs.zap == 'true' && hashFiles('report_json.json') != ''
       shell: bash
       run: jq -f "${GITHUB_ACTION_PATH}/zap-sarif.jq" report_json.json > zap-results.sarif
 
     - name: Upload ZAP SARIF
-      if: hashFiles('zap-results.sarif') != ''
+      if: inputs.zap == 'true' && hashFiles('zap-results.sarif') != ''
       uses: github/codeql-action/upload-sarif@v4
       with:
         sarif_file: zap-results.sarif
-        category: zap
+        category: zap-${{ steps.preflight.outputs.slug }}
 
     # Nuclei writes SARIF only when it has findings; an empty run closes stale alerts
     - name: Empty Nuclei SARIF for a Clean Scan
-      if: ${{ !cancelled() && steps.nuclei.outcome == 'success' }}
+      if: ${{ !cancelled() && inputs.nuclei == 'true' && steps.nuclei.outcome == 'success' }}
       shell: bash
       run: |
         if [[ -f nuclei-results.jsonl && ! -f nuclei-results.sarif ]]; then
@@ -75,17 +101,19 @@ runs:
         fi
 
     - name: Upload Nuclei SARIF
-      if: ${{ !cancelled() && steps.preflight.outcome == 'success' && hashFiles('nuclei-results.sarif') != '' }}
+      if: ${{ !cancelled() && inputs.nuclei == 'true' && steps.preflight.outcome == 'success' && hashFiles('nuclei-results.sarif') != '' }}
       uses: github/codeql-action/upload-sarif@v4
       with:
         sarif_file: nuclei-results.sarif
-        category: nuclei
+        category: nuclei-${{ steps.preflight.outputs.slug }}
 
     # Findings never fail the action; a crashed scanner or missing report does
     - name: Verify Scans Completed
       if: ${{ !cancelled() && steps.preflight.outcome == 'success' }}
       shell: bash
       env:
+        ZAP_ENABLED: ${{ inputs.zap }}
+        NUCLEI_ENABLED: ${{ inputs.nuclei }}
         ZAP_OUTCOME: ${{ steps.zap.outcome }}
         NUCLEI_OUTCOME: ${{ steps.nuclei.outcome }}
-      run: ${GITHUB_ACTION_PATH}/verify.sh
+      run: bash "${GITHUB_ACTION_PATH}/verify.sh"

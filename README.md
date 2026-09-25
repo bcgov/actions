@@ -15,14 +15,6 @@ Conditional container builder with automatic tag management. Publishes to GitHub
   uses: bcgov/actions/builder@vX.Y.Z # Replace with latest release tag
 ```
 
-### [dast](./dast/)
-Run ZAP and Nuclei against one URL (default: the repo's Silver test route) and upload SARIF to the Security tab.
-
-```yaml
-- name: DAST
-  uses: bcgov/actions/dast@vX.Y.Z # Replace with latest release tag
-```
-
 ### [diff-triggers](./diff-triggers/)
 Checks git diff for file and path changes to conditionally trigger workflow jobs.
 
@@ -54,6 +46,14 @@ Validate Pull Request metadata and apply organizational guardrails.
 ```yaml
 - name: Validate PR
   uses: bcgov/actions/pr-validate@vX.Y.Z # Replace with latest release tag
+```
+
+### [scan-url](./scan-url/)
+Scan a running site's URL (default: the repo's Silver test route) with ZAP and Nuclei and upload SARIF to the Security tab.
+
+```yaml
+- name: Scan URL
+  uses: bcgov/actions/scan-url@vX.Y.Z # Replace with latest release tag
 ```
 
 ### [sysdig-monitor](./sysdig-monitor/)
@@ -103,11 +103,11 @@ In alignment with security best practices, you should always declare minimum exp
 
 Refer to each action's directory for its exact minimum required permissions block:
 - **[builder](./builder/)**: `contents: read`, `packages: write`, plus `id-token: write` and `attestations: write` (optional, for build provenance attestations)
-- **[dast](./dast/)**: `contents: read`, `issues: write`, `security-events: write`
 - **[diff-triggers](./diff-triggers/)**: `contents: read`
 - **[image-tracker](./image-tracker/)**: `contents: read`, `pull-requests: read`, `packages: read`
 - **[pr-description-add](./pr-description-add/)**: `pull-requests: write`
 - **[pr-validate](./pr-validate/)**: `pull-requests: read`, plus `pull-requests: write` when `add_markdown` is set
+- **[scan-url](./scan-url/)**: `contents: read`, `issues: write`, `security-events: write`
 - **[sysdig-monitor](./sysdig-monitor/)**: `contents: read` (alert templates are read from the consuming repo's checkout)
 - **[test-and-analyse](./test-and-analyse/)**: `contents: read`, `actions: write` (optional, for caching)
 - **[workflow-notifier](./workflow-notifier/)**: `contents: read`, `issues: write`, `pull-requests: read` (optional, for PR merge author resolution)
