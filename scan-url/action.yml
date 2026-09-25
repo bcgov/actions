@@ -6,10 +6,8 @@ branding:
 
 inputs:
   url:
-    description: |
-      URL to scan.
-      Defaults to the repository's Silver test route.
-    default: https://${{ github.event.repository.name }}-test.apps.silver.devops.gov.bc.ca
+    description: URL to scan
+    required: true
   # What to scan: each scanner is on by default; at least one must stay on
   zap:
     description: Run the ZAP full scan ('true' or 'false')
@@ -49,6 +47,13 @@ runs:
         fi
         if [[ ! "$URL" =~ ^https?://[[:alnum:]][[:alnum:].-]*(:[0-9]+)?(/[^[:space:]]*)?$ ]]; then
           echo "::error::url must be http(s)://host[:port][/path], got '${URL}'"
+          exit 1
+        fi
+        # Any HTTP response passes; DNS failure, refused connection or timeout would scan nothing
+        rc=0
+        curl -s -o /dev/null --connect-timeout 10 --max-time 20 "$URL" || rc=$?
+        if [[ "$rc" -ne 0 ]]; then
+          echo "::error::url ${URL} is unreachable (curl exit ${rc})"
           exit 1
         fi
         # Per-URL names keep a caller matrix from sharing SARIF categories, artifacts and issues

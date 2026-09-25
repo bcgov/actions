@@ -49,11 +49,13 @@ Validate Pull Request metadata and apply organizational guardrails.
 ```
 
 ### [scan-url](./scan-url/)
-Scan a running site's URL (default: the repo's Silver test route) with ZAP and Nuclei and upload SARIF to the Security tab.
+Scan a running site's URL with ZAP and Nuclei and upload SARIF to the Security tab.
 
 ```yaml
 - name: Scan URL
   uses: bcgov/actions/scan-url@vX.Y.Z # Replace with latest release tag
+  with:
+    url: https://my-app-test.apps.silver.devops.gov.bc.ca
 ```
 
 ### [sysdig-monitor](./sysdig-monitor/)

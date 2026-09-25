@@ -12,7 +12,7 @@ Reports stay in the job workspace for later steps (e.g. a caller report script).
 ## Failure policy
 
 - Findings never fail the action.
-- The action fails before any scan runs when `url` is not `http(s)://host[:port][/path]` (including empty), when `zap` or `nuclei` is not exactly `'true'` or `'false'`, or when both are `'false'`.
+- The action fails before any scan runs when `url` is not `http(s)://host[:port][/path]` (including empty), when `url` returns no HTTP response within 20 seconds (DNS failure, refused connection or timeout; any status code passes), when `zap` or `nuclei` is not exactly `'true'` or `'false'`, or when both are `'false'`.
 - The action fails when an enabled scanner's step fails or its report is missing (`report_json.json` for ZAP, `nuclei-results.jsonl` for Nuclei). A broken scan must not look like a clean one. SARIF uploads still run for any report that exists.
 
 ## Permissions
@@ -30,7 +30,7 @@ permissions:
 
 | Input | Description | Default | Required |
 |---|---|---|---|
-| `url` | URL to scan | `https://<repo>-test.apps.silver.devops.gov.bc.ca` | No |
+| `url` | URL to scan. Preflight fails if it gets no HTTP response (any status passes) | | **Yes** |
 | `zap` | What to scan: run the ZAP full scan (`'true'` or `'false'`) | `'true'` | No |
 | `nuclei` | What to scan: run the Nuclei scan (`'true'` or `'false'`) | `'true'` | No |
 
@@ -59,7 +59,7 @@ jobs:
       - uses: actions/checkout@v7 # Optional: needed only for tests/.zap/rules.tsv
       - uses: bcgov/actions/scan-url@vX.Y.Z # Replace with latest release tag
         with:
-          url: https://my-app-test.apps.silver.devops.gov.bc.ca # Optional
+          url: https://my-app-test.apps.silver.devops.gov.bc.ca
 ```
 
 ### Several URLs

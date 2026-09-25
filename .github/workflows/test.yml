@@ -216,6 +216,13 @@ jobs:
         with:
           url: 'not-a-url'
 
+      - name: Unreachable url fails fast
+        id: unreachable_url
+        continue-on-error: true
+        uses: $/scan-url
+        with:
+          url: https://scan-url-test.invalid
+
       - name: Both scanners off fails fast
         id: no_scanners
         continue-on-error: true
@@ -237,9 +244,10 @@ jobs:
         run: |
           if [ "${{ steps.empty_url.outcome }}" != "failure" ] || \
              [ "${{ steps.invalid_url.outcome }}" != "failure" ] || \
+             [ "${{ steps.unreachable_url.outcome }}" != "failure" ] || \
              [ "${{ steps.no_scanners.outcome }}" != "failure" ] || \
              [ "${{ steps.invalid_toggle.outcome }}" != "failure" ]; then
-            echo "::error::scan-url must fail on an empty or invalid url, an invalid toggle, or both scanners off"
+            echo "::error::scan-url must fail on an empty, invalid or unreachable url, an invalid toggle, or both scanners off"
             exit 1
           fi
           echo "Input guards failed fast as expected."
