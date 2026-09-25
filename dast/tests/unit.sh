@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Unit tests for zap-sarif.jq (ZAP JSON report -> SARIF). No network.
+# Unit tests for zap-sarif.jq (ZAP JSON -> SARIF) and verify.sh. No network.
 
 set -euo pipefail
 
@@ -36,6 +36,22 @@ assert_eq "$(q '[.runs[0].tool.driver.rules[].fullDescription.text | select(test
 for empty in '{}' '{"site":[]}' '{"site":[{"@name":"x","alerts":[]}]}'; do
   assert_eq "$(jq -c -f "$JQ_FILTER" <<<"$empty" | jq -c '[.runs[0].results, .runs[0].tool.driver.rules]')" "[[],[]]" "empty report: $empty"
 done
+
+# verify.sh: findings never fail; failed step or missing report does
+VERIFY="${SCRIPT_DIR}/../verify.sh"
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+verify_rc() {
+  local zap="$1" nuclei="$2"; shift 2
+  rm -f "$WORK"/*
+  for f in "$@"; do touch "$WORK/$f"; done
+  (cd "$WORK" && ZAP_OUTCOME="$zap" NUCLEI_OUTCOME="$nuclei" bash "$VERIFY" >/dev/null) && echo 0 || echo 1
+}
+assert_eq "$(verify_rc success success report_json.json nuclei-results.jsonl)" "0" "verify: both scans completed"
+assert_eq "$(verify_rc failure success report_json.json nuclei-results.jsonl)" "1" "verify: ZAP step failed"
+assert_eq "$(verify_rc success failure report_json.json nuclei-results.jsonl)" "1" "verify: Nuclei step failed"
+assert_eq "$(verify_rc success success nuclei-results.jsonl)" "1" "verify: ZAP report missing"
+assert_eq "$(verify_rc success success report_json.json)" "1" "verify: Nuclei JSONL missing"
 
 echo "Passed: $passed, Failed: $failed"
 [[ "$failed" -eq 0 ]]

@@ -3,14 +3,14 @@
 Run [ZAP](https://www.zaproxy.org/) and [Nuclei](https://github.com/projectdiscovery/nuclei) against one URL. Each scanner runs as its own step; results are not merged.
 
 - **ZAP**: [`zaproxy/action-full-scan`](https://github.com/zaproxy/action-full-scan) runs a full (active) scan, opens or updates a GitHub issue with alerts, and uploads its reports as the `zap_scan` artifact. When `tests/.zap/rules.tsv` exists in the caller's workspace, it is passed as the rules file. The JSON report is converted to SARIF (`zap-results.sarif`) and uploaded under category `zap`.
-- **Nuclei**: [`projectdiscovery/nuclei-action`](https://github.com/projectdiscovery/nuclei-action) v3 runs with `-u <target> -jsonl-export nuclei-results.jsonl -sarif-export nuclei-results.sarif`. Nuclei writes SARIF only when it has findings; the action uploads it under category `nuclei` when present.
+- **Nuclei**: [`projectdiscovery/nuclei-action`](https://github.com/projectdiscovery/nuclei-action) v3 runs with `-u <target> -jsonl-export nuclei-results.jsonl -sarif-export nuclei-results.sarif`. SARIF is uploaded under category `nuclei`. Nuclei writes SARIF only when it has findings, so after a clean scan the action uploads an empty run to close stale alerts.
 
 Reports stay in the job workspace for later steps (e.g. a caller report script).
 
 ## Failure policy
 
 - Findings never fail the action.
-- The action fails when `target` is empty or not an `http(s)://` URL, before any scan runs.
+- The action fails when `target` is not `http(s)://host[:port][/path]` (including empty), before any scan runs.
 - The action fails when a scanner step fails or its report is missing (`report_json.json` for ZAP, `nuclei-results.jsonl` for Nuclei). A broken scan must not look like a clean one. SARIF uploads still run for any report that exists.
 
 ## Permissions

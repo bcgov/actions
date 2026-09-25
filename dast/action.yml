@@ -28,8 +28,8 @@ runs:
       env:
         TARGET: ${{ inputs.target }}
       run: |
-        if [[ ! "$TARGET" =~ ^https?://[[:alnum:]][^[:space:]]*$ ]]; then
-          echo "::error::target must be an http(s) URL without whitespace, got '${TARGET}'"
+        if [[ ! "$TARGET" =~ ^https?://[[:alnum:]][[:alnum:].-]*(:[0-9]+)?(/[^[:space:]]*)?$ ]]; then
+          echo "::error::target must be http(s)://host[:port][/path], got '${TARGET}'"
           exit 1
         fi
         # Stale reports from an earlier run would make a broken scan look clean
@@ -65,9 +65,17 @@ runs:
         sarif_file: zap-results.sarif
         category: zap
 
-    # Nuclei writes SARIF only when it has findings
+    # Nuclei writes SARIF only when it has findings; an empty run closes stale alerts
+    - name: Empty Nuclei SARIF for a Clean Scan
+      if: ${{ !cancelled() && steps.nuclei.outcome == 'success' }}
+      shell: bash
+      run: |
+        if [[ -f nuclei-results.jsonl && ! -f nuclei-results.sarif ]]; then
+          echo '{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"Nuclei"}},"results":[]}]}' > nuclei-results.sarif
+        fi
+
     - name: Upload Nuclei SARIF
-      if: hashFiles('nuclei-results.sarif') != ''
+      if: ${{ !cancelled() && steps.preflight.outcome == 'success' && hashFiles('nuclei-results.sarif') != '' }}
       uses: github/codeql-action/upload-sarif@v4
       with:
         sarif_file: nuclei-results.sarif
@@ -80,14 +88,4 @@ runs:
       env:
         ZAP_OUTCOME: ${{ steps.zap.outcome }}
         NUCLEI_OUTCOME: ${{ steps.nuclei.outcome }}
-      run: |
-        rc=0
-        if [[ "$ZAP_OUTCOME" != success || ! -f report_json.json ]]; then
-          echo "::error::ZAP did not complete: step ${ZAP_OUTCOME}, report_json.json $([[ -f report_json.json ]] && echo present || echo missing)"
-          rc=1
-        fi
-        if [[ "$NUCLEI_OUTCOME" != success || ! -f nuclei-results.jsonl ]]; then
-          echo "::error::Nuclei did not complete: step ${NUCLEI_OUTCOME}, nuclei-results.jsonl $([[ -f nuclei-results.jsonl ]] && echo present || echo missing)"
-          rc=1
-        fi
-        exit "$rc"
+      run: ${GITHUB_ACTION_PATH}/verify.sh
