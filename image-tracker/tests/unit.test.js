@@ -3003,7 +3003,7 @@ async function runTagScenario({ packages, built, tags, tipSha }) {
       if (url === 'https://api.github.com/repos/bcgov/demo/commits/main') {
         return { ok: true, status: 200, json: async () => ({ sha: tipSha(headSha) }) };
       }
-      if (url.includes('api.github.com')) return notFound;
+      if (url.startsWith('https://api.github.com/')) return notFound;
       if (url.endsWith('/manifests/latest') && method === 'GET' && !opts.headers) {
         return {
           ok: false,
