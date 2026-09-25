@@ -48,6 +48,16 @@ Validate Pull Request metadata and apply organizational guardrails.
   uses: bcgov/actions/pr-validate@vX.Y.Z # Replace with latest release tag
 ```
 
+### [scan-url](./scan-url/)
+Scan a running site's URL with ZAP and Nuclei and upload SARIF to the Security tab.
+
+```yaml
+- name: Scan URL
+  uses: bcgov/actions/scan-url@vX.Y.Z # Replace with latest release tag
+  with:
+    url: https://my-app-test.apps.silver.devops.gov.bc.ca
+```
+
 ### [sysdig-monitor](./sysdig-monitor/)
 Create or update Sysdig email alerts for an app on PROD deploy. Idempotent, additive and non-blocking.
 
@@ -99,6 +109,7 @@ Refer to each action's directory for its exact minimum required permissions bloc
 - **[image-tracker](./image-tracker/)**: `contents: read`, `pull-requests: read`, `packages: read`
 - **[pr-description-add](./pr-description-add/)**: `pull-requests: write`
 - **[pr-validate](./pr-validate/)**: `pull-requests: read`, plus `pull-requests: write` when `add_markdown` is set
+- **[scan-url](./scan-url/)**: `contents: read`, `issues: write`, `security-events: write`
 - **[sysdig-monitor](./sysdig-monitor/)**: `contents: read` (alert templates are read from the consuming repo's checkout)
 - **[test-and-analyse](./test-and-analyse/)**: `contents: read`, `actions: write` (optional, for caching)
 - **[workflow-notifier](./workflow-notifier/)**: `contents: read`, `issues: write`, `pull-requests: read` (optional, for PR merge author resolution)

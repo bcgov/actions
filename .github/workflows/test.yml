@@ -31,6 +31,8 @@ jobs:
           filters: |
             builder:
               - 'builder/**'
+            scan-url:
+              - 'scan-url/**'
             diff-triggers:
               - 'diff-triggers/**'
             image-tracker:
@@ -179,6 +181,76 @@ jobs:
           triggers: |
             builder/
             .github/workflows/
+
+  # ─── SCAN URL ───────────────────────────────────────────────────────────────
+  test-scan-url:
+    name: Test Scan URL
+    needs: [filter]
+    if: contains(fromJSON(needs.filter.outputs.changes), 'scan-url') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Run Unit Tests
+        run: bash scan-url/tests/unit.sh
+
+      - name: Validate action.yml
+        run: |
+          test -f scan-url/action.yml
+          pip install pyyaml -q
+          python3 -c "import yaml; yaml.safe_load(open('scan-url/action.yml'))"
+
+      - name: Empty url fails fast
+        id: empty_url
+        continue-on-error: true
+        uses: $/scan-url
+        with:
+          url: ''
+
+      - name: Invalid url fails fast
+        id: invalid_url
+        continue-on-error: true
+        uses: $/scan-url
+        with:
+          url: 'not-a-url'
+
+      - name: Unreachable url fails fast
+        id: unreachable_url
+        continue-on-error: true
+        uses: $/scan-url
+        with:
+          url: https://scan-url-test.invalid
+
+      - name: Both scanners off fails fast
+        id: no_scanners
+        continue-on-error: true
+        uses: $/scan-url
+        with:
+          url: https://example.com
+          zap: 'false'
+          nuclei: 'false'
+
+      - name: Invalid toggle fails fast
+        id: invalid_toggle
+        continue-on-error: true
+        uses: $/scan-url
+        with:
+          url: https://example.com
+          zap: 'yes'
+
+      - name: Verify input guards failed
+        run: |
+          if [ "${{ steps.empty_url.outcome }}" != "failure" ] || \
+             [ "${{ steps.invalid_url.outcome }}" != "failure" ] || \
+             [ "${{ steps.unreachable_url.outcome }}" != "failure" ] || \
+             [ "${{ steps.no_scanners.outcome }}" != "failure" ] || \
+             [ "${{ steps.invalid_toggle.outcome }}" != "failure" ]; then
+            echo "::error::scan-url must fail on an empty, invalid or unreachable url, an invalid toggle, or both scanners off"
+            exit 1
+          fi
+          echo "Input guards failed fast as expected."
 
   # ─── DIFF TRIGGERS ──────────────────────────────────────────────────────────
   test-diff-triggers:
@@ -957,6 +1029,7 @@ jobs:
       - filter
       - test-builder-build
       - test-builder-matrix
+      - test-scan-url
       - test-diff-triggers
       - test-image-tracker
       - test-pr-description-add
