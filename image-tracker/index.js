@@ -335,11 +335,12 @@ function parseAuthHeader(header) {
 }
 
 // ---- Registry Bearer Token Acquisition --------------------------------------
-async function registryToken(repo, registry = 'ghcr.io', token = '') {
+async function registryToken(repo, registry = 'ghcr.io', token = '', actions = 'pull') {
   const probeUrl = `https://${registry}/v2/${repo}/manifests/latest`;
   try {
     const res = await fetch(probeUrl, { method: 'GET' });
-    if (res.ok || (res.status >= 200 && res.status < 300)) {
+    // Anonymous reads are enough for pull; push always needs a scoped bearer.
+    if (actions === 'pull' && (res.ok || (res.status >= 200 && res.status < 300))) {
       return '__NO_AUTH__';
     }
 
@@ -367,7 +368,7 @@ async function registryToken(repo, registry = 'ghcr.io', token = '') {
     }
 
     const sep = realm.includes('?') ? '&' : '?';
-    let params = `scope=repository:${repo}:pull`;
+    let params = `scope=repository:${repo}:${actions}`;
     if (service) {
       params = `service=${service}&${params}`;
     }
@@ -388,6 +389,124 @@ async function registryToken(repo, registry = 'ghcr.io', token = '') {
   } catch (err) {
     return null;
   }
+}
+
+const MANIFEST_ACCEPT =
+  'application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json';
+
+// Docker/OCI tag grammar: https://github.com/opencontainers/distribution-spec/blob/main/spec.md#pulling-manifests
+const TAG_PATTERN = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/;
+
+function parseTags(input) {
+  if (typeof input !== 'string') return [];
+  const tags = [];
+  for (const line of input.split(/\r?\n/)) {
+    const tag = line.trim();
+    if (!tag) continue;
+    if (!TAG_PATTERN.test(tag)) {
+      throw new Error(`Invalid tag '${tag}'. Tags must match ${TAG_PATTERN}.`);
+    }
+    if (!tags.includes(tag)) tags.push(tag);
+  }
+  return tags;
+}
+
+async function defaultBranchTip(repo, token) {
+  const headers = {
+    Accept: 'application/vnd.github+json',
+    Authorization: `Bearer ${token}`
+  };
+  const repoRes = await fetch(`https://api.github.com/repos/${repo}`, { headers });
+  if (!repoRes.ok) {
+    throw new Error(`Could not read default branch of ${repo}: HTTP ${repoRes.status}`);
+  }
+  const { default_branch: branch } = await repoRes.json();
+  if (!branch) {
+    throw new Error(`GitHub API returned no default_branch for ${repo}`);
+  }
+  const commitRes = await fetch(
+    `https://api.github.com/repos/${repo}/commits/${encodeURIComponent(branch)}`,
+    { headers }
+  );
+  if (!commitRes.ok) {
+    throw new Error(`Could not read tip of ${repo}@${branch}: HTTP ${commitRes.status}`);
+  }
+  const { sha } = await commitRes.json();
+  if (!sha) {
+    throw new Error(`GitHub API returned no sha for ${repo}@${branch}`);
+  }
+  return { branch, sha };
+}
+
+function retagError(method, ref, status) {
+  if (status === 401 || status === 403) {
+    return new Error(
+      `${method} ${ref} failed: HTTP ${status}. The tags input needs 'permissions: packages: write' on the calling job.`
+    );
+  }
+  return new Error(`${method} ${ref} failed: HTTP ${status}`);
+}
+
+async function retagDigest({ registry, path, digest, tag, bearer }) {
+  const base = `https://${registry}/v2/${path}/manifests`;
+  const getRes = await fetch(`${base}/${digest}`, {
+    headers: { Accept: MANIFEST_ACCEPT, Authorization: `Bearer ${bearer}` }
+  });
+  if (!getRes.ok) {
+    throw retagError('GET', `${registry}/${path}@${digest}`, getRes.status);
+  }
+  const contentType = getRes.headers.get('content-type');
+  if (!contentType) {
+    throw new Error(`GET ${registry}/${path}@${digest} returned no Content-Type`);
+  }
+  const body = Buffer.from(await getRes.arrayBuffer());
+  const putRes = await fetch(`${base}/${tag}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': contentType, Authorization: `Bearer ${bearer}` },
+    body
+  });
+  if (!putRes.ok) {
+    throw retagError('PUT', `${registry}/${path}:${tag}`, putRes.status);
+  }
+}
+
+// Applies tags to every resolved digest. Callers must only invoke this once all packages resolved.
+async function applyTags({ tags, registry, pkgOrder, imagePaths, images, pivotSha, sourceRepository, token, eventName }) {
+  let toApply = tags;
+  if (tags.includes('latest') && eventName.startsWith('pull_request')) {
+    logWarn(`Skipping 'latest': never moved by ${eventName} events. Other tags are still applied.`);
+    toApply = tags.filter((t) => t !== 'latest');
+  } else if (tags.includes('latest')) {
+    const tip = await defaultBranchTip(sourceRepository, token);
+    if (tip.sha.toLowerCase() !== pivotSha.toLowerCase()) {
+      logWarn(
+        `Skipping 'latest': ${pivotSha} is not the tip of ${sourceRepository}@${tip.branch} (${tip.sha}). Other tags are still applied.`
+      );
+      toApply = tags.filter((t) => t !== 'latest');
+    }
+  }
+  if (toApply.length === 0) return [];
+
+  // Mint every push token before the first write so auth failures cannot leave partial tags.
+  const bearers = {};
+  for (const pkg of pkgOrder) {
+    const path = imagePaths[pkg];
+    const bearer = await registryToken(path, registry, token, 'pull,push');
+    if (!bearer || bearer === '__NO_AUTH__') {
+      throw new Error(`Could not obtain a push token for ${registry}/${path}. Tagging needs 'packages: write'.`);
+    }
+    bearers[pkg] = bearer;
+  }
+
+  for (const pkg of pkgOrder) {
+    const path = imagePaths[pkg];
+    const digest = images[pkg].digest;
+    for (const tag of toApply) {
+      await retagDigest({ registry, path, digest, tag, bearer: bearers[pkg] });
+      console.error(`  [✓] TAG: ${registry}/${path}:${tag} -> ${digest}`);
+    }
+  }
+  return toApply;
 }
 
 function addPrMerge(prMergeMap, key, sha) {
@@ -1404,6 +1523,18 @@ async function runMain() {
   const maxTags = parseInt(maxTagsStr, 10);
   const maxDepth = parseInt(maxDepthStr, 10);
 
+  let tags;
+  try {
+    tags = parseTags(env.INPUT_TAGS);
+  } catch (err) {
+    logError(err.message);
+    process.exit(1);
+  }
+  if (tags.length > 0 && !token) {
+    logError('The tags input requires a token with packages: write.');
+    process.exit(1);
+  }
+
   if (!packageInput) {
     logError('Missing required package names. Usage: node index.js pkg1 [pkg2 ...]');
     process.exit(1);
@@ -1815,6 +1946,12 @@ async function runMain() {
     logError(`Failed to resolve: ${missing.join(' ')}`);
     process.exit(1);
   }
+
+  if (tags.length > 0) {
+    logGroup('Tagging');
+    await applyTags({ tags, registry, pkgOrder, imagePaths, images, pivotSha, sourceRepository, token, eventName });
+    logEndGroup();
+  }
 }
 
 if (require.main === module) {
@@ -1849,5 +1986,9 @@ module.exports = {
   repositoryFromRemoteUrl,
   isShallowRepository,
   gitFetchDeepen,
+  parseTags,
+  defaultBranchTip,
+  retagDigest,
+  applyTags,
   runMain
 };
