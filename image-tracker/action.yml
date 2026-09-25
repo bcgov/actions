@@ -41,6 +41,14 @@ inputs:
       Max commits of git ancestry to search. Default 1 (the target revision only).
       Raise this to reuse an older image for a package that was not rebuilt.
     default: '1'
+  tags:
+    description: |
+      Optional tags (one per line) to apply to every resolved digest, e.g. the
+      commit SHA and `latest`. Omit to stay read-only. Setting it requires
+      `packages: write`. Tags are only written after every package resolves.
+      `latest` only moves when the resolved revision is the default-branch tip;
+      otherwise it is skipped with a warning and the other tags still apply.
+    required: false
 
 outputs:
   images:
