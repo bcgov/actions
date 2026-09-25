@@ -462,9 +462,12 @@ async function retagDigest({ registry, path, digest, tag, bearer }) {
 }
 
 // Applies tags to every resolved digest. Callers must only invoke this once all packages resolved.
-async function applyTags({ tags, registry, pkgOrder, imagePaths, images, pivotSha, sourceRepository, token }) {
+async function applyTags({ tags, registry, pkgOrder, imagePaths, images, pivotSha, sourceRepository, token, eventName }) {
   let toApply = tags;
-  if (tags.includes('latest')) {
+  if (tags.includes('latest') && eventName.startsWith('pull_request')) {
+    logWarn(`Skipping 'latest': never moved by ${eventName} events. Other tags are still applied.`);
+    toApply = tags.filter((t) => t !== 'latest');
+  } else if (tags.includes('latest')) {
     const tip = await defaultBranchTip(sourceRepository, token);
     if (tip.sha.toLowerCase() !== pivotSha.toLowerCase()) {
       logWarn(
@@ -1937,7 +1940,7 @@ async function runMain() {
 
   if (tags.length > 0) {
     logGroup('Tagging');
-    await applyTags({ tags, registry, pkgOrder, imagePaths, images, pivotSha, sourceRepository, token });
+    await applyTags({ tags, registry, pkgOrder, imagePaths, images, pivotSha, sourceRepository, token, eventName });
     logEndGroup();
   }
 }

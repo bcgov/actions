@@ -2965,7 +2965,7 @@ test('retagDigest GETs the manifest by digest and PUTs the same bytes and Conten
 
 // Runs runMain against a temp git repo with a mocked registry and GitHub API.
 // `built` lists packages that have an image for HEAD; `tipSha(headSha)` returns the default-branch tip.
-async function runTagScenario({ packages, built, tags, tipSha }) {
+async function runTagScenario({ packages, built, tags, tipSha, eventName = 'push' }) {
   const fs = require('node:fs');
   const os = require('node:os');
   const path = require('node:path');
@@ -3047,7 +3047,7 @@ async function runTagScenario({ packages, built, tags, tipSha }) {
     process.env.GITHUB_OUTPUT = path.join(repoDir, 'github_output');
     delete process.env.GITHUB_STEP_SUMMARY;
     delete process.env.GITHUB_EVENT_PATH;
-    process.env.GITHUB_EVENT_NAME = 'push';
+    process.env.GITHUB_EVENT_NAME = eventName;
     process.env.GITHUB_REPOSITORY = 'bcgov/demo';
     process.env.INPUT_PACKAGE = packages;
     delete process.env.PACKAGE;
@@ -3112,6 +3112,21 @@ test('runMain skips latest with a warning when the commit is not the default-bra
   const puts = r.calls.filter((c) => c.method === 'PUT').map((c) => c.url);
   assert.deepStrictEqual(puts, ['https://ghcr.io/v2/bcgov/demo/frontend/manifests/prod-candidate']);
   assert.ok(r.logs.some((l) => l.startsWith('::warning::') && l.includes("Skipping 'latest'")), 'warning emitted');
+});
+
+test('runMain never moves latest from a pull_request event, even at the default-branch tip', async () => {
+  const r = await runTagScenario({
+    packages: 'frontend',
+    built: ['frontend'],
+    tags: 'latest\npr-candidate',
+    tipSha: (h) => h,
+    eventName: 'pull_request'
+  });
+  assert.strictEqual(r.error, undefined);
+  const puts = r.calls.filter((c) => c.method === 'PUT').map((c) => c.url);
+  assert.deepStrictEqual(puts, ['https://ghcr.io/v2/bcgov/demo/frontend/manifests/pr-candidate']);
+  assert.ok(r.logs.some((l) => l.startsWith('::warning::') && l.includes('pull_request')), 'warning emitted');
+  assert.ok(!r.calls.some((c) => c.url === 'https://api.github.com/repos/bcgov/demo/commits/main'), 'no tip lookup');
 });
 
 test('runMain does not tag anything when a package is missing', async () => {

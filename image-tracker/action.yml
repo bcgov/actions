@@ -47,7 +47,8 @@ inputs:
       commit SHA and `latest`. Omit to stay read-only. Setting it requires
       `packages: write`. Tags are only written after every package resolves.
       `latest` only moves when the resolved revision is the default-branch tip;
-      otherwise it is skipped with a warning and the other tags still apply.
+      otherwise (or on pull_request events) it is skipped with a warning and
+      the other tags still apply.
     required: false
 
 outputs:

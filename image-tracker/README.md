@@ -177,8 +177,9 @@ re-`PUT` under the tag, so no image is rebuilt or copied).
   `latest` differs from `prod`, something is merged but not yet in production.
 - `latest` only moves when the resolved `revision` equals the current tip of the
   default branch (checked through the GitHub API). Otherwise it is skipped with a
-  warning, so an older or re-run workflow cannot move it backwards. Other tags
-  are still applied.
+  warning, so an older or re-run workflow cannot move it backwards. It is also
+  always skipped (with a warning) on `pull_request*` events. Other tags are
+  still applied.
 - Deploy by digest, not by these tags.
 
 ```yaml
