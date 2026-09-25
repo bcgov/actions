@@ -165,7 +165,8 @@ Package-to-image-path convention:
 
 ## Tagging
 
-With `tags` unset the action only reads. When set, each tag is pointed at every
+With `tags` unset the action only reads. There is no default: `latest` (or any
+tag) is never applied unless the caller sets `tags` explicitly. When set, each tag is pointed at every
 resolved digest through the registry API (the manifest is fetched by digest and
 re-`PUT` under the tag, so no image is rebuilt or copied).
 

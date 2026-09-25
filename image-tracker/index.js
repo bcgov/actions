@@ -438,13 +438,22 @@ async function defaultBranchTip(repo, token) {
   return { branch, sha };
 }
 
+function retagError(method, ref, status) {
+  if (status === 401 || status === 403) {
+    return new Error(
+      `${method} ${ref} failed: HTTP ${status}. The tags input needs 'permissions: packages: write' on the calling job.`
+    );
+  }
+  return new Error(`${method} ${ref} failed: HTTP ${status}`);
+}
+
 async function retagDigest({ registry, path, digest, tag, bearer }) {
   const base = `https://${registry}/v2/${path}/manifests`;
   const getRes = await fetch(`${base}/${digest}`, {
     headers: { Accept: MANIFEST_ACCEPT, Authorization: `Bearer ${bearer}` }
   });
   if (!getRes.ok) {
-    throw new Error(`GET ${registry}/${path}@${digest} failed: HTTP ${getRes.status}`);
+    throw retagError('GET', `${registry}/${path}@${digest}`, getRes.status);
   }
   const contentType = getRes.headers.get('content-type');
   if (!contentType) {
@@ -457,7 +466,7 @@ async function retagDigest({ registry, path, digest, tag, bearer }) {
     body
   });
   if (!putRes.ok) {
-    throw new Error(`PUT ${registry}/${path}:${tag} failed: HTTP ${putRes.status}`);
+    throw retagError('PUT', `${registry}/${path}:${tag}`, putRes.status);
   }
 }
 

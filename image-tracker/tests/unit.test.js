@@ -2963,6 +2963,41 @@ test('retagDigest GETs the manifest by digest and PUTs the same bytes and Conten
   }
 });
 
+test('retagDigest explains the missing packages: write permission on 401/403', async () => {
+  const { retagDigest } = require('../index.js');
+  const origFetch = global.fetch;
+  const digest = 'sha256:' + 'd'.repeat(64);
+  const okGet = {
+    ok: true,
+    status: 200,
+    headers: { get: () => 'application/vnd.oci.image.manifest.v1+json' },
+    arrayBuffer: async () => new ArrayBuffer(0)
+  };
+  const args = { registry: 'ghcr.io', path: 'bcgov/demo/frontend', digest, tag: 'latest', bearer: 't' };
+  try {
+    for (const status of [401, 403]) {
+      global.fetch = async (url, opts = {}) =>
+        (opts.method || 'GET') === 'GET' ? okGet : { ok: false, status, headers: { get: () => null } };
+      await assert.rejects(() => retagDigest(args), {
+        message: `PUT ghcr.io/bcgov/demo/frontend:latest failed: HTTP ${status}. The tags input needs 'permissions: packages: write' on the calling job.`
+      });
+
+      global.fetch = async () => ({ ok: false, status, headers: { get: () => null } });
+      await assert.rejects(
+        () => retagDigest(args),
+        new RegExp(`^Error: GET ghcr\\.io/bcgov/demo/frontend@${digest} failed: HTTP ${status}\\. The tags input needs 'permissions: packages: write'`)
+      );
+    }
+
+    global.fetch = async () => ({ ok: false, status: 500, headers: { get: () => null } });
+    await assert.rejects(() => retagDigest(args), {
+      message: `GET ghcr.io/bcgov/demo/frontend@${digest} failed: HTTP 500`
+    });
+  } finally {
+    global.fetch = origFetch;
+  }
+});
+
 // Runs runMain against a temp git repo with a mocked registry and GitHub API.
 // `built` lists packages that have an image for HEAD; `tipSha(headSha)` returns the default-branch tip.
 async function runTagScenario({ packages, built, tags, tipSha, eventName = 'push' }) {
