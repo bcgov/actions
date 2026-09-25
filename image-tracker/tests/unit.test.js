@@ -612,7 +612,9 @@ const ENV_KEYS = [
   'GH_TOKEN',
   'INPUT_GITHUB_TOKEN',
   'TOKEN',
-  'INPUT_TOKEN'
+  'INPUT_TOKEN',
+  'INPUT_TAGS',
+  'GITHUB_STEP_SUMMARY'
 ];
 
 function snapshotEnv() {
@@ -2909,3 +2911,272 @@ test('action.yml defines max_depth default of 1', () => {
 
 
 
+
+test('parseTags splits lines, drops blanks and duplicates, rejects invalid tags', () => {
+  const { parseTags } = require('../index.js');
+  assert.deepStrictEqual(parseTags(undefined), []);
+  assert.deepStrictEqual(parseTags(''), []);
+  assert.deepStrictEqual(parseTags('abc123\n\n  latest \r\nlatest\n'), ['abc123', 'latest']);
+  assert.throws(() => parseTags('bad tag'), /Invalid tag 'bad tag'/);
+  assert.throws(() => parseTags('-leading'), /Invalid tag/);
+  assert.throws(() => parseTags('a'.repeat(129)), /Invalid tag/);
+});
+
+test('retagDigest GETs the manifest by digest and PUTs the same bytes and Content-Type to the tag', async () => {
+  const { retagDigest } = require('../index.js');
+  const origFetch = global.fetch;
+  const digest = 'sha256:' + 'd'.repeat(64);
+  const manifest = '{"schemaVersion":2}';
+  const calls = [];
+  try {
+    global.fetch = async (url, opts = {}) => {
+      calls.push({ url, method: opts.method || 'GET', headers: opts.headers, body: opts.body });
+      if ((opts.method || 'GET') === 'GET') {
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: (h) => (h.toLowerCase() === 'content-type' ? 'application/vnd.oci.image.index.v1+json' : null) },
+          arrayBuffer: async () => new TextEncoder().encode(manifest).buffer
+        };
+      }
+      return { ok: true, status: 201, headers: { get: () => null } };
+    };
+    await retagDigest({ registry: 'ghcr.io', path: 'bcgov/demo/frontend', digest, tag: 'latest', bearer: 'push-token' });
+    assert.strictEqual(calls.length, 2);
+    assert.strictEqual(calls[0].url, `https://ghcr.io/v2/bcgov/demo/frontend/manifests/${digest}`);
+    assert.strictEqual(calls[1].url, 'https://ghcr.io/v2/bcgov/demo/frontend/manifests/latest');
+    assert.strictEqual(calls[1].method, 'PUT');
+    assert.strictEqual(calls[1].headers['Content-Type'], 'application/vnd.oci.image.index.v1+json');
+    assert.strictEqual(calls[1].headers.Authorization, 'Bearer push-token');
+    assert.strictEqual(Buffer.from(calls[1].body).toString(), manifest);
+
+    global.fetch = async (url, opts = {}) =>
+      (opts.method || 'GET') === 'GET'
+        ? { ok: true, status: 200, headers: { get: () => 'application/vnd.oci.image.manifest.v1+json' }, arrayBuffer: async () => new ArrayBuffer(0) }
+        : { ok: false, status: 403, headers: { get: () => null } };
+    await assert.rejects(
+      () => retagDigest({ registry: 'ghcr.io', path: 'bcgov/demo/frontend', digest, tag: 'x', bearer: 't' }),
+      /PUT ghcr\.io\/bcgov\/demo\/frontend:x failed: HTTP 403/
+    );
+  } finally {
+    global.fetch = origFetch;
+  }
+});
+
+test('retagDigest explains the missing packages: write permission on 401/403', async () => {
+  const { retagDigest } = require('../index.js');
+  const origFetch = global.fetch;
+  const digest = 'sha256:' + 'd'.repeat(64);
+  const okGet = {
+    ok: true,
+    status: 200,
+    headers: { get: () => 'application/vnd.oci.image.manifest.v1+json' },
+    arrayBuffer: async () => new ArrayBuffer(0)
+  };
+  const args = { registry: 'ghcr.io', path: 'bcgov/demo/frontend', digest, tag: 'latest', bearer: 't' };
+  try {
+    for (const status of [401, 403]) {
+      global.fetch = async (url, opts = {}) =>
+        (opts.method || 'GET') === 'GET' ? okGet : { ok: false, status, headers: { get: () => null } };
+      await assert.rejects(() => retagDigest(args), {
+        message: `PUT ghcr.io/bcgov/demo/frontend:latest failed: HTTP ${status}. The tags input needs 'permissions: packages: write' on the calling job.`
+      });
+
+      global.fetch = async () => ({ ok: false, status, headers: { get: () => null } });
+      await assert.rejects(
+        () => retagDigest(args),
+        new RegExp(`^Error: GET ghcr\\.io/bcgov/demo/frontend@${digest} failed: HTTP ${status}\\. The tags input needs 'permissions: packages: write'`)
+      );
+    }
+
+    global.fetch = async () => ({ ok: false, status: 500, headers: { get: () => null } });
+    await assert.rejects(() => retagDigest(args), {
+      message: `GET ghcr.io/bcgov/demo/frontend@${digest} failed: HTTP 500`
+    });
+  } finally {
+    global.fetch = origFetch;
+  }
+});
+
+// Runs runMain against a temp git repo with a mocked registry and GitHub API.
+// `built` lists packages that have an image for HEAD; `tipSha(headSha)` returns the default-branch tip.
+async function runTagScenario({ packages, built, tags, tipSha, eventName = 'push' }) {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const { runMain } = require('../index.js');
+  const origFetch = global.fetch;
+  const origExit = process.exit;
+  const origWarn = console.log;
+  const saved = snapshotEnv();
+  const cwd = process.cwd();
+  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tracker-tags-'));
+  const digest = 'sha256:' + 'e'.repeat(64);
+  const calls = [];
+  const logs = [];
+  let error;
+  try {
+    process.exit = (code) => {
+      throw new Error(`process.exit called with code ${code}`);
+    };
+    console.log = (...a) => logs.push(a.join(' '));
+    execFileSync('git', ['init', '-b', 'main'], { cwd: repoDir, stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: repoDir, stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: repoDir, stdio: 'ignore' });
+    fs.writeFileSync(path.join(repoDir, 'file.txt'), 'content\n');
+    execFileSync('git', ['add', '.'], { cwd: repoDir, stdio: 'ignore' });
+    execFileSync('git', ['commit', '-m', 'initial'], { cwd: repoDir, stdio: 'ignore' });
+    const headSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoDir, encoding: 'utf8' }).trim();
+
+    const notFound = { ok: false, status: 404, headers: { get: () => null }, json: async () => ({}) };
+    global.fetch = async (url, opts = {}) => {
+      const method = opts.method || 'GET';
+      calls.push({ url, method });
+      if (url === 'https://api.github.com/repos/bcgov/demo') {
+        return { ok: true, status: 200, json: async () => ({ default_branch: 'main' }) };
+      }
+      if (url === 'https://api.github.com/repos/bcgov/demo/commits/main') {
+        return { ok: true, status: 200, json: async () => ({ sha: tipSha(headSha) }) };
+      }
+      if (url.startsWith('https://api.github.com/')) return notFound;
+      if (url.endsWith('/manifests/latest') && method === 'GET' && !opts.headers) {
+        return {
+          ok: false,
+          status: 401,
+          headers: {
+            get: (h) =>
+              h.toLowerCase() === 'www-authenticate' ? 'Bearer realm="https://ghcr.io/token",service="ghcr.io"' : null
+          },
+          json: async () => ({})
+        };
+      }
+      if (url.includes('/token?')) {
+        const push = url.includes(':pull,push');
+        return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({ token: push ? 'push' : 'pull' }) };
+      }
+      if (method === 'PUT') return { ok: true, status: 201, headers: { get: () => null } };
+      const m = url.match(/\/v2\/bcgov\/demo\/([^/]+)\/manifests\/(.+)$/);
+      if (m && built.includes(m[1]) && (m[2] === headSha || m[2] === digest)) {
+        return {
+          ok: true,
+          status: 200,
+          headers: {
+            get: (h) => {
+              const k = h.toLowerCase();
+              if (k === 'docker-content-digest') return digest;
+              if (k === 'content-type') return 'application/vnd.oci.image.manifest.v1+json';
+              return null;
+            }
+          },
+          json: async () => ({
+            mediaType: 'application/vnd.oci.image.manifest.v1+json',
+            annotations: { 'org.opencontainers.image.revision': headSha }
+          }),
+          arrayBuffer: async () => new TextEncoder().encode('{}').buffer
+        };
+      }
+      return notFound;
+    };
+
+    process.env.GITHUB_ACTIONS = 'true';
+    process.env.GITHUB_OUTPUT = path.join(repoDir, 'github_output');
+    delete process.env.GITHUB_STEP_SUMMARY;
+    delete process.env.GITHUB_EVENT_PATH;
+    process.env.GITHUB_EVENT_NAME = eventName;
+    process.env.GITHUB_REPOSITORY = 'bcgov/demo';
+    process.env.INPUT_PACKAGE = packages;
+    delete process.env.PACKAGE;
+    process.env.INPUT_REPOSITORY = 'bcgov/demo';
+    delete process.env.REPOSITORY;
+    process.env.INPUT_REVISION = headSha;
+    delete process.env.REVISION;
+    process.env.INPUT_DIR = repoDir;
+    delete process.env.DIR;
+    process.env.INPUT_TOKEN = 'gh-token';
+    if (tags === undefined) delete process.env.INPUT_TAGS;
+    else process.env.INPUT_TAGS = tags;
+
+    try {
+      await runMain();
+    } catch (err) {
+      error = err;
+    }
+    return { calls, logs, error, headSha, digest };
+  } finally {
+    global.fetch = origFetch;
+    process.exit = origExit;
+    console.log = origWarn;
+    process.chdir(cwd);
+    restoreEnv(saved);
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+}
+
+test('runMain without tags performs no registry writes', async () => {
+  const r = await runTagScenario({ packages: 'frontend', built: ['frontend'], tags: undefined, tipSha: (h) => h });
+  assert.strictEqual(r.error, undefined);
+  assert.ok(!r.calls.some((c) => c.method === 'PUT'), 'no PUT');
+  assert.ok(!r.calls.some((c) => c.url.includes(':pull,push')), 'no push token requested');
+});
+
+test('runMain tags every resolved digest, including latest at the default-branch tip', async () => {
+  const r = await runTagScenario({
+    packages: 'frontend backend',
+    built: ['frontend', 'backend'],
+    tags: 'prod-candidate\nlatest',
+    tipSha: (h) => h
+  });
+  assert.strictEqual(r.error, undefined);
+  const puts = r.calls.filter((c) => c.method === 'PUT').map((c) => c.url);
+  assert.deepStrictEqual(puts, [
+    'https://ghcr.io/v2/bcgov/demo/frontend/manifests/prod-candidate',
+    'https://ghcr.io/v2/bcgov/demo/frontend/manifests/latest',
+    'https://ghcr.io/v2/bcgov/demo/backend/manifests/prod-candidate',
+    'https://ghcr.io/v2/bcgov/demo/backend/manifests/latest'
+  ]);
+});
+
+test('runMain skips latest with a warning when the commit is not the default-branch tip', async () => {
+  const r = await runTagScenario({
+    packages: 'frontend',
+    built: ['frontend'],
+    tags: 'latest\nprod-candidate',
+    tipSha: () => 'f'.repeat(40)
+  });
+  assert.strictEqual(r.error, undefined);
+  const puts = r.calls.filter((c) => c.method === 'PUT').map((c) => c.url);
+  assert.deepStrictEqual(puts, ['https://ghcr.io/v2/bcgov/demo/frontend/manifests/prod-candidate']);
+  assert.ok(r.logs.some((l) => l.startsWith('::warning::') && l.includes("Skipping 'latest'")), 'warning emitted');
+});
+
+test('runMain never moves latest from a pull_request event, even at the default-branch tip', async () => {
+  const r = await runTagScenario({
+    packages: 'frontend',
+    built: ['frontend'],
+    tags: 'latest\npr-candidate',
+    tipSha: (h) => h,
+    eventName: 'pull_request'
+  });
+  assert.strictEqual(r.error, undefined);
+  const puts = r.calls.filter((c) => c.method === 'PUT').map((c) => c.url);
+  assert.deepStrictEqual(puts, ['https://ghcr.io/v2/bcgov/demo/frontend/manifests/pr-candidate']);
+  assert.ok(r.logs.some((l) => l.startsWith('::warning::') && l.includes('pull_request')), 'warning emitted');
+  assert.ok(!r.calls.some((c) => c.url === 'https://api.github.com/repos/bcgov/demo/commits/main'), 'no tip lookup');
+});
+
+test('runMain does not tag anything when a package is missing', async () => {
+  const r = await runTagScenario({
+    packages: 'frontend backend',
+    built: ['frontend'],
+    tags: 'latest',
+    tipSha: (h) => h
+  });
+  assert.match(String(r.error), /process\.exit called with code 1/);
+  assert.ok(!r.calls.some((c) => c.method === 'PUT'), 'no PUT');
+});
+
+test('runMain rejects invalid tags before resolving anything', async () => {
+  const r = await runTagScenario({ packages: 'frontend', built: ['frontend'], tags: 'not valid', tipSha: (h) => h });
+  assert.match(String(r.error), /process\.exit called with code 1/);
+  assert.ok(!r.calls.some((c) => c.url.includes('/manifests/')), 'no registry calls');
+});

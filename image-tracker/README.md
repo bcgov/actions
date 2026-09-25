@@ -14,6 +14,9 @@ permissions:
   packages: read
 ```
 
+Setting the `tags` input writes to the registry, so that job needs
+`packages: write` instead of `packages: read`.
+
 
 ## How it works
 
@@ -154,10 +157,47 @@ be resolved, or no image exists for that revision, the action fails (`exit 1`).
 | `token`        |          | `github.token`       | GitHub token used to mint a GHCR bearer token.                                 |
 | `max_tags`   |          | `500`                | Upper bound on tags inspected per package before failing.                      |
 | `max_depth`  |          | `1`                  | Max commits of git ancestry to search. Default is this SHA only. Merge/promote must raise this (e.g. `100`) so a squash can resolve the last built image. |
+| `tags`       |          | —                    | Tags (one per line) applied to every resolved digest. Omit to stay read-only. Needs `packages: write`. See [Tagging](#tagging). |
 
 Package-to-image-path convention:
 - If package name == repository name → `ghcr.io/<owner>/<repo>`
 - Otherwise → `ghcr.io/<owner>/<repo>/<package>`
+
+## Tagging
+
+With `tags` unset the action only reads. There is no default: `latest` (or any
+tag) is never applied unless the caller sets `tags` explicitly. When set, each tag is pointed at every
+resolved digest through the registry API (the manifest is fetched by digest and
+re-`PUT` under the tag, so no image is rebuilt or copied).
+
+- Tags are written only after **every** package resolves. A miss still exits 1
+  and nothing is tagged.
+- `latest` is a human convenience: "the image `main` uses right now". It moves
+  on every merge to the default branch, never on PR builds, and moves even for
+  packages that were not rebuilt (their resolved digest is re-tagged). When
+  `latest` differs from `prod`, something is merged but not yet in production.
+- `latest` only moves when the resolved `revision` equals the current tip of the
+  default branch (checked through the GitHub API). Otherwise it is skipped with a
+  warning, so an older or re-run workflow cannot move it backwards. It is also
+  always skipped (with a warning) on `pull_request*` events. Other tags are
+  still applied.
+- Deploy by digest, not by these tags.
+
+```yaml
+permissions:
+  contents: read
+  packages: write
+  pull-requests: read
+steps:
+  - uses: actions/checkout@v6
+  - uses: bcgov/actions/image-tracker@vX.Y.Z
+    with:
+      package: backend frontend
+      max_depth: 100
+      tags: |
+        ${{ github.sha }}
+        latest
+```
 
 ## Outputs
 
