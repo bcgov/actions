@@ -252,6 +252,50 @@ jobs:
           fi
           echo "Input guards failed fast as expected."
 
+  # Real scan of a live site Derek owns. A down site fails this job on purpose.
+  # ZAP issue writing stays on so its issue is maintained in this repo.
+  test-scan-url-live:
+    name: Test Scan URL (Live)
+    needs: [filter]
+    if: contains(fromJSON(needs.filter.outputs.changes), 'scan-url') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      actions: read
+      contents: read
+      issues: write
+      security-events: write
+    env:
+      SLUG: quickstart-openshift-test-apps-silver-devops-gov-bc-ca
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Scan quickstart-openshift test
+        id: scan
+        uses: $/scan-url
+        with:
+          url: https://quickstart-openshift-test.apps.silver.devops.gov.bc.ca/
+
+      - name: Verify reports, SARIF and artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for f in report_json.json zap-results.sarif nuclei-results.jsonl nuclei-results.sarif; do
+            test -f "$f" || { echo "::error::missing $f"; exit 1; }
+          done
+          echo "ZAP results: $(jq '.runs[0].results | length' zap-results.sarif)"
+          echo "Nuclei findings: $(wc -l < nuclei-results.jsonl)"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts" \
+            --jq '.artifacts[].name' | grep -qx "zap_scan-${SLUG}" \
+            || { echo "::error::artifact zap_scan-${SLUG} not uploaded"; exit 1; }
+          categories="$(gh api "repos/${GITHUB_REPOSITORY}/code-scanning/analyses?ref=${GITHUB_REF}&per_page=100" --jq '.[].category')"
+          echo "Code scanning categories on ${GITHUB_REF}:"
+          echo "$categories"
+          for c in "zap-${SLUG}" "nuclei-${SLUG}"; do
+            grep -q "^${c}" <<<"$categories" || { echo "::error::no SARIF analysis with category ${c}"; exit 1; }
+          done
+
   # ─── DIFF TRIGGERS ──────────────────────────────────────────────────────────
   test-diff-triggers:
     name: Test Diff Triggers
@@ -1030,6 +1074,7 @@ jobs:
       - test-builder-build
       - test-builder-matrix
       - test-scan-url
+      - test-scan-url-live
       - test-diff-triggers
       - test-image-tracker
       - test-pr-description-add
