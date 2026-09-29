@@ -3,6 +3,9 @@
 set -euo pipefail
 
 version="${ACTIONLINT_VERSION:-v1.7.12}"
+# SHA-256 of actionlint_1.7.12_linux_amd64.tar.gz from actionlint_1.7.12_checksums.txt.
+# Bump this with the version. The tag can move; the asset checksum cannot.
+expected_sha256="8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
 config="${ACTIONLINT_CONFIG:?ACTIONLINT_CONFIG is required}"
 workspace="${ACTIONLINT_WORKSPACE:-${GITHUB_WORKSPACE:-.}}"
 
@@ -11,6 +14,7 @@ if [[ ! -f "$config" ]]; then
   exit 1
 fi
 
+# ubuntu-24.04 runners only. Other OS/arch combinations fail instead of skipping the lint.
 os="$(uname -s)"
 arch="$(uname -m)"
 if [[ "$os" != "Linux" || "$arch" != "x86_64" ]]; then
@@ -29,6 +33,11 @@ if ! curl -fsSL "$url" -o "$archive"; then
   exit 1
 fi
 
+if ! printf '%s  %s\n' "$expected_sha256" "$archive" | sha256sum --check --status; then
+  echo "::error title=actionlint checksum failed::Checksum mismatch for actionlint ${version}"
+  exit 1
+fi
+
 if ! tar -xzf "$archive" -C "$bindir" actionlint; then
   echo "::error title=actionlint extract failed::Failed to extract actionlint ${version}"
   exit 1
@@ -41,6 +50,13 @@ if [[ ! -x "$bin" ]]; then
 fi
 
 cd "$workspace"
-# The lint-failure workflow checks this so a checkout error cannot pass as a lint failure.
-touch "${RUNNER_TEMP:-/tmp}/pr-validate-actionlint-ran"
-"$bin" -config-file "$config"
+shopt -s nullglob
+workflow_files=(.github/workflows/*.yml .github/workflows/*.yaml)
+if (( ${#workflow_files[@]} == 0 )); then
+  echo "::error title=actionlint workflows missing::No workflow files found in ${workspace}/.github/workflows"
+  exit 1
+fi
+# Pass paths explicitly. With no arguments, actionlint walks up looking for a Git
+# checkout and exits before reading the files when the workspace is not a repo.
+out="${RUNNER_TEMP:-/tmp}/pr-validate-actionlint-out"
+"$bin" -config-file "$config" "${workflow_files[@]}" | tee "$out"

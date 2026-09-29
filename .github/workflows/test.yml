@@ -699,8 +699,8 @@ jobs:
             echo "::error::pr-validate accepted a workflow with an invalid expression"
             exit 1
           fi
-          if [ ! -f "$RUNNER_TEMP/pr-validate-actionlint-ran" ]; then
-            echo "::error::actionlint did not run; the failure was an earlier step"
+          if ! grep -q 'evnet' "$RUNNER_TEMP/pr-validate-actionlint-out"; then
+            echo "::error::actionlint did not report the invalid expression"
             exit 1
           fi
           if ! grep -q 'github.evnet' .github/workflows/broken.yml; then

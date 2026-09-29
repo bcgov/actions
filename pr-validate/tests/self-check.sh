@@ -40,7 +40,6 @@ else
 fi
 
 fixture="$(mktemp -d)"
-git init -q "$fixture"
 mkdir -p "$fixture/.github/workflows"
 cat > "$fixture/.github/workflows/ok.yml" <<'EOF'
 name: ok
