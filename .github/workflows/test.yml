@@ -428,8 +428,6 @@ jobs:
             package: frontend
           - repo: bcgov/quickstart-openshift
             package: backend
-          - repo: miniontech/vexilon
-            package: agnav
     steps:
       - uses: actions/checkout@v7
 
