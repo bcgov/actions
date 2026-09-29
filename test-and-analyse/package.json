@@ -21,7 +21,8 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/bcgov/action-test-and-analyse.git"
+    "url": "https://github.com/bcgov/actions.git",
+    "directory": "test-and-analyse"
   },
   "license": "Apache-2.0"
 }
