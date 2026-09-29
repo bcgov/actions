@@ -662,6 +662,52 @@ jobs:
           conventional_commits: 'false'
           add_markdown: 'pr-validate wrapper integration test'
 
+  test-pr-validate-lint:
+    name: Test PR Validate workflow lint
+    needs: [filter]
+    if: contains(fromJSON(needs.filter.outputs.changes), 'pr-validate') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      # No checkout. The action must see the broken workflow already in the workspace
+      # and must not replace it with a clean clone of this repo.
+      - name: Seed invalid workflow
+        run: |
+          mkdir -p .github/workflows
+          cat > .github/workflows/broken.yml <<'EOF'
+          name: broken
+          on: push
+          jobs:
+            test:
+              runs-on: ubuntu-latest
+              steps:
+                - run: echo ${{ '${{ github.evnet }}' }}
+          EOF
+
+      - name: Lint should fail
+        id: lint
+        continue-on-error: true
+        uses: $/pr-validate
+        with:
+          conventional_commits: 'false'
+
+      - name: Assert workflow lint failed
+        run: |
+          if [ "${{ steps.lint.outcome }}" != "failure" ]; then
+            echo "::error::pr-validate accepted a workflow with an invalid expression"
+            exit 1
+          fi
+          if [ ! -f "$RUNNER_TEMP/pr-validate-actionlint-ran" ]; then
+            echo "::error::actionlint did not run; the failure was an earlier step"
+            exit 1
+          fi
+          if ! grep -q 'github.evnet' .github/workflows/broken.yml; then
+            echo "::error::pr-validate replaced the seeded workflow before linting it"
+            exit 1
+          fi
+
   # ─── WORKFLOW RESULTS ───────────────────────────────────────────────────────
   test-workflow-results:
     name: Test Workflow Results
@@ -1079,6 +1125,7 @@ jobs:
       - test-image-tracker
       - test-pr-description-add
       - test-pr-validate
+      - test-pr-validate-lint
       - test-notifier
       - test-workflow-results
       - test-sysdig-monitor
