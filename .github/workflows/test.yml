@@ -311,15 +311,21 @@ jobs:
       - name: Run Parser Self-Check
         run: node diff-triggers/self-check.js
 
+      # Local commit with a known change, so results do not depend on what the PR touched
+      - name: Commit Fixture Change
+        run: |
+          mkdir -p .diff-triggers-fixture
+          echo fixture > .diff-triggers-fixture/changed.txt
+          git add .diff-triggers-fixture/changed.txt
+          git -c user.name=diff-triggers-test -c user.email=diff-triggers-test@example.invalid commit -q -m "test: diff-triggers fixture"
+
       - name: Test Match
         id: match
         uses: $/diff-triggers
         with:
           triggers: |
-            diff-triggers/
-            action.yml
-            .github/
-            .tool-versions
+            path/to/nowhere
+            .diff-triggers-fixture/
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Test No Match
@@ -327,7 +333,9 @@ jobs:
         uses: $/diff-triggers
         with:
           triggers: |
+            diff-triggers/
             path/to/nowhere
+          ref: HEAD~1
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Test Omitted Triggers
@@ -341,10 +349,7 @@ jobs:
         uses: $/diff-triggers
         with:
           triggers: |
-            diff-triggers/
-            action.yml
-            .github/
-            .tool-versions
+            .diff-triggers-fixture/
           ref: ${{ github.event.pull_request.base.sha || 'HEAD~1' }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -352,7 +357,7 @@ jobs:
         id: formats
         uses: $/diff-triggers
         with:
-          triggers: '["diff-triggers/", "action.yml", ".github/", ".tool-versions"]'
+          triggers: '["path/to/nowhere", ".diff-triggers-fixture/"]'
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Test Dynamic Filters
@@ -361,10 +366,7 @@ jobs:
         with:
           filters: |
             diff-triggers:
-              - 'diff-triggers/**'
-              - 'action.yml'
-              - '.github/'
-              - '.tool-versions'
+              - '.diff-triggers-fixture/**'
             non-existent:
               - 'non-existent-path/**'
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -375,6 +377,7 @@ jobs:
           echo "No-Match: ${{ steps.no_match.outputs.triggered }} (expected: false)"
           echo "Omitted: ${{ steps.omitted.outputs.triggered }} (expected: true)"
           echo "Custom Ref: ${{ steps.custom_ref.outputs.triggered }} (expected: true)"
+          echo "Formats: ${{ steps.formats.outputs.triggered }} (expected: true)"
           echo "Dynamic matched: ${{ steps.dynamic_filters.outputs['diff-triggers'] }} (expected: true)"
           echo "Dynamic unmatched: ${{ steps.dynamic_filters.outputs['non-existent'] }} (expected: false)"
           echo "Dynamic changes: ${{ steps.dynamic_filters.outputs.changes }}"
@@ -383,6 +386,7 @@ jobs:
              [[ "${{ steps.no_match.outputs.triggered }}" != "false" ]] || \
              [[ "${{ steps.omitted.outputs.triggered }}" != "true" ]] || \
              [[ "${{ steps.custom_ref.outputs.triggered }}" != "true" ]] || \
+             [[ "${{ steps.formats.outputs.triggered }}" != "true" ]] || \
              [[ "${{ steps.dynamic_filters.outputs['diff-triggers'] }}" != "true" ]] || \
              [[ "${{ steps.dynamic_filters.outputs['non-existent'] }}" != "false" ]] || \
              [[ '${{ steps.dynamic_filters.outputs.changes }}' != '["diff-triggers"]' ]]; then
