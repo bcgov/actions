@@ -428,6 +428,8 @@ jobs:
             package: frontend
           - repo: bcgov/quickstart-openshift
             package: backend
+          - repo: miniontech/vexilon
+            package: agnav
     steps:
       - uses: actions/checkout@v7
 
@@ -503,10 +505,16 @@ jobs:
 
             result=$(probe_tag "sha-${short_sha}" "$bearer" || true)
             if [[ -z "$result" ]]; then
+              result=$(probe_tag "${cand}" "$bearer" || true)
+            fi
+            if [[ -z "$result" ]]; then
               result=$(probe_tag "sha-${cand}" "$bearer" || true)
             fi
             if [[ -z "$result" && -n "$pr_num" ]]; then
               result=$(probe_tag "pr-${pr_num}" "$bearer" || true)
+            fi
+            if [[ -z "$result" && -n "$pr_num" ]]; then
+              result=$(probe_tag "${pr_num}" "$bearer" || true)
             fi
 
             if [[ -n "$result" ]]; then
