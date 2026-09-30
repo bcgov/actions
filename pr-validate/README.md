@@ -8,6 +8,7 @@ Validate Pull Request metadata and apply organizational guardrails to contributo
 - ✅ **Educational UX**: Provides explicit, custom GitHub annotations when title validation fails, instructing contributors exactly how to fix the issue without manually retrying CI.
 - ✅ **PR description**: Optional `add_markdown` appends text via [`pr-description-add`](../pr-description-add/).
 - ✅ **Fork notice**: Emits a warning on fork pull requests with a link to fork CI configuration guidance. Validation continues (conventional commits, etc.).
+- ✅ **Workflow lint**: Runs `rhysd/actionlint` v1.7.12 on Linux x86_64 against `.github/workflows`. Other runners fail the step. The linux/amd64 tarball is checked against the SHA-256 in `actionlint_1.7.12_checksums.txt` before extraction. Checks the files out with `clean: false` when they are not already in the workspace. A failed download fails the step.
 
 ## Permissions
 
@@ -15,6 +16,7 @@ To run this action, the calling workflow job must have the following minimum per
 
 ```yaml
 permissions:
+  contents: read
   pull-requests: read
 ```
 

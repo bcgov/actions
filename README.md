@@ -108,7 +108,7 @@ Refer to each action's directory for its exact minimum required permissions bloc
 - **[diff-triggers](./diff-triggers/)**: `contents: read`
 - **[image-tracker](./image-tracker/)**: `contents: read`, `pull-requests: read`, `packages: read`
 - **[pr-description-add](./pr-description-add/)**: `pull-requests: write`
-- **[pr-validate](./pr-validate/)**: `pull-requests: read`, plus `pull-requests: write` when `add_markdown` is set
+- **[pr-validate](./pr-validate/)**: `contents: read`, `pull-requests: read`, plus `pull-requests: write` when `add_markdown` is set
 - **[scan-url](./scan-url/)**: `contents: read`, `issues: write`, `security-events: write`
 - **[sysdig-monitor](./sysdig-monitor/)**: `contents: read` (alert templates are read from the consuming repo's checkout)
 - **[test-and-analyse](./test-and-analyse/)**: `contents: read`, `actions: write` (optional, for caching)

@@ -1,5 +1,5 @@
 name: "PR Validate"
-description: "Validate Pull Request metadata like Conventional Commits"
+description: "Validate pull request titles and GitHub Actions workflows"
 branding:
   icon: "check-circle"
   color: "blue"
@@ -40,6 +40,20 @@ runs:
       shell: bash
       run: |
         echo "::error::Title validation failed. Please edit the PR title at the top of the page to match Conventional Commits (e.g. 'feat: ...', 'fix: ...'). This job will automatically re-run as soon as you save the new title—no manual retry needed! See https://www.conventionalcommits.org/"
+
+    # After the title check. A failed step skips the rest of the composite, and the
+    # title failure is the one that tells the author to edit and wait for a re-run.
+    - name: Checkout workflows
+      if: hashFiles('.github/workflows/*.yml', '.github/workflows/*.yaml') == ''
+      uses: actions/checkout@v7
+      with:
+        clean: false
+
+    - name: Lint workflows
+      shell: bash
+      env:
+        ACTIONLINT_CONFIG: ${{ github.action_path }}/actionlint.yaml
+      run: bash "${{ github.action_path }}/lint-workflows.sh"
 
     - name: PR Description
       if: inputs.add_markdown != ''
