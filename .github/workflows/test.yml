@@ -497,24 +497,31 @@ jobs:
 
           found_rev=""
           found_digest=""
-          pr_num=""
+          found_tag=""
 
-          for cand in $(cd target && git rev-list --topo-order -n 20 HEAD); do
-            short_sha="${cand:0:7}"
-            pr_num=$(GH_TOKEN="$GH_TOKEN" gh api "/repos/${TARGET_REPO}/commits/${cand}/pulls" --jq 'if length > 0 then .[0].number else empty end' 2>/dev/null || true)
-
-            result=$(probe_tag "sha-${short_sha}" "$bearer" || true)
-            if [[ -z "$result" ]]; then
-              result=$(probe_tag "sha-${cand}" "$bearer" || true)
-            fi
-            if [[ -z "$result" && -n "$pr_num" ]]; then
-              result=$(probe_tag "pr-${pr_num}" "$bearer" || true)
-            fi
-
+          try_probe() {
+            local tag="$1" result
+            result=$(probe_tag "$tag" "$bearer" || true)
             if [[ -n "$result" ]]; then
               found_rev="${result%%$'\t'*}"
               found_digest="${result##*$'\t'}"
-              break
+              found_tag="$tag"
+              return 0
+            fi
+            return 1
+          }
+
+          for cand in $(cd target && git rev-list --topo-order -n 20 HEAD); do
+            short_sha="${cand:0:7}"
+            cand_pr=$(GH_TOKEN="$GH_TOKEN" gh api "/repos/${TARGET_REPO}/commits/${cand}/pulls" --jq 'if length > 0 then .[0].number else empty end' 2>/dev/null || true)
+
+            try_probe "sha-${short_sha}" && break
+            try_probe "${cand}" && break
+            try_probe "sha-${cand}" && break
+            # pr-<n> is docker/metadata; bare <n> is what some builders publish. Probe both. outputs.pr is the number.
+            if [[ -n "$cand_pr" ]]; then
+              try_probe "pr-${cand_pr}" && break
+              try_probe "${cand_pr}" && break
             fi
           done
 
@@ -528,7 +535,9 @@ jobs:
             git fetch --quiet origin "${found_rev}" 2>/dev/null || true
           )
 
-          echo "Ground truth: pkg=${PACKAGE} commit=${found_rev} digest=${found_digest} pr=${pr_num}"
+          pr_num=$(GH_TOKEN="$GH_TOKEN" gh api "/repos/${TARGET_REPO}/commits/${found_rev}/pulls" --jq 'if length > 0 then .[0].number else empty end' 2>/dev/null || true)
+
+          echo "Ground truth: pkg=${PACKAGE} tag=${found_tag} commit=${found_rev} digest=${found_digest} pr=${pr_num}"
           {
             echo "revision=${found_rev}"
             echo "digest=${found_digest}"
