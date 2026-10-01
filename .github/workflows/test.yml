@@ -252,10 +252,11 @@ jobs:
           fi
           echo "Input guards failed fast as expected."
 
-  # Real scan of a live site Derek owns. A down site fails this job on purpose.
-  # ZAP issue writing stays on so its issue is maintained in this repo.
+  # Real scans of quickstart-openshift TEST frontend and backend. A down site
+  # fails that matrix leg on purpose. ZAP issue writing stays on so each URL's
+  # issue is maintained in this repo. Slugs keep artifacts and SARIF apart.
   test-scan-url-live:
-    name: Test Scan URL (Live)
+    name: Test Scan URL (Live) (${{ matrix.name }})
     needs: [filter]
     if: contains(fromJSON(needs.filter.outputs.changes), 'scan-url') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
@@ -265,8 +266,16 @@ jobs:
       contents: read
       issues: write
       security-events: write
-    env:
-      SLUG: quickstart-openshift-test-apps-silver-devops-gov-bc-ca
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: frontend
+            url: https://quickstart-openshift-test.apps.silver.devops.gov.bc.ca/
+            slug: quickstart-openshift-test-apps-silver-devops-gov-bc-ca
+          - name: backend
+            url: https://quickstart-openshift-test.apps.silver.devops.gov.bc.ca/api
+            slug: quickstart-openshift-test-apps-silver-devops-gov-bc-ca-api
     steps:
       - uses: actions/checkout@v7
 
@@ -274,11 +283,12 @@ jobs:
         id: scan
         uses: $/scan-url
         with:
-          url: https://quickstart-openshift-test.apps.silver.devops.gov.bc.ca/
+          url: ${{ matrix.url }}
 
       - name: Verify reports, SARIF and artifact
         env:
           GH_TOKEN: ${{ github.token }}
+          SLUG: ${{ matrix.slug }}
         run: |
           set -euo pipefail
           for f in report_json.json zap-results.sarif nuclei-results.jsonl nuclei-results.sarif; do
@@ -294,6 +304,39 @@ jobs:
           echo "$categories"
           for c in "zap-${SLUG}" "nuclei-${SLUG}"; do
             grep -q "^${c}" <<<"$categories" || { echo "::error::no SARIF analysis with category ${c}"; exit 1; }
+          done
+
+  # Both matrix legs upload before this runs, so a shared artifact name or SARIF
+  # category would show up as a missing slug here.
+  test-scan-url-matrix:
+    name: Test Scan URL (Two URLs)
+    needs: [filter, test-scan-url-live]
+    if: contains(fromJSON(needs.filter.outputs.changes), 'scan-url') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      security-events: read
+    steps:
+      - name: Verify both URLs kept separate artifacts and analyses
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          artifacts="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts" --jq '.artifacts[].name')"
+          echo "Artifacts:"
+          echo "$artifacts"
+          categories="$(gh api "repos/${GITHUB_REPOSITORY}/code-scanning/analyses?ref=${GITHUB_REF}&per_page=100" --jq '.[].category')"
+          echo "Code scanning categories on ${GITHUB_REF}:"
+          echo "$categories"
+          for slug in \
+            quickstart-openshift-test-apps-silver-devops-gov-bc-ca \
+            quickstart-openshift-test-apps-silver-devops-gov-bc-ca-api
+          do
+            grep -qx "zap_scan-${slug}" <<<"$artifacts" \
+              || { echo "::error::artifact zap_scan-${slug} not uploaded"; exit 1; }
+            for c in "zap-${slug}" "nuclei-${slug}"; do
+              grep -q "^${c}" <<<"$categories" || { echo "::error::no SARIF analysis with category ${c}"; exit 1; }
+            done
           done
 
   # ─── DIFF TRIGGERS ──────────────────────────────────────────────────────────
@@ -1134,6 +1177,7 @@ jobs:
       - test-builder-matrix
       - test-scan-url
       - test-scan-url-live
+      - test-scan-url-matrix
       - test-diff-triggers
       - test-image-tracker
       - test-pr-description-add
