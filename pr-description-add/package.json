@@ -17,7 +17,8 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/actions/typescript-action.git"
+    "url": "https://github.com/bcgov/actions.git",
+    "directory": "pr-description-add"
   },
   "keywords": [
     "actions",
