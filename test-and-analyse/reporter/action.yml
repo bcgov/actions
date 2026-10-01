@@ -1,0 +1,25 @@
+name: Process reports and analysis
+description: Summarize test and Knip results on the Actions Node 24 runtime
+inputs:
+  dir:
+    description: App/package directory, relative to the workspace unless absolute
+    required: true
+  dep_scan:
+    description: "Knip mode: off, warn, or error"
+    default: "warn"
+  knip_output:
+    description: Knip JSON path, relative to dir
+    default: knip-output.json
+  language:
+    description: "Primary language: node, java, or python"
+    default: node
+outputs:
+  unused_files:
+    description: Number of unused files found by Knip
+  unused_deps:
+    description: Number of unused dependencies found by Knip
+  total_issues:
+    description: Total number of issues found by Knip
+runs:
+  using: node24
+  main: index.mjs
