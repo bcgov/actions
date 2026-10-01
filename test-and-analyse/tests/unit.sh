@@ -456,6 +456,49 @@ assert_java_version "" "" "$TMP_DIR/jv-pom-prop" "$TMP_DIR/jv-pom-prop" "17|" "a
 assert_java_version "" "" "$TMP_DIR/jv-gradle-import" "$TMP_DIR/jv-gradle-import" "17|" "auto-discover: skips JavaVersion import then finds VERSION_17"
 assert_java_version "" "" "$TMP_DIR/jv-docker-multistage" "$TMP_DIR/jv-docker-multistage" "17|" "auto-discover: skips non-Java FROM then finds temurin:17"
 
+# Reporter is a node24 action and reads Knip output from dir, not the workspace root.
+ACTION_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+if ! grep -q 'uses: \$/test-and-analyse/reporter' "${ACTION_ROOT}/action.yml"; then
+    echo "✗ composite action calls the node24 reporter"
+    failed=$((failed + 1))
+else
+    echo "✓ composite action calls the node24 reporter"
+    passed=$((passed + 1))
+fi
+if ! grep -q 'using: node24' "${ACTION_ROOT}/reporter/action.yml" || ! grep -q 'main: index.mjs' "${ACTION_ROOT}/reporter/action.yml"; then
+    echo "✗ reporter action runs on node24"
+    failed=$((failed + 1))
+else
+    echo "✓ reporter action runs on node24"
+    passed=$((passed + 1))
+fi
+
+REPORTER_WS="$(mktemp -d)"
+REPORTER_OUT="$(mktemp)"
+REPORTER_SUMMARY="$(mktemp)"
+mkdir -p "${REPORTER_WS}/app"
+printf '%s\n' '{"files":["unused.js"],"issues":[]}' > "${REPORTER_WS}/app/knip-output.json"
+if (
+    cd /tmp
+    GITHUB_WORKSPACE="$REPORTER_WS" \
+    GITHUB_OUTPUT="$REPORTER_OUT" \
+    GITHUB_STEP_SUMMARY="$REPORTER_SUMMARY" \
+    INPUT_DIR="app" \
+    INPUT_DEP_SCAN="warn" \
+    INPUT_KNIP_OUTPUT="knip-output.json" \
+    INPUT_LANGUAGE="node" \
+    node "${ACTION_ROOT}/reporter/index.mjs"
+) && [ "$(awk '/^unused_files<</ { getline; print; exit }' "$REPORTER_OUT")" = "1" ]; then
+    echo "✓ reporter reads Knip output from dir on the Actions runtime entrypoint"
+    passed=$((passed + 1))
+else
+    echo "✗ reporter reads Knip output from dir on the Actions runtime entrypoint"
+    echo "  GITHUB_OUTPUT:"
+    cat "$REPORTER_OUT" || true
+    failed=$((failed + 1))
+fi
+rm -rf "$REPORTER_WS" "$REPORTER_OUT" "$REPORTER_SUMMARY"
+
 echo ""
 echo "Unit tests finished: ${passed} passed, ${failed} failed."
 

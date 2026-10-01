@@ -417,19 +417,19 @@ runs:
         npx -y knip --dependencies --exports ${KNIP_CONFIG} | sed 's/\u001b\[[0-9;]*[a-zA-Z]//g' > knip-summary.txt 2>&1
         set -e
 
+    # Composite stays: this action installs the caller's toolchain and runs their
+    # commands, Sonar and Knip. The reporter is a node24 action, so it uses the
+    # Actions runtime instead of the project's node_version. Node is installed
+    # once, for the caller's code.
     - name: Process Reports and Analysis
       id: reporter_logic
       if: steps.final_triggered.outputs.triggered == 'true' && (success() || failure())
-      working-directory: ${{ inputs.dir }}
-      shell: bash
-      run: |
-        # Process results with the bundled action script (shared logic)
-        export INPUT_DIR="${{ inputs.dir }}"
-        export INPUT_DEP_SCAN="${{ inputs.dep_scan }}"
-        export INPUT_KNIP_OUTPUT="knip-output.json"
-        export INPUT_LANGUAGE="${{ inputs.language }}"
-        
-        node ${{ github.action_path }}/dist/index.js
+      uses: $/test-and-analyse/reporter
+      with:
+        dir: ${{ inputs.dir }}
+        dep_scan: ${{ inputs.dep_scan }}
+        knip_output: knip-output.json
+        language: ${{ inputs.language }}
 
     - name: Final cleanup
       if: always() && inputs.repository != github.repository
