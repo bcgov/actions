@@ -1,0 +1,7 @@
+# Deterministic rule for the Semgrep tests in .github/workflows/test.yml.
+rules:
+  - id: semgrep-test-marker
+    languages: [javascript]
+    severity: WARNING
+    message: Test marker call found (expected by the findings fixture)
+    pattern: semgrepTestMarker(...)
