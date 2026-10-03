@@ -1274,6 +1274,85 @@ jobs:
           fi
           echo "✅ Deepened in place, caller's checkout intact."
 
+  test-test-and-analyse-semgrep:
+    name: Test Test and Analyse (Semgrep)
+    needs: [filter]
+    if: contains(fromJSON(needs.filter.outputs.changes), 'test-and-analyse') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || contains(fromJSON(needs.filter.outputs.changes), 'lockfile') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Clean project
+        id: clean
+        uses: $/test-and-analyse
+        with:
+          commands: echo "Semgrep test"
+          dir: test-and-analyse/fixtures/semgrep/clean
+          node_version: '24'
+          cache: none
+          dep_scan: off
+          supply_scan: 'false'
+          semgrep: 'true'
+          semgrep_config: test-and-analyse/fixtures/semgrep/rules.yml
+
+      - name: Findings warn by default
+        id: warn
+        uses: $/test-and-analyse
+        with:
+          commands: echo "Semgrep test"
+          dir: test-and-analyse/fixtures/semgrep/findings
+          node_version: '24'
+          cache: none
+          dep_scan: off
+          supply_scan: 'false'
+          semgrep: 'true'
+          semgrep_config: test-and-analyse/fixtures/semgrep/rules.yml
+
+      - name: Findings fail with semgrep_fail
+        id: fail
+        continue-on-error: true
+        uses: $/test-and-analyse
+        with:
+          commands: echo "Semgrep test"
+          dir: test-and-analyse/fixtures/semgrep/findings
+          node_version: '24'
+          cache: none
+          dep_scan: off
+          supply_scan: 'false'
+          semgrep: 'true'
+          semgrep_config: test-and-analyse/fixtures/semgrep/rules.yml
+          semgrep_fail: 'true'
+
+      - name: Scan off by default
+        id: off
+        uses: $/test-and-analyse
+        with:
+          commands: echo "Semgrep test"
+          dir: test-and-analyse/fixtures/semgrep/findings
+          node_version: '24'
+          cache: none
+          dep_scan: off
+          supply_scan: 'false'
+
+      - name: Verify Semgrep behaviour
+        env:
+          CLEAN_FINDINGS: ${{ steps.clean.outputs.semgrep_findings }}
+          WARN_OUTCOME: ${{ steps.warn.outcome }}
+          WARN_FINDINGS: ${{ steps.warn.outputs.semgrep_findings }}
+          WARN_SARIF: ${{ steps.warn.outputs.semgrep_sarif }}
+          FAIL_OUTCOME: ${{ steps.fail.outcome }}
+          OFF_FINDINGS: ${{ steps.off.outputs.semgrep_findings }}
+        run: |
+          echo "clean=${CLEAN_FINDINGS} warn=${WARN_OUTCOME}/${WARN_FINDINGS} fail=${FAIL_OUTCOME} off='${OFF_FINDINGS}'"
+          [ "$CLEAN_FINDINGS" = "0" ] || { echo "❌ Clean project: expected 0 findings"; exit 1; }
+          [ "$WARN_OUTCOME" = "success" ] && [ "$WARN_FINDINGS" = "1" ] || { echo "❌ Findings should warn, not fail"; exit 1; }
+          [ "$(jq '.runs[0].results | length' "$WARN_SARIF")" = "1" ] || { echo "❌ SARIF report should hold 1 result"; exit 1; }
+          [ "$FAIL_OUTCOME" = "failure" ] || { echo "❌ semgrep_fail: true should fail on findings"; exit 1; }
+          [ -z "$OFF_FINDINGS" ] || { echo "❌ Scan should not run when semgrep is off"; exit 1; }
+          echo "✅ Semgrep: clean passes, findings warn, semgrep_fail fails, off by default"
+
   # ─── RESULTS AGGREGATOR ─────────────────────────────────────────────────────
   results:
     name: PR Results
@@ -1296,6 +1375,7 @@ jobs:
       - test-sysdig-monitor
       - test-test-and-analyse
       - test-test-and-analyse-shallow
+      - test-test-and-analyse-semgrep
     if: always()
     runs-on: ubuntu-24.04
     steps:
