@@ -1241,7 +1241,9 @@ jobs:
         run: |
           echo "clean=${CLEAN_FINDINGS} warn=${WARN_OUTCOME}/${WARN_FINDINGS} fail=${FAIL_OUTCOME} off='${OFF_FINDINGS}'"
           [ "$CLEAN_FINDINGS" = "0" ] || { echo "❌ Clean project: expected 0 findings"; exit 1; }
-          [ "$WARN_OUTCOME" = "success" ] && [ "$WARN_FINDINGS" = "1" ] || { echo "❌ Findings should warn, not fail"; exit 1; }
+          if [ "$WARN_OUTCOME" != "success" ] || [ "$WARN_FINDINGS" != "1" ]; then
+            echo "❌ Findings should warn, not fail"; exit 1
+          fi
           [ "$(jq '.runs[0].results | length' "$WARN_SARIF")" = "1" ] || { echo "❌ SARIF report should hold 1 result"; exit 1; }
           [ "$FAIL_OUTCOME" = "failure" ] || { echo "❌ semgrep_fail: true should fail on findings"; exit 1; }
           [ -z "$OFF_FINDINGS" ] || { echo "❌ Scan should not run when semgrep is off"; exit 1; }
