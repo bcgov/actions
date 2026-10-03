@@ -28,7 +28,8 @@ rel="${rel#/}"
 # relative to the workspace root.
 configs=()
 while IFS= read -r c; do
-  c="$(printf '%s' "$c" | xargs)"
+  c="${c#"${c%%[![:space:]]*}"}"
+  c="${c%"${c##*[![:space:]]}"}"
   [[ -n "$c" ]] || continue
   if [[ "$c" != p/* && "$c" != r/* ]]; then
     [[ -e "${workspace}/${c}" ]] || { echo "::error::Semgrep config not found: ${c} (relative to the workspace root)"; exit 1; }
@@ -38,8 +39,8 @@ while IFS= read -r c; do
 done <<< "${INPUT_SEMGREP_CONFIG:-p/default}"
 [[ ${#configs[@]} -gt 0 ]] || { echo "::error::semgrep_config is empty"; exit 1; }
 
-out="${RUNNER_TEMP}/semgrep"
-mkdir -p "$out"
+# Unique per run, so several scans in one job keep their own reports
+out="$(mktemp -d "${RUNNER_TEMP}/semgrep.XXXXXX")"
 json="${out}/semgrep.json"
 sarif="${out}/semgrep.sarif"
 
@@ -56,6 +57,25 @@ if [[ "$rc" -ne 0 && "$rc" -ne 1 ]]; then
   exit "$rc"
 fi
 
+# Error-level entries mean the scan is unreliable; warn-level ones (files
+# that only partly parsed, timeouts) are reported but do not fail
+errors="$(jq '[.errors[] | select(.level == "error")] | length' "$json")"
+skipped="$(jq '[.errors[] | select(.level != "error")] | length' "$json")"
+if [[ "$errors" -gt 0 ]]; then
+  jq -r '.errors[] | select(.level == "error") | .message' "$json"
+  echo "::error::Semgrep reported ${errors} scan error(s)"
+  exit 1
+fi
+[[ "$skipped" -eq 0 ]] || echo "::warning::Semgrep: ${skipped} file(s) or rule(s) not fully scanned; see the log above"
+
+# SARIF paths are relative to dir; make them relative to the workspace root
+# so an upload maps them to the right files
+if [[ -n "$rel" ]]; then
+  jq --arg p "${rel}/" 'walk(if type == "object" and (.artifactLocation.uri? | type) == "string"
+    then .artifactLocation.uri = $p + .artifactLocation.uri else . end)' "$sarif" > "${sarif}.tmp"
+  mv "${sarif}.tmp" "$sarif"
+fi
+
 count="$(jq '.results | length' "$json")"
 {
   echo "semgrep_findings=${count}"
@@ -63,10 +83,12 @@ count="$(jq '.results | length' "$json")"
 } >> "$GITHUB_OUTPUT"
 
 # One annotation per finding (first 50), paths relative to the workspace root
-jq -r --arg rel "$rel" '.results[:50][] |
+jq -r --arg rel "$rel" '
+  def esc: gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A");
+  def prop: esc | gsub(":"; "%3A") | gsub(","; "%2C");
+  .results[:50][] |
   ((if $rel == "" then "" else $rel + "/" end) + .path) as $p |
-  (.extra.message | gsub("%"; "%25") | gsub("\r"; "%0D") | gsub("\n"; "%0A")) as $m |
-  "::warning file=\($p),line=\(.start.line),title=Semgrep \(.check_id)::\($m)"' "$json"
+  "::warning file=\($p | prop),line=\(.start.line),title=\("Semgrep " + .check_id | prop)::\(.extra.message | esc)"' "$json"
 
 if [[ "$count" -eq 0 ]]; then
   echo "Semgrep: no findings"

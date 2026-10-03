@@ -459,7 +459,7 @@ Optional, language-agnostic static analysis (Node, Java, Python and more) of `di
 | `semgrep_config` | `p/default` | Rules, one per line: registry rulesets (`p/...`, `r/...`) or rule files relative to the workspace root |
 | `semgrep_fail` | `false` | `false`: findings are warnings and the action continues. `true`: any finding fails the action |
 
-Findings appear as warning annotations (first 50) and in the `semgrep_findings` and `semgrep_sarif` outputs. A scan error (bad rules, network failure fetching a registry ruleset) always fails the action.
+Findings appear as warning annotations (first 50) and in the `semgrep_findings` and `semgrep_sarif` outputs. Each scan writes its own report, with paths relative to the workspace root. A scan error (bad rules, network failure fetching a registry ruleset) always fails the action; files Semgrep could only partly parse are reported as a warning.
 
 Semgrep's default ignore list applies (e.g. `node_modules/`, `dist/`, `test/`, `tests/`); add a `.semgrepignore` to change it.
 

@@ -1245,6 +1245,8 @@ jobs:
             echo "❌ Findings should warn, not fail"; exit 1
           fi
           [ "$(jq '.runs[0].results | length' "$WARN_SARIF")" = "1" ] || { echo "❌ SARIF report should hold 1 result"; exit 1; }
+          uri=$(jq -r '.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uri' "$WARN_SARIF")
+          [ "$uri" = "test-and-analyse/fixtures/semgrep/findings/index.js" ] || { echo "❌ SARIF path should be relative to the workspace root, got $uri"; exit 1; }
           [ "$FAIL_OUTCOME" = "failure" ] || { echo "❌ semgrep_fail: true should fail on findings"; exit 1; }
           [ -z "$OFF_FINDINGS" ] || { echo "❌ Scan should not run when semgrep is off"; exit 1; }
           echo "✅ Semgrep: clean passes, findings warn, semgrep_fail fails, off by default"
