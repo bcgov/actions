@@ -135,6 +135,17 @@ needs_qemu "$multiline_qemu" X64 && assert_eq "yes" "yes" "multiline platforms w
 multiline_native=$'linux/amd64\namd64'
 needs_qemu "$multiline_native" X64 && assert_eq "yes" "no" "multiline native platforms does not need QEMU on X64" || assert_eq "no" "no" "multiline native platforms does not need QEMU on X64"
 
+subshell_errexit_test=$(bash -c '
+set -e
+source "'"${SCRIPT_DIR}"'/../context.sh"
+needs_qemu "linux/amd64" X64 || true
+case "$-" in
+  *e*) echo "preserved" ;;
+  *) echo "lost" ;;
+esac
+')
+assert_eq "$subshell_errexit_test" "preserved" "needs_qemu preserves caller errexit"
+
 echo ""
 echo "Passed: ${passed}, Failed: ${failed}"
 [ "$failed" -eq 0 ]

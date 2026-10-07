@@ -188,7 +188,7 @@ jobs:
         with:
           package: builder-multiarch
           build_context: builder/tests
-          build_file: builder/tests/Dockerfile
+          build_file: builder/tests/Dockerfile.multiarch
           platforms: linux/amd64,linux/arm64
           tags: ${{ github.event.number || github.run_id }}-multiarch
           sbom: 'false'
@@ -218,7 +218,7 @@ jobs:
         with:
           package: builder-multiarch
           build_context: builder/tests
-          build_file: builder/tests/Dockerfile
+          build_file: builder/tests/Dockerfile.multiarch
           tag_fallback: ${{ github.event.number || github.run_id }}-multiarch
           tags: ${{ github.event.number || github.run_id }}-multiarch-fallback
           sbom: 'false'

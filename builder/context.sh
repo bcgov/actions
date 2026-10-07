@@ -162,9 +162,11 @@ needs_qemu() {
     return 1
   fi
 
-  local saved_shopts
-  saved_shopts="$(set +o)"
-  set -f
+  local restore_noglob=false
+  case "$-" in
+    *f*) ;;
+    *) set -f; restore_noglob=true ;;
+  esac
 
   local p
   local result=1
@@ -204,6 +206,8 @@ needs_qemu() {
     esac
   done
 
-  eval "$saved_shopts"
+  if [ "$restore_noglob" = true ]; then
+    set +f
+  fi
   return "$result"
 }

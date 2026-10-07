@@ -269,7 +269,9 @@ When using `tag_fallback`, `builder` resolves and retags existing multi-architec
 
 ## Native-Runner Matrix + Merge Pattern (Heavy Images)
 
-QEMU emulation can be significantly slower for compile-heavy workloads (such as C++, Rust, GDAL, or compiled Python extensions). For heavy builds, run a matrix across native runners (`ubuntu-24.04` for AMD64 and `ubuntu-24.04-arm` for ARM64) to build each architecture natively without emulation, then merge the architecture tags into a unified multi-architecture manifest list using `docker buildx imagetools create`:
+QEMU emulation can be significantly slower for compile-heavy workloads (such as C++, Rust, GDAL, or compiled Python extensions). For heavy builds, run a matrix across native runners (`ubuntu-24.04` for AMD64 and `ubuntu-24.04-arm` for ARM64) to build each architecture natively without emulation, then merge the architecture tags into a unified multi-architecture manifest list using `docker buildx imagetools create`.
+
+This pattern requires registry write access (`packages: write`) to push per-architecture tags and the merged index, so it runs on same-repository pull requests:
 
 ```yaml
 name: Multi-Arch Native Build
@@ -279,6 +281,7 @@ on:
 
 jobs:
   build:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     strategy:
       matrix:
         include:
@@ -316,9 +319,14 @@ jobs:
         run: |
           docker buildx imagetools create \
             -t ghcr.io/${{ github.repository }}/backend:${{ github.event.number }} \
+            -t ghcr.io/${{ github.repository }}/backend:${{ github.event.pull_request.head.sha }} \
             ghcr.io/${{ github.repository }}/backend:${{ github.event.number }}-amd64 \
             ghcr.io/${{ github.repository }}/backend:${{ github.event.number }}-arm64
 ```
+
+> **Note on SHA tags:** Matrix builds each publish their own commit SHA tag (`source_sha`), so the last completed job overwrites that tag with its single-arch digest. Tagging the merged index with both `${{ github.event.number }}` and `${{ github.event.pull_request.head.sha }}` ensures `image-tracker` and downstream deploy pipelines resolve the multi-architecture index when pulling by git SHA.
+>
+> **Note on Fork PRs:** Like single-runner builds, fork pull requests run with a read-only token and cannot write to GHCR. For fork workflows, multi-job matrix publishing runs on `push` to the fork's own repository where its `GITHUB_TOKEN` has package write access.
 
 # Security Features
 

@@ -1,0 +1,4 @@
+# Multi-arch test fixture. Executes a binary under the target platform architecture to verify QEMU emulation.
+# ponytail: keep minimal; alpine is official, multi-arch, and tiny (~3MB).
+FROM alpine:3.21
+RUN uname -m
