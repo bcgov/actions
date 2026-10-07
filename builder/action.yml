@@ -34,14 +34,13 @@ inputs:
         pr123
         demo
         test
-  architectures:
+  architecture:
     description: |
-      Architectures of a native multi-arch build; e.g. amd64,arm64.
-      Run builder once per architecture, each on a runner of that architecture (e.g. a matrix
-      of ubuntu-24.04 and ubuntu-24.04-arm). Each run tags its image with its runner's
-      architecture (<tag>-amd64), and the last run to finish merges them into the plain tags
-      as one multi-arch image. Resolve the merged digest with image-tracker.
-      Omit for a normal single-architecture build.
+      Architecture this run builds natively; must match the runner (no QEMU emulation).
+      Omit or amd64: publishes the canonical tags (:123, :<sha>), as today.
+      Anything else, e.g. arm64 on an ubuntu-24.04-arm runner: suffixes every tag and the
+      tag_fallback lookup with -<architecture> (:123-arm64, :<sha>-arm64), so it never
+      touches the canonical tags. See builder-merge to combine them into one multi-arch tag.
   triggers:
     description: |
       Paths used to trigger a build. Prefer multiline:
@@ -77,12 +76,8 @@ inputs:
         ANOTHER_SECRET=another_value
 outputs:
   digest:
-    description: "Immutable digest of the image (resolved from fallback or built fresh). With architectures, this run's architecture only; resolve the merged multi-arch digest with image-tracker"
+    description: "Immutable digest of the image (resolved from fallback or built fresh)"
     value: ${{ steps.final_outputs.outputs.digest }}
-
-  merged:
-    description: "With architectures: whether this run merged the multi-arch image [true|false]. Only the last run to finish merges"
-    value: ${{ steps.merge.outputs.merged }}
 
   triggered:
     description: Did a deployment trigger?  [true|false]
@@ -118,7 +113,7 @@ runs:
       env:
         INPUT_PACKAGE: ${{ inputs.package }}
         INPUT_TAGS: ${{ inputs.tags }}
-        INPUT_ARCHITECTURES: ${{ inputs.architectures }}
+        INPUT_ARCHITECTURE: ${{ inputs.architecture }}
         INPUT_REPOSITORY: ${{ inputs.repository }}
         EVENT_NAME: ${{ github.event_name }}
         GH_REPOSITORY: ${{ github.repository }}
@@ -147,22 +142,18 @@ runs:
           exit 1
         fi
 
-        # Multi-arch: suffix every tag with this runner's architecture so the per-architecture
-        # runs don't overwrite each other's tags; the merge step publishes the plain tags.
-        architectures="$(list_architectures "${INPUT_ARCHITECTURES}")"
-        tag_suffix=""
-        if [ -n "${architectures}" ]; then
-          invalid="$(printf '%s\n' "${architectures}" | grep -vxE '[a-z0-9]+' || true)"
-          if [ -n "${invalid}" ]; then
-            echo "::error::Input 'architectures' has invalid entries: ${invalid//$'\n'/, }. Use names like amd64,arm64."
+        # amd64 (or unset) owns the canonical tags. Any other architecture builds natively on a
+        # matching runner and suffixes every tag with -<arch>, so it never touches them.
+        tag_suffix="$(architecture_tag_suffix "${INPUT_ARCHITECTURE}")" || {
+          echo "::error::Input 'architecture' (${INPUT_ARCHITECTURE}) must be one architecture name, e.g. amd64 or arm64."
+          exit 1
+        }
+        if [ -n "${INPUT_ARCHITECTURE}" ]; then
+          runner_arch="$(normalize_arch "${RUNNER_ARCH}")"
+          if [ "${runner_arch}" != "$(normalize_arch "${INPUT_ARCHITECTURE}")" ]; then
+            echo "::error::architecture is ${INPUT_ARCHITECTURE}, but this runner is ${runner_arch}. Build each architecture on a matching runner (e.g. ubuntu-24.04-arm for arm64)."
             exit 1
           fi
-          arch="$(normalize_arch "${RUNNER_ARCH}")"
-          if ! printf '%s\n' "${architectures}" | grep -qx "${arch}"; then
-            echo "::error::This runner is ${arch}, which isn't in architectures (${architectures//$'\n'/, }). Run each architecture on a matching runner."
-            exit 1
-          fi
-          tag_suffix="-${arch}"
         fi
 
         publish_repo="$(publish_repository "${EVENT_NAME}" "${GH_REPOSITORY}" "${HEAD_REPO}")"
@@ -176,7 +167,6 @@ runs:
           sha="$(source_sha "${HEAD_SHA}" "${EVENT_SHA}")"
           tags="$(merge_sha_tag "${INPUT_TAGS}" "${sha}")"
         fi
-        plain_tags="${tags}"
         tags="$(apply_tag_suffix "${tags}" "${tag_suffix}")"
 
         if can_push_packages "${EVENT_NAME}" "${GH_REPOSITORY}" "${HEAD_REPO}"; then
@@ -194,12 +184,6 @@ runs:
         {
           echo "tags<<EOF"
           printf '%s\n' "${tags}"
-          echo "EOF"
-          echo "plain_tags<<EOF"
-          printf '%s\n' "${plain_tags}"
-          echo "EOF"
-          echo "architectures<<EOF"
-          printf '%s\n' "${architectures}"
           echo "EOF"
         } >> "$GITHUB_OUTPUT"
 
@@ -237,7 +221,8 @@ runs:
     # Check if a build is required (steps.build.outputs.triggered=true|false)
     - name: Check for builds
       env:
-        URL_FALLBACK: ${{ steps.vars.outputs.registry_host }}/${{ steps.vars.outputs.image_path }}:${{ inputs.tag_fallback }}
+        # Non-amd64 runs fall back to their own architecture's tag, e.g. test-arm64
+        URL_FALLBACK: ${{ steps.vars.outputs.registry_host }}/${{ steps.vars.outputs.image_path }}:${{ inputs.tag_fallback }}${{ steps.vars.outputs.tag_suffix }}
       id: build
       shell: bash
       run: |
@@ -291,7 +276,7 @@ runs:
       with:
         registry: ${{ steps.vars.outputs.registry_host }}
         repository: ${{ steps.vars.outputs.image_path }}
-        target: ${{ inputs.tag_fallback }}
+        target: ${{ inputs.tag_fallback }}${{ steps.vars.outputs.tag_suffix }}
         tags: |
           ${{ steps.vars.outputs.tags }}
         token: ${{ inputs.token }}
@@ -340,15 +325,11 @@ runs:
         else
           sha="${WORKFLOW_SHA}"
         fi
-        plain_tags="$(merge_sha_tag "${INPUT_TAGS}" "${sha}")"
-        tags="$(apply_tag_suffix "${plain_tags}" "${TAG_SUFFIX}")"
+        tags="$(apply_tag_suffix "$(merge_sha_tag "${INPUT_TAGS}" "${sha}")" "${TAG_SUFFIX}")"
         echo "source_sha=${sha}" >> "$GITHUB_OUTPUT"
         {
           echo "tags<<EOF"
           printf '%s\n' "${tags}"
-          echo "EOF"
-          echo "plain_tags<<EOF"
-          printf '%s\n' "${plain_tags}"
           echo "EOF"
         } >> "$GITHUB_OUTPUT"
 
@@ -417,69 +398,12 @@ runs:
         tags: ${{ steps.tags.outputs.final_tags }}
         labels: ${{ steps.tags.outputs.labels }}
         annotations: ${{ steps.tags.outputs.annotations }}
-        # Multi-arch runs keep a cache per architecture (buildcache-amd64) so they don't overwrite each other's
+        # Non-amd64 runs keep their own cache (buildcache-arm64) so they don't overwrite the amd64 one
         cache-from: type=registry,ref=${{ steps.vars.outputs.registry_host }}/${{ steps.vars.outputs.image_path }}:buildcache${{ steps.vars.outputs.tag_suffix }}
         cache-to: ${{ steps.vars.outputs.can_push == 'true' && format('type=registry,ref={0}/{1}:buildcache{2},mode=max', steps.vars.outputs.registry_host, steps.vars.outputs.image_path, steps.vars.outputs.tag_suffix) || '' }}
         build-args: ${{ inputs.build_args }}
         secrets: |
           ${{ inputs.secrets }}
-
-    # Multi-arch: the last architecture to finish merges. Each run checks whether every
-    # architecture's image for this commit (<sha>-<arch>) exists; if so, it publishes the plain
-    # tags as one multi-arch index. Whichever run checks last always sees every image, and if
-    # two runs both merge they publish the same images, so the result is the same either way.
-    - name: Merge architectures
-      id: merge
-      if: steps.vars.outputs.tag_suffix != '' && steps.vars.outputs.can_push == 'true'
-      shell: bash
-      env:
-        IMAGE: ${{ steps.vars.outputs.registry_host }}/${{ steps.vars.outputs.image_path }}
-        PLAIN_TAGS: ${{ steps.resolved_sha.outputs.plain_tags || steps.vars.outputs.plain_tags }}
-        SOURCE_SHA: ${{ steps.resolved_sha.outputs.source_sha || steps.vars.outputs.source_sha }}
-        ARCHITECTURES: ${{ steps.vars.outputs.architectures }}
-      run: |
-        set -euo pipefail
-        first=$(printf '%s\n' "${PLAIN_TAGS}" | grep -v '^$' | head -n 1)
-        # The commit SHA tag identifies this commit's images; other tags (e.g. the PR number) may
-        # still point at an earlier commit's build
-        key="${SOURCE_SHA:-${first}}"
-        digest_of() { docker buildx imagetools inspect "$1" | awk '/^Digest:/ {print $2}'; }
-
-        digests=()
-        while IFS= read -r arch; do
-          [ -z "${arch}" ] && continue
-          ref="${IMAGE}:${key}-${arch}"
-          if ! digest=$(digest_of "${ref}" 2>/dev/null) || [ -z "${digest}" ]; then
-            echo "${ref} isn't pushed yet, so the ${arch} run will merge when it finishes."
-            echo "merged=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          digests+=("${digest}")
-        done <<< "${ARCHITECTURES}"
-
-        # When no build triggered, every architecture retagged the same tag_fallback image,
-        # so keep that image as is instead of merging it with itself
-        sources=()
-        while IFS= read -r digest; do
-          sources+=("${IMAGE}@${digest}")
-        done < <(printf '%s\n' "${digests[@]}" | awk '!seen[$0]++')
-
-        args=()
-        while IFS= read -r tag; do
-          [ -n "${tag}" ] && args+=(--tag "${IMAGE}:${tag}")
-        done <<< "${PLAIN_TAGS}"
-        docker buildx imagetools create "${args[@]}" "${sources[@]}"
-
-        digest=$(digest_of "${IMAGE}:${first}")
-        echo "merged=true" >> "$GITHUB_OUTPUT"
-        echo "Merged ${IMAGE}:${first} (${digest}) from: ${sources[*]}"
-        {
-          echo "### Multi-arch image"
-          echo "| Output | Value |"
-          echo "| --- | --- |"
-          echo "| **image** | \`${IMAGE}:${first}\` |"
-          echo "| **digest** | \`${digest}\` |"
-        } >> "$GITHUB_STEP_SUMMARY"
 
     - name: Fork pull_request notice
       if: steps.vars.outputs.can_push != 'true'
@@ -630,8 +554,8 @@ runs:
             echo "> Attestation failed. Check logs for details." >> $GITHUB_STEP_SUMMARY
           fi
         else
-          echo "retagged: ${{ inputs.tag_fallback }} -> ${{ steps.vars.outputs.tags }}"
-          echo "| **retagged** | \`${{ inputs.tag_fallback }} -> ${{ steps.vars.outputs.tags }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "retagged: ${{ inputs.tag_fallback }}${{ steps.vars.outputs.tag_suffix }} -> ${{ steps.vars.outputs.tags }}"
+          echo "| **retagged** | \`${{ inputs.tag_fallback }}${{ steps.vars.outputs.tag_suffix }} -> ${{ steps.vars.outputs.tags }}\` |" >> $GITHUB_STEP_SUMMARY
         fi
         echo "-----------------------"
 

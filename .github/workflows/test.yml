@@ -31,6 +31,7 @@ jobs:
           filters: |
             builder:
               - 'builder/**'
+              - 'builder-merge/**'
             scan-url:
               - 'scan-url/**'
             diff-triggers:
@@ -182,10 +183,11 @@ jobs:
             builder/
             .github/workflows/
 
-  # Native multi-arch: each architecture on its own runner (no QEMU); the last to finish merges.
-  # Chain: build -> verify (with image-tracker, as consumers do) -> fallback build -> fallback verify.
+  # Tag isolation: amd64 publishes the canonical tags as before; arm64 runs natively on its own
+  # runner and only ever writes -arm64 tags. builder-merge then publishes a separate -multiarch tag.
+  # Chain: build -> verify + merge -> fallback build -> fallback verify.
   test-builder-multiarch:
-    name: Test Builder Multi-arch (Build ${{ matrix.runner }})
+    name: Test Builder Multi-arch (Build ${{ matrix.arch }})
     needs: [filter]
     if: contains(fromJSON(needs.filter.outputs.changes), 'builder') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
     runs-on: ${{ matrix.runner }}
@@ -194,29 +196,39 @@ jobs:
       packages: write
     strategy:
       matrix:
-        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
     steps:
       - uses: $/builder
         with:
           package: builder-multiarch-selftest
           build_context: builder/tests
           build_file: builder/tests/Dockerfile
-          architectures: amd64,arm64
+          # amd64 is the default; set it on the amd64 leg too, to cover the explicit value
+          architecture: ${{ matrix.arch }}
           tags: ${{ github.event.number || github.run_id }}-native
           sbom: 'false'
 
   test-builder-multiarch-verify:
-    name: Test Builder Multi-arch (Verify)
+    name: Test Builder Multi-arch (Verify and Merge)
     needs: [test-builder-multiarch]
     # Fork PRs build but can't push, so there's no registry image to verify
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-      packages: read
+      packages: write
       pull-requests: read
     outputs:
-      digest: ${{ steps.tracker.outputs.digest }}
+      amd64: ${{ steps.check.outputs.amd64 }}
+      arm64: ${{ steps.check.outputs.arm64 }}
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}/builder-multiarch-selftest
+      TAG: ${{ github.event.number || github.run_id }}-native
+      SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v7
 
@@ -226,33 +238,57 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
-      # Consumers resolve the merged digest this way
+      # Deploys resolve the canonical image this way; it must stay amd64
       - id: tracker
         uses: $/image-tracker
         with:
           package: builder-multiarch-selftest
 
-      - name: Verify the merged multi-arch index
+      - name: Verify canonical tags are amd64 and -arm64 tags are arm64
+        id: check
         env:
-          IMAGE: ghcr.io/${{ github.repository }}/builder-multiarch-selftest
-          TAG: ${{ github.event.number || github.run_id }}-native
-          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           TRACKER_DIGEST: ${{ steps.tracker.outputs.digest }}
         run: |
           set -euo pipefail
           digest_of() { docker buildx imagetools inspect "$1" | awk '/^Digest:/ {print $2}'; }
-          archs=$(docker buildx imagetools inspect --raw "${IMAGE}:${TAG}" | jq -c '[.manifests[]? | select(.platform.os != "unknown") | .platform.architecture] | sort')
-          [ "${archs}" = '["amd64","arm64"]' ] || { echo "::error::${IMAGE}:${TAG} should be an amd64+arm64 index, got ${archs}"; exit 1; }
-          digest=$(digest_of "${IMAGE}:${TAG}")
-          # The commit SHA tag must be the merged index too, not one architecture's build
-          [ "$(digest_of "${IMAGE}:${SHA}")" = "${digest}" ] || { echo "::error::${IMAGE}:${SHA} isn't the merged index ${digest}"; exit 1; }
-          # image-tracker must resolve the commit to the merged index, not a per-architecture image
-          [ "${TRACKER_DIGEST}" = "${digest}" ] || { echo "::error::image-tracker resolved ${TRACKER_DIGEST}, not the merged index ${digest}"; exit 1; }
-          echo "Verified ${IMAGE}:${TAG}: ${archs}, ${digest}"
+          archs_of() { docker buildx imagetools inspect --raw "$1" | jq -c '[.manifests[]? | select(.platform.os != "unknown") | .platform.architecture] | sort'; }
+          for ref in "${IMAGE}:${TAG}" "${IMAGE}:${SHA}"; do
+            [ "$(archs_of "${ref}")" = '["amd64"]' ] || { echo "::error::canonical ${ref} should be amd64 only, got $(archs_of "${ref}")"; exit 1; }
+          done
+          for ref in "${IMAGE}:${TAG}-arm64" "${IMAGE}:${SHA}-arm64"; do
+            [ "$(archs_of "${ref}")" = '["arm64"]' ] || { echo "::error::${ref} should be arm64 only, got $(archs_of "${ref}")"; exit 1; }
+          done
+          amd64=$(digest_of "${IMAGE}:${TAG}")
+          [ "${TRACKER_DIGEST}" = "${amd64}" ] || { echo "::error::image-tracker resolved ${TRACKER_DIGEST}, not the canonical amd64 ${amd64}"; exit 1; }
+          echo "amd64=${amd64}" >> "${GITHUB_OUTPUT}"
+          echo "arm64=$(digest_of "${IMAGE}:${TAG}-arm64")" >> "${GITHUB_OUTPUT}"
 
-  # No trigger path changes, so each architecture retags the merged multi-arch image
+      - id: merge
+        uses: $/builder-merge
+        with:
+          package: builder-multiarch-selftest
+          tags: ${{ github.event.number || github.run_id }}-native
+
+      - name: Verify the -multiarch tag, and that canonical tags are untouched
+        env:
+          MERGED: ghcr.io${{ steps.merge.outputs.image_path }}
+          MERGED_DIGEST: ${{ steps.merge.outputs.digest }}
+          AMD64: ${{ steps.check.outputs.amd64 }}
+        run: |
+          set -euo pipefail
+          digest_of() { docker buildx imagetools inspect "$1" | awk '/^Digest:/ {print $2}'; }
+          archs=$(docker buildx imagetools inspect --raw "${MERGED}" | jq -c '[.manifests[]? | select(.platform.os != "unknown") | .platform.architecture] | sort')
+          [ "${archs}" = '["amd64","arm64"]' ] || { echo "::error::${MERGED} should be an amd64+arm64 index, got ${archs}"; exit 1; }
+          [ "$(digest_of "${MERGED}")" = "${MERGED_DIGEST}" ] || { echo "::error::builder-merge digest output doesn't match ${MERGED}"; exit 1; }
+          [ "$(digest_of "${IMAGE}:${SHA}-multiarch")" = "${MERGED_DIGEST}" ] || { echo "::error::${IMAGE}:${SHA}-multiarch isn't the merged index"; exit 1; }
+          for ref in "${IMAGE}:${TAG}" "${IMAGE}:${SHA}"; do
+            [ "$(digest_of "${ref}")" = "${AMD64}" ] || { echo "::error::builder-merge changed canonical ${ref}"; exit 1; }
+          done
+          echo "Verified ${MERGED}: ${archs}; canonical tags still ${AMD64}"
+
+  # No trigger path changes, so each architecture retags its own fallback (<tag> / <tag>-arm64)
   test-builder-multiarch-fallback:
-    name: Test Builder Multi-arch (Fallback ${{ matrix.runner }})
+    name: Test Builder Multi-arch (Fallback ${{ matrix.arch }})
     needs: [test-builder-multiarch-verify]
     runs-on: ${{ matrix.runner }}
     permissions:
@@ -260,14 +296,18 @@ jobs:
       packages: write
     strategy:
       matrix:
-        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
     steps:
       - uses: $/builder
         with:
           package: builder-multiarch-selftest
           build_context: builder/tests
           build_file: builder/tests/Dockerfile
-          architectures: amd64,arm64
+          architecture: ${{ matrix.arch }}
           tags: ${{ github.event.number || github.run_id }}-native-fallback
           tag_fallback: ${{ github.event.number || github.run_id }}-native
           sbom: 'false'
@@ -287,17 +327,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
-      - name: Verify fallback kept the multi-arch image
+      - name: Verify each architecture retagged its own fallback
         env:
-          REF: ghcr.io/${{ github.repository }}/builder-multiarch-selftest:${{ github.event.number || github.run_id }}-native-fallback
-          BUILD_DIGEST: ${{ needs.test-builder-multiarch-verify.outputs.digest }}
+          IMAGE: ghcr.io/${{ github.repository }}/builder-multiarch-selftest
+          TAG: ${{ github.event.number || github.run_id }}-native-fallback
+          AMD64: ${{ needs.test-builder-multiarch-verify.outputs.amd64 }}
+          ARM64: ${{ needs.test-builder-multiarch-verify.outputs.arm64 }}
         run: |
           set -euo pipefail
-          digest=$(docker buildx imagetools inspect "${REF}" | awk '/^Digest:/ {print $2}')
-          [ "${digest}" = "${BUILD_DIGEST}" ] || { echo "::error::fallback ${REF} is ${digest}, not the original ${BUILD_DIGEST}"; exit 1; }
-          archs=$(docker buildx imagetools inspect --raw "${REF}" | jq -c '[.manifests[]? | select(.platform.os != "unknown") | .platform.architecture] | sort')
-          [ "${archs}" = '["amd64","arm64"]' ] || { echo "::error::${REF} should be an amd64+arm64 index, got ${archs}"; exit 1; }
-          echo "Verified fallback ${REF}: ${archs}, ${digest}"
+          digest_of() { docker buildx imagetools inspect "$1" | awk '/^Digest:/ {print $2}'; }
+          [ "$(digest_of "${IMAGE}:${TAG}")" = "${AMD64}" ] || { echo "::error::${IMAGE}:${TAG} isn't the original amd64 ${AMD64}"; exit 1; }
+          [ "$(digest_of "${IMAGE}:${TAG}-arm64")" = "${ARM64}" ] || { echo "::error::${IMAGE}:${TAG}-arm64 isn't the original arm64 ${ARM64}"; exit 1; }
+          echo "Verified fallback: ${TAG} -> ${AMD64}, ${TAG}-arm64 -> ${ARM64}"
 
   # ─── SCAN URL ───────────────────────────────────────────────────────────────
   test-scan-url:

@@ -83,10 +83,16 @@ ${tags}
 EOF
 }
 
-# list_architectures ARCHITECTURES
-# Prints each architecture once, lowercased, from a comma, space or newline separated list.
-list_architectures() {
-  printf '%s\n' "${1,,}" | tr ',[:blank:]' '\n' | awk 'NF && !seen[$0]++'
+# architecture_tag_suffix ARCHITECTURE
+# Prints the tag suffix for an architecture: nothing for amd64 or unset (the canonical tags),
+# otherwise -<arch>, e.g. -arm64. Fails unless ARCHITECTURE is a single architecture name.
+architecture_tag_suffix() {
+  local arch
+  arch="$(normalize_arch "$1")"
+  [ -z "$arch" ] && return 0
+  [[ "$arch" =~ ^[a-z0-9]+$ ]] || return 1
+  [ "$arch" = "amd64" ] && return 0
+  printf -- '-%s\n' "$arch"
 }
 
 # normalize_arch RUNNER_ARCH

@@ -107,9 +107,10 @@ Only GitHub Container Registry (`ghcr.io`) is supported.
       pr123
       demo
 
-    # Architectures of a native multi-arch build, each run on a matching runner
-    # Optional. Omit for a single-architecture build; see "Example, Multi-arch Build"
-    architectures: amd64,arm64
+    # Architecture this run builds natively; must match the runner
+    # Optional. Omit (or amd64) for the canonical tags, as today. Anything else, e.g. arm64,
+    # suffixes every tag and the tag_fallback lookup with -arm64; see "Example, Multi-arch Build"
+    architecture: arm64
 
     # Paths to diff for build triggering (multiline recommended)
     # Optional, defaults to nothing, which forces a build
@@ -245,15 +246,12 @@ builds:
 
 # Example, Multi-arch Build
 
-`builder` builds for the architecture of the runner it's on. To publish one image that runs natively on both amd64 and arm64 (e.g. for developers on Apple Silicon) without QEMU emulation, set `architectures` and run `builder` once per architecture on a matching runner:
+`builder` builds for the architecture of the runner it's on, and the canonical tags (`:<pr>`, `:<sha>`, `:test`, `:prod`) are amd64, which is what OpenShift deploys. To also publish arm64 images (e.g. for developers on Apple Silicon) without QEMU emulation, add a second `builder` job on an ARM runner with `architecture: arm64`:
 
 ```yaml
 jobs:
   build:
-    strategy:
-      matrix:
-        runner: [ubuntu-24.04, ubuntu-24.04-arm]
-    runs-on: ${{ matrix.runner }}
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
@@ -261,33 +259,45 @@ jobs:
       - uses: bcgov/actions/builder@vX.Y.Z
         with:
           package: backend
-          architectures: amd64,arm64
           tag_fallback: test
           triggers: |
             backend/
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-24.04
+  build-arm64:
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
-      packages: read
-      pull-requests: read
+      packages: write
     steps:
-      - uses: actions/checkout@v7
-      - id: image
-        uses: bcgov/actions/image-tracker@vX.Y.Z
+      - uses: bcgov/actions/builder@vX.Y.Z
         with:
           package: backend
-      - run: echo "Deploying ${{ steps.image.outputs.image }}"
+          architecture: arm64
+          tag_fallback: test
+          triggers: |
+            backend/
 ```
 
-- Each run tags its image with its runner's architecture (`<pr>-amd64`, `<sha>-amd64`, ...), so the runs never overwrite each other's tags, including the commit SHA tag.
-- The last run to finish sees every architecture's image for the commit and merges them into the plain tags (`<pr>`, `<sha>`) as one multi-architecture index. Earlier runs log that they're waiting on the others. If two runs finish together and both merge, they publish the same images, so the result is the same.
-- `builder`'s `digest` output is that run's architecture only. Resolve the merged multi-architecture digest with [`image-tracker`](../image-tracker/), which finds the commit SHA tag and returns the index digest, so each machine pulls its own architecture.
-- `tag_fallback` is the normal multi-architecture tag (e.g. `test`). When nothing triggers, every run retags it and the merge keeps it as is.
-- Each architecture keeps its own build cache (`buildcache-amd64`, `buildcache-arm64`).
-- A run on a runner whose architecture isn't listed fails. Fork pull requests can't push to GHCR, so the runs only validate and nothing is merged.
+- The amd64 job is unchanged: canonical tags, `digest` output and `image-tracker` all behave as before.
+- The arm64 job suffixes every tag with `-arm64` (`:<pr>-arm64`, `:<sha>-arm64`), so it can never overwrite a canonical tag. Developers pull `:<pr>-arm64`.
+- Its `tag_fallback` lookup is suffixed too (`test-arm64`). If that tag doesn't exist yet, it builds instead.
+- The arm64 job keeps its own build cache (`buildcache-arm64`), so it doesn't overwrite the amd64 one.
+- Nothing depends on the arm64 job, so an arm64 failure never blocks a deploy.
+- `architecture` must match the runner; e.g. `architecture: arm64` on an amd64 runner fails, rather than emulating.
+
+To publish one tag that runs natively on both, add [`builder-merge`](../builder-merge/) after both jobs. It combines `:<pr>` and `:<pr>-arm64` into a separate `:<pr>-multiarch` tag (and `:<sha>-multiarch`), leaving the canonical tags amd64:
+
+```yaml
+  merge:
+    needs: [build, build-arm64]
+    runs-on: ubuntu-24.04
+    permissions:
+      packages: write
+    steps:
+      - uses: bcgov/actions/builder-merge@vX.Y.Z
+        with:
+          package: backend
+```
 
 # Security Features
 
