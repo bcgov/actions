@@ -15,6 +15,16 @@ Conditional container builder with automatic tag management. Publishes to GitHub
   uses: bcgov/actions/builder@vX.Y.Z # Replace with latest release tag
 ```
 
+### [builder-merge](./builder-merge/)
+Merges per-architecture `builder` images, each built natively on its own runner, into one multi-architecture tag.
+
+```yaml
+- name: Merge Architectures
+  uses: bcgov/actions/builder-merge@vX.Y.Z # Replace with latest release tag
+  with:
+    package: backend
+```
+
 ### [diff-triggers](./diff-triggers/)
 Checks git diff for file and path changes to conditionally trigger workflow jobs.
 
@@ -105,6 +115,7 @@ In alignment with security best practices, you should always declare minimum exp
 
 Refer to each action's directory for its exact minimum required permissions block:
 - **[builder](./builder/)**: `contents: read`, `packages: write`, plus `id-token: write` and `attestations: write` (optional, for build provenance attestations)
+- **[builder-merge](./builder-merge/)**: `packages: write`
 - **[diff-triggers](./diff-triggers/)**: `contents: read`
 - **[image-tracker](./image-tracker/)**: `contents: read`, `pull-requests: read`, `packages: read`
 - **[pr-description-add](./pr-description-add/)**: `pull-requests: write`

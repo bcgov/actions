@@ -34,6 +34,11 @@ inputs:
         pr123
         demo
         test
+  tag_suffix:
+    description: |
+      Suffix appended to every tag, including the source commit SHA; e.g. -amd64.
+      For building each architecture on its own runner without the builds overwriting
+      each other's tags; builder-merge then publishes the plain tags as one multi-arch image.
   triggers:
     description: |
       Paths used to trigger a build. Prefer multiline:
@@ -106,6 +111,7 @@ runs:
       env:
         INPUT_PACKAGE: ${{ inputs.package }}
         INPUT_TAGS: ${{ inputs.tags }}
+        INPUT_TAG_SUFFIX: ${{ inputs.tag_suffix }}
         INPUT_REPOSITORY: ${{ inputs.repository }}
         EVENT_NAME: ${{ github.event_name }}
         GH_REPOSITORY: ${{ github.repository }}
@@ -132,6 +138,10 @@ runs:
           echo "::error::Required input 'tags' was not provided (and no pull request number is available for event '${EVENT_NAME}'). Please provide explicit 'tags'."
           exit 1
         fi
+        if ! valid_tag_suffix "${INPUT_TAG_SUFFIX}"; then
+          echo "::error::Input 'tag_suffix' (${INPUT_TAG_SUFFIX}) may only contain letters, digits, '.', '_' and '-'."
+          exit 1
+        fi
 
         publish_repo="$(publish_repository "${EVENT_NAME}" "${GH_REPOSITORY}" "${HEAD_REPO}")"
         publish_name="${publish_repo##*/}"
@@ -144,6 +154,7 @@ runs:
           sha="$(source_sha "${HEAD_SHA}" "${EVENT_SHA}")"
           tags="$(merge_sha_tag "${INPUT_TAGS}" "${sha}")"
         fi
+        tags="$(apply_tag_suffix "${tags}" "${INPUT_TAG_SUFFIX}")"
 
         if can_push_packages "${EVENT_NAME}" "${GH_REPOSITORY}" "${HEAD_REPO}"; then
           can_push=true
@@ -285,6 +296,7 @@ runs:
       shell: bash
       env:
         INPUT_TAGS: ${{ inputs.tags }}
+        INPUT_TAG_SUFFIX: ${{ inputs.tag_suffix }}
         INPUT_REPOSITORY: ${{ inputs.repository }}
         GH_REPOSITORY: ${{ github.repository }}
         WORKFLOW_SHA: ${{ steps.vars.outputs.source_sha }}
@@ -298,7 +310,7 @@ runs:
         else
           sha="${WORKFLOW_SHA}"
         fi
-        tags="$(merge_sha_tag "${INPUT_TAGS}" "${sha}")"
+        tags="$(apply_tag_suffix "$(merge_sha_tag "${INPUT_TAGS}" "${sha}")" "${INPUT_TAG_SUFFIX}")"
         echo "source_sha=${sha}" >> "$GITHUB_OUTPUT"
         {
           echo "tags<<EOF"

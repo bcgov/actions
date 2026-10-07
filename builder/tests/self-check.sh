@@ -59,6 +59,14 @@ assert_eq "$(merge_sha_tag $'abcdef\n123\n' abcdef)" $'abcdef\n123' "merge_sha_t
 assert_eq "$(merge_sha_tag '' abcdef)" "abcdef" "merge_sha_tag works when tags are empty (push)"
 assert_eq "$(merge_sha_tag $'PR-123\n' ABCDEF)" $'pr-123\nabcdef' "merge_sha_tag lowercases"
 
+assert_eq "$(apply_tag_suffix $'123\nabcdef' -amd64)" $'123-amd64\nabcdef-amd64' "apply_tag_suffix suffixes every tag, SHA included"
+assert_eq "$(apply_tag_suffix $'123\n\nabcdef\n' -ARM64)" $'123-arm64\nabcdef-arm64' "apply_tag_suffix drops empty lines and lowercases the suffix"
+assert_eq "$(apply_tag_suffix $'123\nabcdef' '')" $'123\nabcdef' "apply_tag_suffix is a no-op without a suffix"
+assert_eq "$(valid_tag_suffix -amd64 && echo yes || echo no)" "yes" "valid_tag_suffix accepts -amd64"
+assert_eq "$(valid_tag_suffix '' && echo yes || echo no)" "yes" "valid_tag_suffix accepts empty"
+assert_eq "$(valid_tag_suffix ':evil' && echo yes || echo no)" "no" "valid_tag_suffix rejects ':'"
+assert_eq "$(valid_tag_suffix $'-a\nb' && echo yes || echo no)" "no" "valid_tag_suffix rejects newlines"
+
 assert_eq "$(publish_repository push bcgov/actions '')" "bcgov/actions" "push publishes to workflow repo"
 assert_eq "$(publish_repository pull_request bcgov/actions bcgov/actions)" "bcgov/actions" "same-repo PR publishes to workflow repo"
 assert_eq "$(publish_repository pull_request bcgov/actions fork/actions)" "fork/actions" "fork PR targets fork GHCR"

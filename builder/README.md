@@ -107,6 +107,11 @@ Only GitHub Container Registry (`ghcr.io`) is supported.
       pr123
       demo
 
+    # Suffix appended to every tag, including the source commit SHA
+    # Optional. For native per-architecture builds merged by builder-merge;
+    # see "Example, Multi-arch Build"
+    tag_suffix: -amd64
+
     # Paths to diff for build triggering (multiline recommended)
     # Optional, defaults to nothing, which forces a build
     triggers: |
@@ -238,6 +243,52 @@ builds:
         triggers: ${{ matrix.triggers }}
 
 ```
+
+# Example, Multi-arch Build
+
+`builder` builds for the architecture of the runner it's on. To publish one image that runs natively on both amd64 and arm64 (e.g. for developers on Apple Silicon) without QEMU emulation, run `builder` once per architecture on a native runner with a `tag_suffix`, then merge the results into one multi-architecture tag with [`builder-merge`](../builder-merge/):
+
+```yaml
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: bcgov/actions/builder@vX.Y.Z
+        with:
+          package: backend
+          tag_suffix: -${{ matrix.arch }}
+          tag_fallback: test
+          triggers: |
+            backend/
+
+  merge:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      packages: write
+    outputs:
+      digest: ${{ steps.merge.outputs.digest }}
+    steps:
+      - id: merge
+        uses: bcgov/actions/builder-merge@vX.Y.Z
+        with:
+          package: backend
+```
+
+- Each build pushes its tags with the suffix (`<pr>-amd64`, `<sha>-amd64`, ...), so the two builds never overwrite each other's tags, including the commit SHA tag.
+- `builder-merge` publishes the plain tags (`<pr>`, `<sha>`) as one multi-architecture index. Deploy with its `digest` output, not either build's.
+- `tag_fallback` is the normal multi-architecture tag (e.g. `test`). When nothing triggers, both builds retag it and `builder-merge` keeps it as is.
+- Fork pull requests can't push to GHCR, so the builds only validate and `builder-merge` skips with a notice.
 
 # Security Features
 

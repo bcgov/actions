@@ -68,6 +68,27 @@ EOF
   fi
 }
 
+# apply_tag_suffix TAGS_MULTILINE SUFFIX
+# Prints each non-empty tag with SUFFIX appended (e.g. -amd64), so per-architecture
+# builds of one commit don't overwrite each other's tags. Empty SUFFIX is a no-op.
+apply_tag_suffix() {
+  local tags="$1"
+  local suffix="${2,,}"
+  local line
+  while IFS= read -r line || [ -n "$line" ]; do
+    [ -z "$line" ] && continue
+    printf '%s%s\n' "$line" "$suffix"
+  done <<EOF
+${tags}
+EOF
+}
+
+# valid_tag_suffix SUFFIX
+# True when SUFFIX is empty or only uses characters allowed in an image tag.
+valid_tag_suffix() {
+  [[ "$1" =~ ^[A-Za-z0-9._-]*$ ]]
+}
+
 # is_external_repository INPUT_REPOSITORY GH_REPOSITORY
 # True when building from a different repo than the workflow context.
 is_external_repository() {
