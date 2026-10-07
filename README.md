@@ -15,17 +15,7 @@ Conditional container builder with automatic tag management. Publishes to GitHub
   uses: bcgov/actions/builder@vX.Y.Z # Replace with latest release tag
 ```
 
-To also publish arm64 images, run `builder` again on an ARM runner with `architecture: arm64`; its tags get an `-arm64` suffix, so the canonical tags stay amd64. See [Multi-arch builds](./builder/README.md#example-multi-arch-build).
-
-### [builder-merge](./builder-merge/)
-Combines `builder`'s canonical amd64 image and its `-arm64` images into a separate multi-architecture tag (`:<pr>-multiarch`), leaving the canonical tags amd64.
-
-```yaml
-- name: Merge Architectures
-  uses: bcgov/actions/builder-merge@vX.Y.Z # Replace with latest release tag
-  with:
-    package: backend
-```
+To also publish arm64 images, run `builder` again on an ARM runner with `architecture: arm64`. It publishes to its own package (e.g. `backend-arm64`), so the deploy package stays amd64. See [Multi-arch builds](./builder/README.md#example-multi-arch-build).
 
 ### [diff-triggers](./diff-triggers/)
 Checks git diff for file and path changes to conditionally trigger workflow jobs.
@@ -117,7 +107,6 @@ In alignment with security best practices, you should always declare minimum exp
 
 Refer to each action's directory for its exact minimum required permissions block:
 - **[builder](./builder/)**: `contents: read`, `packages: write`, plus `id-token: write` and `attestations: write` (optional, for build provenance attestations)
-- **[builder-merge](./builder-merge/)**: `packages: write`
 - **[diff-triggers](./diff-triggers/)**: `contents: read`
 - **[image-tracker](./image-tracker/)**: `contents: read`, `pull-requests: read`, `packages: read`
 - **[pr-description-add](./pr-description-add/)**: `pull-requests: write`

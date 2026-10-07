@@ -37,10 +37,10 @@ inputs:
   architecture:
     description: |
       Architecture this run builds natively; must match the runner (no QEMU emulation).
-      Omit or amd64: publishes the canonical tags (:123, :<sha>), as today.
-      Anything else, e.g. arm64 on an ubuntu-24.04-arm runner: suffixes every tag and the
-      tag_fallback lookup with -<architecture> (:123-arm64, :<sha>-arm64), so it never
-      touches the canonical tags. See builder-merge to combine them into one multi-arch tag.
+      Omit (or amd64) to publish <package> exactly as before.
+      Set another architecture, e.g. arm64 on an ubuntu-24.04-arm runner, to publish to the
+      separate <package>-<architecture> package (backend-arm64) with the usual tags, so it never
+      touches the deploy package. A non-amd64 runner must set it.
   triggers:
     description: |
       Paths used to trigger a build. Prefer multiline:
@@ -142,23 +142,27 @@ runs:
           exit 1
         fi
 
-        # amd64 (or unset) owns the canonical tags. Any other architecture builds natively on a
-        # matching runner and suffixes every tag with -<arch>, so it never touches them.
-        tag_suffix="$(architecture_tag_suffix "${INPUT_ARCHITECTURE}")" || {
+        # amd64 publishes <package> as always. Other architectures publish their own package
+        # (<package>-arm64), so image-tracker lookups for <package> never see them. The
+        # architecture must match the runner, and a non-amd64 runner must set it, so an ARM
+        # image can never land in the deploy package.
+        runner_arch="$(normalize_arch "${RUNNER_ARCH}")"
+        if ! package="$(architecture_package "${INPUT_PACKAGE}" "${INPUT_ARCHITECTURE}")"; then
           echo "::error::Input 'architecture' (${INPUT_ARCHITECTURE}) must be one architecture name, e.g. amd64 or arm64."
           exit 1
-        }
-        if [ -n "${INPUT_ARCHITECTURE}" ]; then
-          runner_arch="$(normalize_arch "${RUNNER_ARCH}")"
-          if [ "${runner_arch}" != "$(normalize_arch "${INPUT_ARCHITECTURE}")" ]; then
-            echo "::error::architecture is ${INPUT_ARCHITECTURE}, but this runner is ${runner_arch}. Build each architecture on a matching runner (e.g. ubuntu-24.04-arm for arm64)."
-            exit 1
-          fi
+        fi
+        if [ -n "${INPUT_ARCHITECTURE}" ] && [ "$(normalize_arch "${INPUT_ARCHITECTURE}")" != "${runner_arch}" ]; then
+          echo "::error::architecture is ${INPUT_ARCHITECTURE}, but this runner is ${runner_arch}. Build each architecture on a matching runner, e.g. ubuntu-24.04-arm for arm64."
+          exit 1
+        fi
+        if [ -z "${INPUT_ARCHITECTURE}" ] && [ "${runner_arch}" != "amd64" ]; then
+          echo "::error::This runner is ${runner_arch}. Set architecture: ${runner_arch} to publish ${INPUT_PACKAGE}-${runner_arch}; without it, a ${runner_arch} image would be pushed to the deploy package ${INPUT_PACKAGE}."
+          exit 1
         fi
 
         publish_repo="$(publish_repository "${EVENT_NAME}" "${GH_REPOSITORY}" "${HEAD_REPO}")"
         publish_name="${publish_repo##*/}"
-        image_path="$(image_path_for "${INPUT_PACKAGE}" "${publish_repo}" "${publish_name}")"
+        image_path="$(image_path_for "${package}" "${publish_repo}" "${publish_name}")"
         if is_external_repository "${INPUT_REPOSITORY}" "${GH_REPOSITORY}"; then
           # External checkouts resolve their own SHA after clone (see Resolve source SHA).
           sha=""
@@ -167,7 +171,6 @@ runs:
           sha="$(source_sha "${HEAD_SHA}" "${EVENT_SHA}")"
           tags="$(merge_sha_tag "${INPUT_TAGS}" "${sha}")"
         fi
-        tags="$(apply_tag_suffix "${tags}" "${tag_suffix}")"
 
         if can_push_packages "${EVENT_NAME}" "${GH_REPOSITORY}" "${HEAD_REPO}"; then
           can_push=true
@@ -175,12 +178,12 @@ runs:
           can_push=false
         fi
 
+        echo "package=${package}" >> "$GITHUB_OUTPUT"
         echo "image_path=${image_path}" >> "$GITHUB_OUTPUT"
         echo "image_name=${registry}/${image_path}" >> "$GITHUB_OUTPUT"
         echo "registry_host=${registry}" >> "$GITHUB_OUTPUT"
         echo "source_sha=${sha}" >> "$GITHUB_OUTPUT"
         echo "can_push=${can_push}" >> "$GITHUB_OUTPUT"
-        echo "tag_suffix=${tag_suffix}" >> "$GITHUB_OUTPUT"
         {
           echo "tags<<EOF"
           printf '%s\n' "${tags}"
@@ -221,8 +224,7 @@ runs:
     # Check if a build is required (steps.build.outputs.triggered=true|false)
     - name: Check for builds
       env:
-        # Non-amd64 runs fall back to their own architecture's tag, e.g. test-arm64
-        URL_FALLBACK: ${{ steps.vars.outputs.registry_host }}/${{ steps.vars.outputs.image_path }}:${{ inputs.tag_fallback }}${{ steps.vars.outputs.tag_suffix }}
+        URL_FALLBACK: ${{ steps.vars.outputs.registry_host }}/${{ steps.vars.outputs.image_path }}:${{ inputs.tag_fallback }}
       id: build
       shell: bash
       run: |
@@ -276,7 +278,7 @@ runs:
       with:
         registry: ${{ steps.vars.outputs.registry_host }}
         repository: ${{ steps.vars.outputs.image_path }}
-        target: ${{ inputs.tag_fallback }}${{ steps.vars.outputs.tag_suffix }}
+        target: ${{ inputs.tag_fallback }}
         tags: |
           ${{ steps.vars.outputs.tags }}
         token: ${{ inputs.token }}
@@ -311,7 +313,6 @@ runs:
       shell: bash
       env:
         INPUT_TAGS: ${{ inputs.tags }}
-        TAG_SUFFIX: ${{ steps.vars.outputs.tag_suffix }}
         INPUT_REPOSITORY: ${{ inputs.repository }}
         GH_REPOSITORY: ${{ github.repository }}
         WORKFLOW_SHA: ${{ steps.vars.outputs.source_sha }}
@@ -325,7 +326,7 @@ runs:
         else
           sha="${WORKFLOW_SHA}"
         fi
-        tags="$(apply_tag_suffix "$(merge_sha_tag "${INPUT_TAGS}" "${sha}")" "${TAG_SUFFIX}")"
+        tags="$(merge_sha_tag "${INPUT_TAGS}" "${sha}")"
         echo "source_sha=${sha}" >> "$GITHUB_OUTPUT"
         {
           echo "tags<<EOF"
@@ -398,9 +399,8 @@ runs:
         tags: ${{ steps.tags.outputs.final_tags }}
         labels: ${{ steps.tags.outputs.labels }}
         annotations: ${{ steps.tags.outputs.annotations }}
-        # Non-amd64 runs keep their own cache (buildcache-arm64) so they don't overwrite the amd64 one
-        cache-from: type=registry,ref=${{ steps.vars.outputs.registry_host }}/${{ steps.vars.outputs.image_path }}:buildcache${{ steps.vars.outputs.tag_suffix }}
-        cache-to: ${{ steps.vars.outputs.can_push == 'true' && format('type=registry,ref={0}/{1}:buildcache{2},mode=max', steps.vars.outputs.registry_host, steps.vars.outputs.image_path, steps.vars.outputs.tag_suffix) || '' }}
+        cache-from: type=registry,ref=${{ steps.vars.outputs.registry_host }}/${{ steps.vars.outputs.image_path }}:buildcache
+        cache-to: ${{ steps.vars.outputs.can_push == 'true' && format('type=registry,ref={0}/{1}:buildcache,mode=max', steps.vars.outputs.registry_host, steps.vars.outputs.image_path) || '' }}
         build-args: ${{ inputs.build_args }}
         secrets: |
           ${{ inputs.secrets }}
@@ -429,7 +429,8 @@ runs:
         curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
 
         IMAGE="${{ steps.vars.outputs.registry_host }}/${{ steps.vars.outputs.image_path }}@${{ steps.build_and_push.outputs.digest }}"
-        PACKAGE_SANITIZED=$(echo "${{ inputs.package }}" | tr '/:' '-' | tr -d ' ')
+        # The published package (backend-arm64), so per-architecture SBOM artifacts don't collide
+        PACKAGE_SANITIZED=$(echo "${{ steps.vars.outputs.package }}" | tr '/:' '-' | tr -d ' ')
         echo "package_sanitized=${PACKAGE_SANITIZED}" >> $GITHUB_OUTPUT
 
         mkdir -p sboms
@@ -554,8 +555,8 @@ runs:
             echo "> Attestation failed. Check logs for details." >> $GITHUB_STEP_SUMMARY
           fi
         else
-          echo "retagged: ${{ inputs.tag_fallback }}${{ steps.vars.outputs.tag_suffix }} -> ${{ steps.vars.outputs.tags }}"
-          echo "| **retagged** | \`${{ inputs.tag_fallback }}${{ steps.vars.outputs.tag_suffix }} -> ${{ steps.vars.outputs.tags }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "retagged: ${{ inputs.tag_fallback }} -> ${{ steps.vars.outputs.tags }}"
+          echo "| **retagged** | \`${{ inputs.tag_fallback }} -> ${{ steps.vars.outputs.tags }}\` |" >> $GITHUB_STEP_SUMMARY
         fi
         echo "-----------------------"
 

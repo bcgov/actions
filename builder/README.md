@@ -108,8 +108,8 @@ Only GitHub Container Registry (`ghcr.io`) is supported.
       demo
 
     # Architecture this run builds natively; must match the runner
-    # Optional. Omit (or amd64) for the canonical tags, as today. Anything else, e.g. arm64,
-    # suffixes every tag and the tag_fallback lookup with -arm64; see "Example, Multi-arch Build"
+    # Optional. Omit (or amd64) to publish <package> as today. arm64 publishes the separate
+    # <package>-arm64 package; a non-amd64 runner must set it. See "Example, Multi-arch Build"
     architecture: arm64
 
     # Paths to diff for build triggering (multiline recommended)
@@ -246,7 +246,7 @@ builds:
 
 # Example, Multi-arch Build
 
-`builder` builds for the architecture of the runner it's on, and the canonical tags (`:<pr>`, `:<sha>`, `:test`, `:prod`) are amd64, which is what OpenShift deploys. To also publish arm64 images (e.g. for developers on Apple Silicon) without QEMU emulation, add a second `builder` job on an ARM runner with `architecture: arm64`:
+`builder` builds for the architecture of the runner it's on, and the deploy package (e.g. `backend`) is amd64, which is what OpenShift deploys. To also publish arm64 images (e.g. for developers on Apple Silicon) without QEMU emulation, add a second `builder` job on an ARM runner with `architecture: arm64`. It publishes to its own package, `backend-arm64`:
 
 ```yaml
 jobs:
@@ -273,31 +273,16 @@ jobs:
         with:
           package: backend
           architecture: arm64
-          tag_fallback: test
+          tag_fallback: latest
           triggers: |
             backend/
 ```
 
-- The amd64 job is unchanged: canonical tags, `digest` output and `image-tracker` all behave as before.
-- The arm64 job suffixes every tag with `-arm64` (`:<pr>-arm64`, `:<sha>-arm64`), so it can never overwrite a canonical tag. Developers pull `:<pr>-arm64`.
-- Its `tag_fallback` lookup is suffixed too (`test-arm64`). If that tag doesn't exist yet, it builds instead.
-- The arm64 job keeps its own build cache (`buildcache-arm64`), so it doesn't overwrite the amd64 one.
-- Nothing depends on the arm64 job, so an arm64 failure never blocks a deploy.
-- `architecture` must match the runner; e.g. `architecture: arm64` on an amd64 runner fails, rather than emulating.
-
-To publish one tag that runs natively on both, add [`builder-merge`](../builder-merge/) after both jobs. It combines `:<pr>` and `:<pr>-arm64` into a separate `:<pr>-multiarch` tag (and `:<sha>-multiarch`), leaving the canonical tags amd64:
-
-```yaml
-  merge:
-    needs: [build, build-arm64]
-    runs-on: ubuntu-24.04
-    permissions:
-      packages: write
-    steps:
-      - uses: bcgov/actions/builder-merge@vX.Y.Z
-        with:
-          package: backend
-```
+- The amd64 job is unchanged: it publishes `backend:<pr>` and `backend:<sha>`, and `digest` and `image-tracker` behave as before.
+- The arm64 job publishes the same tags to `backend-arm64` (`backend-arm64:<pr>`, `backend-arm64:<sha>`). `image-tracker` lookups for `backend` never open that package, and developers pull `backend-arm64:<pr>`.
+- Build cache and `tag_fallback` are per package, so the arm64 job uses its own (`backend-arm64:buildcache`, `backend-arm64:latest`). If its fallback tag doesn't exist yet, it builds instead.
+- Leave the arm64 job out of the deploy job's `needs`, so an arm64 failure never blocks a deploy.
+- `architecture` must match the runner: `architecture: arm64` on an amd64 runner fails rather than emulating. A non-amd64 runner without `architecture` also fails, rather than pushing an ARM image to the deploy package.
 
 # Security Features
 

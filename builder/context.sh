@@ -68,41 +68,29 @@ EOF
   fi
 }
 
-# apply_tag_suffix TAGS_MULTILINE SUFFIX
-# Prints each non-empty tag with SUFFIX appended (e.g. -amd64), so per-architecture
-# builds of one commit don't overwrite each other's tags. Empty SUFFIX is a no-op.
-apply_tag_suffix() {
-  local tags="$1"
-  local suffix="${2,,}"
-  local line
-  while IFS= read -r line || [ -n "$line" ]; do
-    [ -z "$line" ] && continue
-    printf '%s%s\n' "$line" "$suffix"
-  done <<EOF
-${tags}
-EOF
-}
-
-# architecture_tag_suffix ARCHITECTURE
-# Prints the tag suffix for an architecture: nothing for amd64 or unset (the canonical tags),
-# otherwise -<arch>, e.g. -arm64. Fails unless ARCHITECTURE is a single architecture name.
-architecture_tag_suffix() {
-  local arch
-  arch="$(normalize_arch "$1")"
-  [ -z "$arch" ] && return 0
-  [[ "$arch" =~ ^[a-z0-9]+$ ]] || return 1
-  [ "$arch" = "amd64" ] && return 0
-  printf -- '-%s\n' "$arch"
-}
-
-# normalize_arch RUNNER_ARCH
-# Maps runner.arch (X64, ARM64) to the image architecture name (amd64, arm64).
+# normalize_arch ARCH
+# Maps runner.arch (X64, ARM64) and common aliases to image architecture names (amd64, arm64).
 normalize_arch() {
   case "${1,,}" in
     x64 | amd64 | x86_64) printf 'amd64\n' ;;
     arm64 | aarch64) printf 'arm64\n' ;;
     *) printf '%s\n' "${1,,}" ;;
   esac
+}
+
+# architecture_package PACKAGE ARCHITECTURE
+# Prints the package to publish: PACKAGE for amd64 or unset (the deploy package), otherwise
+# PACKAGE-<arch>, e.g. backend-arm64. Fails unless ARCHITECTURE is a single architecture name.
+architecture_package() {
+  local package="$1"
+  local arch
+  arch="$(normalize_arch "$2")"
+  if [ -z "$arch" ] || [ "$arch" = "amd64" ]; then
+    printf '%s\n' "$package"
+    return 0
+  fi
+  [[ "$arch" =~ ^[a-z0-9]+$ ]] || return 1
+  printf '%s-%s\n' "$package" "$arch"
 }
 
 # is_external_repository INPUT_REPOSITORY GH_REPOSITORY

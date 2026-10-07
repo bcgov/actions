@@ -41,13 +41,6 @@ inputs:
       Max commits of git ancestry to search. Default 1 (the target revision only).
       Raise this to reuse an older image for a package that was not rebuilt.
     default: '1'
-  architecture:
-    description: |
-      Only resolve images for this architecture (the deploy platform). A
-      multi-arch image must include it; a single-arch image must be it. Images
-      for other architectures with the same revision label, e.g. builder's
-      -arm64 tags, are skipped. Images whose architecture is unknown are accepted.
-    default: 'amd64'
   tags:
     description: |
       Optional tags (one per line) to apply to every resolved digest, e.g. the

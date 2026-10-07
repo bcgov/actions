@@ -31,7 +31,6 @@ jobs:
           filters: |
             builder:
               - 'builder/**'
-              - 'builder-merge/**'
             scan-url:
               - 'scan-url/**'
             diff-triggers:
@@ -183,11 +182,11 @@ jobs:
             builder/
             .github/workflows/
 
-  # Tag isolation: amd64 publishes the canonical tags as before; arm64 runs natively on its own
-  # runner and only ever writes -arm64 tags. builder-merge then publishes a separate -multiarch tag.
-  # Chain: build -> verify + merge -> fallback build -> fallback verify.
+  # Separate package per architecture: amd64 publishes <package> exactly as before; arm64 builds
+  # natively on an ARM runner and publishes <package>-arm64, which image-tracker never opens.
+  # Chain: build -> verify -> fallback build -> fallback verify.
   test-builder-multiarch:
-    name: Test Builder Multi-arch (Build ${{ matrix.arch }})
+    name: Test Builder Multi-arch (Build ${{ matrix.runner }})
     needs: [filter]
     if: contains(fromJSON(needs.filter.outputs.changes), 'builder') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
     runs-on: ${{ matrix.runner }}
@@ -197,30 +196,48 @@ jobs:
     strategy:
       matrix:
         include:
-          - arch: amd64
-            runner: ubuntu-24.04
-          - arch: arm64
-            runner: ubuntu-24.04-arm
+          # Unset on amd64: the deploy package, exactly as today
+          - runner: ubuntu-24.04
+            architecture: ''
+          - runner: ubuntu-24.04-arm
+            architecture: arm64
     steps:
       - uses: $/builder
         with:
           package: builder-multiarch-selftest
           build_context: builder/tests
           build_file: builder/tests/Dockerfile
-          # amd64 is the default; set it on the amd64 leg too, to cover the explicit value
-          architecture: ${{ matrix.arch }}
+          architecture: ${{ matrix.architecture }}
           tags: ${{ github.event.number || github.run_id }}-native
           sbom: 'false'
 
+      # An ARM runner without architecture must fail rather than push to the deploy package
+      - name: ARM runner without architecture
+        id: unset
+        if: matrix.architecture == 'arm64'
+        continue-on-error: true
+        uses: $/builder
+        with:
+          package: builder-multiarch-selftest
+          build_context: builder/tests
+          build_file: builder/tests/Dockerfile
+          tags: ${{ github.event.number || github.run_id }}-must-not-exist
+          sbom: 'false'
+
+      - name: Verify the ARM runner without architecture failed
+        if: matrix.architecture == 'arm64'
+        run: |
+          [ "${{ steps.unset.outcome }}" = "failure" ] || { echo "::error::builder on an ARM runner without architecture should fail, got ${{ steps.unset.outcome }}"; exit 1; }
+
   test-builder-multiarch-verify:
-    name: Test Builder Multi-arch (Verify and Merge)
+    name: Test Builder Multi-arch (Verify)
     needs: [test-builder-multiarch]
     # Fork PRs build but can't push, so there's no registry image to verify
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-      packages: write
+      packages: read
       pull-requests: read
     outputs:
       amd64: ${{ steps.check.outputs.amd64 }}
@@ -238,13 +255,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
-      # Deploys resolve the canonical image this way; it must stay amd64
+      # Deploys resolve the deploy package this way, with image-tracker unchanged
       - id: tracker
         uses: $/image-tracker
         with:
           package: builder-multiarch-selftest
 
-      - name: Verify canonical tags are amd64 and -arm64 tags are arm64
+      - name: Verify the deploy package is amd64 and the -arm64 package is arm64
         id: check
         env:
           TRACKER_DIGEST: ${{ steps.tracker.outputs.digest }}
@@ -253,42 +270,24 @@ jobs:
           digest_of() { docker buildx imagetools inspect "$1" | awk '/^Digest:/ {print $2}'; }
           archs_of() { docker buildx imagetools inspect --raw "$1" | jq -c '[.manifests[]? | select(.platform.os != "unknown") | .platform.architecture] | sort'; }
           for ref in "${IMAGE}:${TAG}" "${IMAGE}:${SHA}"; do
-            [ "$(archs_of "${ref}")" = '["amd64"]' ] || { echo "::error::canonical ${ref} should be amd64 only, got $(archs_of "${ref}")"; exit 1; }
+            [ "$(archs_of "${ref}")" = '["amd64"]' ] || { echo "::error::deploy package ${ref} should be amd64 only, got $(archs_of "${ref}")"; exit 1; }
           done
-          for ref in "${IMAGE}:${TAG}-arm64" "${IMAGE}:${SHA}-arm64"; do
+          for ref in "${IMAGE}-arm64:${TAG}" "${IMAGE}-arm64:${SHA}"; do
             [ "$(archs_of "${ref}")" = '["arm64"]' ] || { echo "::error::${ref} should be arm64 only, got $(archs_of "${ref}")"; exit 1; }
           done
+          # Neither the ARM build nor the failed unset run touched the deploy package
+          if docker buildx imagetools inspect "${IMAGE}:${TAG}-arm64" >/dev/null 2>&1 || docker buildx imagetools inspect "${IMAGE}:${{ github.event.number || github.run_id }}-must-not-exist" >/dev/null 2>&1; then
+            echo "::error::an ARM image was pushed to the deploy package"; exit 1
+          fi
           amd64=$(digest_of "${IMAGE}:${TAG}")
-          [ "${TRACKER_DIGEST}" = "${amd64}" ] || { echo "::error::image-tracker resolved ${TRACKER_DIGEST}, not the canonical amd64 ${amd64}"; exit 1; }
+          [ "${TRACKER_DIGEST}" = "${amd64}" ] || { echo "::error::image-tracker resolved ${TRACKER_DIGEST}, not the amd64 ${amd64}"; exit 1; }
           echo "amd64=${amd64}" >> "${GITHUB_OUTPUT}"
-          echo "arm64=$(digest_of "${IMAGE}:${TAG}-arm64")" >> "${GITHUB_OUTPUT}"
+          echo "arm64=$(digest_of "${IMAGE}-arm64:${TAG}")" >> "${GITHUB_OUTPUT}"
+          echo "Verified ${IMAGE}:${TAG} (amd64, ${amd64}) and ${IMAGE}-arm64:${TAG} (arm64)"
 
-      - id: merge
-        uses: $/builder-merge
-        with:
-          package: builder-multiarch-selftest
-          tags: ${{ github.event.number || github.run_id }}-native
-
-      - name: Verify the -multiarch tag, and that canonical tags are untouched
-        env:
-          MERGED: ghcr.io${{ steps.merge.outputs.image_path }}
-          MERGED_DIGEST: ${{ steps.merge.outputs.digest }}
-          AMD64: ${{ steps.check.outputs.amd64 }}
-        run: |
-          set -euo pipefail
-          digest_of() { docker buildx imagetools inspect "$1" | awk '/^Digest:/ {print $2}'; }
-          archs=$(docker buildx imagetools inspect --raw "${MERGED}" | jq -c '[.manifests[]? | select(.platform.os != "unknown") | .platform.architecture] | sort')
-          [ "${archs}" = '["amd64","arm64"]' ] || { echo "::error::${MERGED} should be an amd64+arm64 index, got ${archs}"; exit 1; }
-          [ "$(digest_of "${MERGED}")" = "${MERGED_DIGEST}" ] || { echo "::error::builder-merge digest output doesn't match ${MERGED}"; exit 1; }
-          [ "$(digest_of "${IMAGE}:${SHA}-multiarch")" = "${MERGED_DIGEST}" ] || { echo "::error::${IMAGE}:${SHA}-multiarch isn't the merged index"; exit 1; }
-          for ref in "${IMAGE}:${TAG}" "${IMAGE}:${SHA}"; do
-            [ "$(digest_of "${ref}")" = "${AMD64}" ] || { echo "::error::builder-merge changed canonical ${ref}"; exit 1; }
-          done
-          echo "Verified ${MERGED}: ${archs}; canonical tags still ${AMD64}"
-
-  # No trigger path changes, so each architecture retags its own fallback (<tag> / <tag>-arm64)
+  # No trigger path changes, so each package retags its own fallback
   test-builder-multiarch-fallback:
-    name: Test Builder Multi-arch (Fallback ${{ matrix.arch }})
+    name: Test Builder Multi-arch (Fallback ${{ matrix.runner }})
     needs: [test-builder-multiarch-verify]
     runs-on: ${{ matrix.runner }}
     permissions:
@@ -297,17 +296,17 @@ jobs:
     strategy:
       matrix:
         include:
-          - arch: amd64
-            runner: ubuntu-24.04
-          - arch: arm64
-            runner: ubuntu-24.04-arm
+          - runner: ubuntu-24.04
+            architecture: ''
+          - runner: ubuntu-24.04-arm
+            architecture: arm64
     steps:
       - uses: $/builder
         with:
           package: builder-multiarch-selftest
           build_context: builder/tests
           build_file: builder/tests/Dockerfile
-          architecture: ${{ matrix.arch }}
+          architecture: ${{ matrix.architecture }}
           tags: ${{ github.event.number || github.run_id }}-native-fallback
           tag_fallback: ${{ github.event.number || github.run_id }}-native
           sbom: 'false'
@@ -327,7 +326,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
-      - name: Verify each architecture retagged its own fallback
+      - name: Verify each package retagged its own fallback
         env:
           IMAGE: ghcr.io/${{ github.repository }}/builder-multiarch-selftest
           TAG: ${{ github.event.number || github.run_id }}-native-fallback
@@ -337,8 +336,8 @@ jobs:
           set -euo pipefail
           digest_of() { docker buildx imagetools inspect "$1" | awk '/^Digest:/ {print $2}'; }
           [ "$(digest_of "${IMAGE}:${TAG}")" = "${AMD64}" ] || { echo "::error::${IMAGE}:${TAG} isn't the original amd64 ${AMD64}"; exit 1; }
-          [ "$(digest_of "${IMAGE}:${TAG}-arm64")" = "${ARM64}" ] || { echo "::error::${IMAGE}:${TAG}-arm64 isn't the original arm64 ${ARM64}"; exit 1; }
-          echo "Verified fallback: ${TAG} -> ${AMD64}, ${TAG}-arm64 -> ${ARM64}"
+          [ "$(digest_of "${IMAGE}-arm64:${TAG}")" = "${ARM64}" ] || { echo "::error::${IMAGE}-arm64:${TAG} isn't the original arm64 ${ARM64}"; exit 1; }
+          echo "Verified fallback: ${IMAGE}:${TAG} -> ${AMD64}, ${IMAGE}-arm64:${TAG} -> ${ARM64}"
 
   # ─── SCAN URL ───────────────────────────────────────────────────────────────
   test-scan-url:

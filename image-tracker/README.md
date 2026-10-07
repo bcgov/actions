@@ -31,8 +31,6 @@ revision label matches your target commit.
 
 Tag names (`sha-<7>`, `pr-123`, `latest`, etc.) are used as search hints, but the **label is the sole authority**. Even if a tag matches your SHA, the tracker will verify the internal OCI label before returning the digest.
 
-The image must also be for the `architecture` input (default `amd64`, the deploy platform): a multi-arch image must include it, and a single-arch image must be it. A commit can have images for other architectures with the same revision label, such as `builder`'s `-arm64` tags, and those are skipped, so they're never deployed by mistake. Images whose architecture is unknown are accepted.
-
 The returned digest is immutable and cryptographically verified on pull, making
 it the recommended form for deployment references.
 
@@ -159,7 +157,6 @@ be resolved, or no image exists for that revision, the action fails (`exit 1`).
 | `token`        |          | `github.token`       | GitHub token used to mint a GHCR bearer token.                                 |
 | `max_tags`   |          | `500`                | Upper bound on tags inspected per package before failing.                      |
 | `max_depth`  |          | `1`                  | Max commits of git ancestry to search. Default is this SHA only. Merge/promote must raise this (e.g. `100`) so a squash can resolve the last built image. |
-| `architecture` |        | `amd64`              | Only resolve images for this architecture (the deploy platform). Images for other architectures, e.g. `-arm64` builds of the same commit, are skipped. |
 | `tags`       |          | —                    | Tags (one per line) applied to every resolved digest. Omit to stay read-only. Needs `packages: write`. See [Tagging](#tagging). |
 
 Package-to-image-path convention:
