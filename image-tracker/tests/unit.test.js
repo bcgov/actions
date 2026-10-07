@@ -3270,7 +3270,8 @@ test('resolveDigestIterative skips a newer -arm64 image and resolves the amd64 o
   const digestOf = (ref) => `sha256:${ref.padEnd(64, '0')}`;
   const registry = archRegistry(images);
   global.fetch = async (url) => {
-    if (url.includes('api.github.com') && url.includes('/versions')) {
+    const { hostname, pathname } = new URL(url);
+    if (hostname === 'api.github.com' && pathname.endsWith('/versions')) {
       return {
         ok: true,
         json: async () => [

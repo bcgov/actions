@@ -136,16 +136,18 @@ runs:
         first=$(printf '%s\n' "${TAGS}" | head -n 1)
         digest_of() { docker buildx imagetools inspect "$1" | awk '/^Digest:/ {print $2}'; }
 
-        # The canonical amd64 image (<tag>) plus each architecture's image (<tag>-arm64)
+        # The canonical amd64 image (<tag>, empty suffix) plus each architecture's image (<tag>-arm64).
+        # Suffixes are validated single words, so word splitting is safe.
         sources=()
-        while IFS= read -r suffix; do
+        # shellcheck disable=SC2086
+        for suffix in "" ${SUFFIXES}; do
           ref="${IMAGE}:${first}${suffix}"
           if ! digest=$(digest_of "${ref}") || [ -z "${digest}" ]; then
             echo "::error::${ref} not found. Did builder run${suffix:+ with architecture: ${suffix#-}} for this commit?"
             exit 1
           fi
           sources+=("${IMAGE}@${digest}")
-        done < <(printf '\n%s' "${SUFFIXES}")
+        done
 
         # Separate -multiarch tags only; the canonical tags stay amd64 for deploys
         args=()
