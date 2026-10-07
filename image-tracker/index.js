@@ -582,7 +582,8 @@ async function probeTag(
   prMergeMap = {},
   token = null,
   sourceRepository = '',
-  diagnostics = null
+  diagnostics = null,
+  architecture = 'amd64'
 ) {
   const base = `https://${registry}/v2/${imagePath}`;
   const accept =
@@ -635,13 +636,21 @@ async function probeTag(
     let version = body.annotations?.['org.opencontainers.image.version'] || '';
     let source = body.annotations?.['org.opencontainers.image.source'] || '';
 
+    // Only images for the deploy architecture can resolve: the same commit can also have images for
+    // other architectures (e.g. builder's -arm64 tags) carrying the same revision label.
+    // Set when the image's architecture is known and isn't the wanted one; unknown is accepted.
+    let archMismatch = '';
+    const isIndex = mtype.includes('index') || mtype.includes('manifest.list');
+
     // Multi-arch Index Navigation
-    if (mtype.includes('index') || mtype.includes('manifest.list')) {
+    if (isIndex) {
       const manifests = body.manifests || [];
-      const amd64 = manifests.find(
-        (m) => m.platform?.architecture === 'amd64' && (m.platform?.os || '') !== 'unknown'
-      );
-      const childDigest = amd64?.digest || manifests[0]?.digest;
+      const platforms = manifests.filter((m) => m.platform && (m.platform.os || '') !== 'unknown');
+      const wanted = platforms.find((m) => m.platform.architecture === architecture);
+      if (platforms.length > 0 && !wanted) {
+        archMismatch = `Index has ${platforms.map((m) => m.platform.architecture).join(', ')}, not ${architecture}`;
+      }
+      const childDigest = wanted?.digest || manifests[0]?.digest;
 
       if (childDigest) {
         const acceptManifest =
@@ -688,13 +697,16 @@ async function probeTag(
       }
     }
 
-    // Config Blob Fallback
-    if (!revision || !version || !source) {
+    // Config Blob Fallback (always read for single-architecture images, for their architecture)
+    if (!isIndex || !revision || !version || !source) {
       const configDigest = body.config?.digest;
       if (configDigest) {
         const blobRes = await fetch(`${base}/blobs/${configDigest}`, { headers });
         if (blobRes.ok) {
           const configObj = await blobRes.json();
+          if (!isIndex && configObj.architecture && configObj.architecture !== architecture) {
+            archMismatch = `Image is ${configObj.architecture}, not ${architecture}`;
+          }
           if (!revision) {
             revision = configObj.config?.Labels?.['org.opencontainers.image.revision'] || '';
           }
@@ -709,6 +721,20 @@ async function probeTag(
           }
         }
       }
+    }
+
+    if (archMismatch) {
+      logDebug(`Skipping ${tag} (${finalDigest}): ${archMismatch}`, debug);
+      if (diagnostics) {
+        diagnostics.set(tag, {
+          tag,
+          status: 200,
+          statusText: 'OK',
+          reason: 'Architecture mismatch',
+          details: archMismatch
+        });
+      }
+      return null;
     }
 
     const prMatch = tag.match(/^pr-([0-9]+)$/) || tag.match(/^([0-9]+)$/);
@@ -941,7 +967,8 @@ async function resolveDigestIterative({
   debug = false,
   prMergeMap = {},
   sourceRepository = '',
-  diagnostics = null
+  diagnostics = null,
+  architecture = 'amd64'
 }) {
   const owner = repository.split('/')[0];
   const pkg = imagePath.split('/').slice(1).join('/') || imagePath;
@@ -1005,7 +1032,9 @@ async function resolveDigestIterative({
         debug,
         prMergeMap,
         token,
-        sourceRepository
+        sourceRepository,
+        null,
+        architecture
       );
       if (res) return { hit: res, code: 0 };
     }
@@ -1039,7 +1068,9 @@ async function resolveDigestIterative({
           debug,
           prMergeMap,
           token,
-          sourceRepository
+          sourceRepository,
+          null,
+          architecture
         );
         if (res) return { hit: res, code: 0 };
       }
@@ -1139,6 +1170,7 @@ function generateGuidance({
   let hasRevisionMismatch = false;
   let hasMissingLabel = false;
   let hasSourceMismatch = false;
+  let hasArchMismatch = false;
   let hasAuthError = false;
   let totalProbes = 0;
 
@@ -1167,6 +1199,9 @@ function generateGuidance({
         }
         if (info.reason === 'Source repository mismatch') {
           hasSourceMismatch = true;
+        }
+        if (info.reason === 'Architecture mismatch') {
+          hasArchMismatch = true;
         }
       }
     }
@@ -1232,6 +1267,17 @@ function generateGuidance({
       subItems: [
         'Image-tracker strictly rejects images from mismatched source repositories to prevent cross-repository supply-chain attacks.',
         `Verify that the image was built and published from the expected repository: '${sourceRepository}'.`
+      ]
+    });
+  }
+
+  if (hasArchMismatch) {
+    items.push({
+      title: 'Architecture Mismatch',
+      message: 'An image exists for this commit, but not for the `architecture` input (default `amd64`).',
+      subItems: [
+        'Images for other architectures (e.g. builder `-arm64` tags) are skipped so they are never deployed by mistake.',
+        'Verify the canonical (amd64) build ran, or set `architecture` to resolve another architecture on purpose.'
       ]
     });
   }
@@ -1511,7 +1557,12 @@ async function runMain() {
   const maxTagsStr = env.MAX_TAGS || env.INPUT_MAX_TAGS || '500';
   const maxDepthStr = env.MAX_DEPTH || env.INPUT_MAX_DEPTH || '1';
   const debug = env.DEBUG || env.INPUT_DEBUG || 'false';
+  const architecture = (env.ARCHITECTURE || env.INPUT_ARCHITECTURE || 'amd64').trim().toLowerCase();
 
+  if (!/^[a-z0-9]+$/.test(architecture)) {
+    logError(`ARCHITECTURE must be a single architecture name, e.g. amd64 (got '${architecture}').`);
+    process.exit(1);
+  }
   if (!/^\d+$/.test(maxTagsStr) || parseInt(maxTagsStr, 10) <= 0) {
     logError('MAX_TAGS must be a positive integer.');
     process.exit(1);
@@ -1810,7 +1861,8 @@ async function runMain() {
           prMergeMap,
           token,
           sourceRepository,
-          pkgDiag.probedTags
+          pkgDiag.probedTags,
+          architecture
         );
         if (res) break;
       }
@@ -1835,7 +1887,8 @@ async function runMain() {
         debug,
         prMergeMap,
         sourceRepository,
-        diagnostics: pkgDiag
+        diagnostics: pkgDiag,
+        architecture
       });
 
       if (iterRes.code === 2) {
