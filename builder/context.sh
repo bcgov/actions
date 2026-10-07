@@ -13,16 +13,25 @@ ghcr_package() {
   esac
 }
 
-# arm64_runner_ok ARCHITECTURE RUNNER_ARCH
-# Exits 0 unless ARCHITECTURE is arm64, which requires an arm64 runner.
-# Empty and amd64 do not consult the runner, so existing jobs stay valid.
-arm64_runner_ok() {
-  case "${1,,}" in
-    arm64) ;;
-    *) return 0 ;;
-  esac
-  case "${2,,}" in
-    arm64 | aarch64) return 0 ;;
+# runner_matches ARCHITECTURE RUNNER_ARCH
+# Deploy packages are amd64. Empty and amd64 require an amd64 runner.
+# arm64 is only the Mac/Podman package, and it requires an arm64 runner.
+runner_matches() {
+  local arch="${1,,}"
+  local runner="${2,,}"
+  case "$arch" in
+    '' | amd64)
+      case "$runner" in
+        x64 | amd64 | x86_64) return 0 ;;
+        *) return 1 ;;
+      esac
+      ;;
+    arm64)
+      case "$runner" in
+        arm64 | aarch64) return 0 ;;
+        *) return 1 ;;
+      esac
+      ;;
     *) return 1 ;;
   esac
 }

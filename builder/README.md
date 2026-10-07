@@ -107,8 +107,8 @@ Only GitHub Container Registry (`ghcr.io`) is supported.
       pr123
       demo
 
-    # Omit on the quickstart-openshift `builds` job (ubuntu-24.04, packages
-    # backend, frontend, migrations). Empty publishes `package`. See "ARM images".
+    # Default amd64. quickstart-openshift `builds` omits this and runs on
+    # ubuntu-24.04, which publishes `package`. See "ARM images".
     # architecture: arm64
 
     # Paths to diff for build triggering (multiline recommended)
@@ -277,7 +277,7 @@ A Mac pulls `ghcr.io/<organization>/<repository>/backend-arm64:<pull request num
 
 `merge.yml` promote retags `backend`, `frontend`, and `migrations` to `prod`. It does not retag the `-arm64` packages. `tag_fallback: latest` on the ARM job looks for `<package>-arm64:latest`, which that promote step never writes, so the ARM job builds on every pull request until that tag exists.
 
-`architecture: arm64` on `ubuntu-24.04` fails. Omitting `architecture`, which is what `builds` does, still publishes `backend`, `frontend`, and `migrations`.
+`builds` omits `architecture`, so it stays `amd64` and publishes `backend`, `frontend`, and `migrations`. An ARM runner that omits it, or sets `amd64`, fails. That keeps an ARM image off the package OpenShift deploys. `architecture: arm64` is the Mac and Podman package, and it fails on `ubuntu-24.04`.
 
 # Security Features
 

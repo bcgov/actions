@@ -36,12 +36,12 @@ inputs:
         test
   architecture:
     description: |
-      Omit for the quickstart-openshift `builds` job, which publishes `package`
-      from ubuntu-24.04. Empty or amd64 does that. arm64, on an ARM runner,
-      publishes `package-arm64` with the same tags. The build context stays
-      `package`. Any other value fails.
+      Default amd64. Publishes `package` and requires an amd64 runner, which is
+      what quickstart-openshift `builds` does on ubuntu-24.04. arm64 publishes
+      `package-arm64` for Mac and Podman, and requires an ARM runner. The build
+      context stays `package`. Any other value fails.
     required: false
-    default: ""
+    default: amd64
   triggers:
     description: |
       Paths used to trigger a build. Prefer multiline:
@@ -134,8 +134,8 @@ runs:
           echo "::error::Input 'architecture' must be empty, amd64, or arm64 (got '${INPUT_ARCHITECTURE}')."
           exit 1
         fi
-        if ! arm64_runner_ok "${INPUT_ARCHITECTURE}" "${RUNNER_ARCH}"; then
-          echo "::error::architecture arm64 must run on an ARM runner (this runner is ${RUNNER_ARCH}). The deploy package is unchanged; set runs-on to ubuntu-24.04-arm."
+        if ! runner_matches "${INPUT_ARCHITECTURE}" "${RUNNER_ARCH}"; then
+          echo "::error::architecture '${INPUT_ARCHITECTURE:-amd64}' does not match this runner (${RUNNER_ARCH}). OpenShift packages are amd64. Use architecture arm64 on ubuntu-24.04-arm to publish a separate package for Mac and Podman."
           exit 1
         fi
 

@@ -131,11 +131,49 @@ else
   echo "ok  ghcr_package rejects a platform list"
   passed=$((passed + 1))
 fi
-arm64_runner_ok '' X64 && assert_eq "ok" "ok" "empty architecture does not check the runner" || assert_eq "fail" "ok" "empty architecture does not check the runner"
-arm64_runner_ok amd64 ARM64 && assert_eq "ok" "ok" "explicit amd64 does not check the runner" || assert_eq "fail" "ok" "explicit amd64 does not check the runner"
-arm64_runner_ok arm64 ARM64 && assert_eq "ok" "ok" "arm64 accepts an ARM64 runner" || assert_eq "fail" "ok" "arm64 accepts an ARM64 runner"
-arm64_runner_ok arm64 aarch64 && assert_eq "ok" "ok" "arm64 accepts an aarch64 runner" || assert_eq "fail" "ok" "arm64 accepts an aarch64 runner"
-if arm64_runner_ok arm64 X64; then
+if runner_matches '' X64; then
+  echo "ok  empty architecture accepts an Intel runner"
+  passed=$((passed + 1))
+else
+  echo "FAIL  empty architecture accepts an Intel runner"
+  failed=$((failed + 1))
+fi
+if runner_matches amd64 X64; then
+  echo "ok  amd64 accepts an Intel runner"
+  passed=$((passed + 1))
+else
+  echo "FAIL  amd64 accepts an Intel runner"
+  failed=$((failed + 1))
+fi
+if runner_matches arm64 ARM64; then
+  echo "ok  arm64 accepts an ARM64 runner"
+  passed=$((passed + 1))
+else
+  echo "FAIL  arm64 accepts an ARM64 runner"
+  failed=$((failed + 1))
+fi
+if runner_matches arm64 aarch64; then
+  echo "ok  arm64 accepts an aarch64 runner"
+  passed=$((passed + 1))
+else
+  echo "FAIL  arm64 accepts an aarch64 runner"
+  failed=$((failed + 1))
+fi
+if runner_matches '' ARM64; then
+  echo "FAIL  empty architecture rejects an ARM runner"
+  failed=$((failed + 1))
+else
+  echo "ok  empty architecture rejects an ARM runner"
+  passed=$((passed + 1))
+fi
+if runner_matches amd64 ARM64; then
+  echo "FAIL  amd64 rejects an ARM runner"
+  failed=$((failed + 1))
+else
+  echo "ok  amd64 rejects an ARM runner"
+  passed=$((passed + 1))
+fi
+if runner_matches arm64 X64; then
   echo "FAIL  arm64 rejects an Intel runner"
   failed=$((failed + 1))
 else
