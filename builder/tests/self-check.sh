@@ -117,6 +117,32 @@ assert_contains "$pr_msg" "push to your fork" "fork PR notice points to fork pus
 assert_eq "$(is_fork_repository true && echo yes || echo no)" "yes" "is_fork_repository true"
 assert_eq "$(is_fork_repository false && echo yes || echo no)" "no" "is_fork_repository false"
 
+assert_eq "$(ghcr_package backend '')" "backend" "empty architecture keeps the package"
+assert_eq "$(ghcr_package backend amd64)" "backend" "amd64 keeps the package"
+assert_eq "$(ghcr_package Backend AMD64)" "backend" "amd64 package is lowercased"
+assert_eq "$(ghcr_package backend arm64)" "backend-arm64" "arm64 publishes a separate package"
+assert_eq "$(ghcr_package Backend ARM64)" "backend-arm64" "arm64 package is lowercased"
+assert_eq "$(image_path_for "$(ghcr_package actions '')" bcgov/actions actions)" "bcgov/actions" "empty architecture keeps a single-package repo path"
+assert_eq "$(image_path_for "$(ghcr_package actions arm64)" bcgov/actions actions)" "bcgov/actions/actions-arm64" "arm64 single-package repo publishes under a suffixed name"
+if ghcr_package backend 'linux/arm64' >/dev/null; then
+  echo "FAIL  ghcr_package rejects a platform list"
+  failed=$((failed + 1))
+else
+  echo "ok  ghcr_package rejects a platform list"
+  passed=$((passed + 1))
+fi
+arm64_runner_ok '' X64 && assert_eq "ok" "ok" "empty architecture does not check the runner" || assert_eq "fail" "ok" "empty architecture does not check the runner"
+arm64_runner_ok amd64 ARM64 && assert_eq "ok" "ok" "explicit amd64 does not check the runner" || assert_eq "fail" "ok" "explicit amd64 does not check the runner"
+arm64_runner_ok arm64 ARM64 && assert_eq "ok" "ok" "arm64 accepts an ARM64 runner" || assert_eq "fail" "ok" "arm64 accepts an ARM64 runner"
+arm64_runner_ok arm64 aarch64 && assert_eq "ok" "ok" "arm64 accepts an aarch64 runner" || assert_eq "fail" "ok" "arm64 accepts an aarch64 runner"
+if arm64_runner_ok arm64 X64; then
+  echo "FAIL  arm64 rejects an Intel runner"
+  failed=$((failed + 1))
+else
+  echo "ok  arm64 rejects an Intel runner"
+  passed=$((passed + 1))
+fi
+
 echo ""
 echo "Passed: ${passed}, Failed: ${failed}"
 [ "$failed" -eq 0 ]

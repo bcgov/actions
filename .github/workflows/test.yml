@@ -182,6 +182,115 @@ jobs:
             builder/
             .github/workflows/
 
+  test-builder-arm64:
+    name: Test Builder (arm64 package)
+    needs: [filter]
+    if: contains(fromJSON(needs.filter.outputs.changes), 'builder') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_path: ${{ steps.arm.outputs.image_path }}
+      digest: ${{ steps.arm.outputs.digest }}
+    steps:
+      - id: arm
+        uses: $/builder
+        with:
+          package: builder-arm-selftest
+          architecture: arm64
+          build_context: builder/tests
+          build_file: builder/tests/Dockerfile
+          tags: ${{ github.event.number || github.run_id }}-armpkg
+          sbom: 'false'
+          triggers: |
+            builder/
+            .github/workflows/
+
+      - name: ARM image uses the separate package
+        if: steps.arm.outputs.triggered == 'true'
+        env:
+          IMAGE_PATH: ${{ steps.arm.outputs.image_path }}
+        run: |
+          set -euo pipefail
+          case "${IMAGE_PATH}" in
+            */builder-arm-selftest-arm64:*) ;;
+            *) echo "::error::expected package builder-arm-selftest-arm64, got ${IMAGE_PATH}"; exit 1 ;;
+          esac
+
+  test-builder-arm64-verify:
+    name: Test Builder (arm64 package stays out of the deploy package)
+    needs: [filter, test-builder-arm64]
+    if: |
+      always() && needs.test-builder-arm64.result == 'success' &&
+      (contains(fromJSON(needs.filter.outputs.changes), 'builder') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - id: mismatch
+        continue-on-error: true
+        uses: $/builder
+        with:
+          package: builder-arm-selftest
+          architecture: arm64
+          build_context: builder/tests
+          build_file: builder/tests/Dockerfile
+          tags: ${{ github.event.number || github.run_id }}-armpkg-mismatch
+          sbom: 'false'
+          triggers: |
+            builder/
+
+      - name: Intel runner refuses architecture arm64
+        run: |
+          set -euo pipefail
+          [ "${{ steps.mismatch.outcome }}" = "failure" ]
+
+      - id: amd
+        uses: $/builder
+        with:
+          package: builder-arm-selftest
+          build_context: builder/tests
+          build_file: builder/tests/Dockerfile
+          tags: ${{ github.event.number || github.run_id }}-armpkg
+          sbom: 'false'
+          triggers: |
+            builder/
+            .github/workflows/
+
+      - name: Deploy package is still the unsuffixed image
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        id: track
+        uses: $/image-tracker
+        with:
+          package: builder-arm-selftest
+
+      - name: Tracker digest is the amd64 image
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          AMD_DIGEST: ${{ steps.amd.outputs.digest }}
+          AMD_PATH: ${{ steps.amd.outputs.image_path }}
+          ARM_DIGEST: ${{ needs.test-builder-arm64.outputs.digest }}
+          ARM_PATH: ${{ needs.test-builder-arm64.outputs.image_path }}
+          TRACK_DIGEST: ${{ steps.track.outputs.digest }}
+        run: |
+          set -euo pipefail
+          case "${AMD_PATH}" in
+            */builder-arm-selftest:*) ;;
+            *) echo "::error::amd64 image left its package: ${AMD_PATH}"; exit 1 ;;
+          esac
+          case "${AMD_PATH}" in
+            *-arm64:*) echo "::error::amd64 image path is suffixed: ${AMD_PATH}"; exit 1 ;;
+          esac
+          [ -n "${TRACK_DIGEST}" ] || { echo "::error::image-tracker returned no digest"; exit 1; }
+          [ "${TRACK_DIGEST}" = "${AMD_DIGEST}" ] || { echo "::error::image-tracker resolved ${TRACK_DIGEST}, not the amd64 image ${AMD_DIGEST}"; exit 1; }
+          [ "${TRACK_DIGEST}" != "${ARM_DIGEST}" ] || { echo "::error::image-tracker resolved the arm64 package digest"; exit 1; }
+          echo "Deploy package stayed ${AMD_PATH} (${TRACK_DIGEST}); arm package is ${ARM_PATH}"
+
   # ─── SCAN URL ───────────────────────────────────────────────────────────────
   test-scan-url:
     name: Test Scan URL
@@ -1175,6 +1284,8 @@ jobs:
       - filter
       - test-builder-build
       - test-builder-matrix
+      - test-builder-arm64
+      - test-builder-arm64-verify
       - test-scan-url
       - test-scan-url-live
       - test-scan-url-matrix

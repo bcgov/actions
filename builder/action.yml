@@ -34,6 +34,13 @@ inputs:
         pr123
         demo
         test
+  architecture:
+    description: |
+      Empty or amd64 (the default): publish `package` for this runner's native
+      architecture, as today. arm64, on an ARM runner: publish `package-arm64`
+      with the same tags. The build context stays `package`. Any other value fails.
+    required: false
+    default: ""
   triggers:
     description: |
       Paths used to trigger a build. Prefer multiline:
@@ -105,6 +112,7 @@ runs:
       shell: bash
       env:
         INPUT_PACKAGE: ${{ inputs.package }}
+        INPUT_ARCHITECTURE: ${{ inputs.architecture }}
         INPUT_TAGS: ${{ inputs.tags }}
         INPUT_REPOSITORY: ${{ inputs.repository }}
         EVENT_NAME: ${{ github.event_name }}
@@ -112,6 +120,7 @@ runs:
         HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
         HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         EVENT_SHA: ${{ github.sha }}
+        RUNNER_ARCH: ${{ runner.arch }}
       run: |
         # Set variables.
         set -euo pipefail
@@ -119,6 +128,15 @@ runs:
         source "${{ github.action_path }}/context.sh"
 
         registry="ghcr.io"
+
+        if ! publish_package="$(ghcr_package "${INPUT_PACKAGE}" "${INPUT_ARCHITECTURE}")"; then
+          echo "::error::Input 'architecture' must be empty, amd64, or arm64 (got '${INPUT_ARCHITECTURE}')."
+          exit 1
+        fi
+        if ! arm64_runner_ok "${INPUT_ARCHITECTURE}" "${RUNNER_ARCH}"; then
+          echo "::error::architecture arm64 must run on an ARM runner (this runner is ${RUNNER_ARCH}). The deploy package is unchanged; set runs-on to ubuntu-24.04-arm."
+          exit 1
+        fi
 
         reason="$(refuse_reason "${EVENT_NAME}" "${GH_REPOSITORY}" "${HEAD_REPO}")"
         if [ -n "${reason}" ]; then
@@ -135,7 +153,7 @@ runs:
 
         publish_repo="$(publish_repository "${EVENT_NAME}" "${GH_REPOSITORY}" "${HEAD_REPO}")"
         publish_name="${publish_repo##*/}"
-        image_path="$(image_path_for "${INPUT_PACKAGE}" "${publish_repo}" "${publish_name}")"
+        image_path="$(image_path_for "${publish_package}" "${publish_repo}" "${publish_name}")"
         if is_external_repository "${INPUT_REPOSITORY}" "${GH_REPOSITORY}"; then
           # External checkouts resolve their own SHA after clone (see Resolve source SHA).
           sha=""

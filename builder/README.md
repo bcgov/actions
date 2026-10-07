@@ -107,6 +107,10 @@ Only GitHub Container Registry (`ghcr.io`) is supported.
       pr123
       demo
 
+    # Empty or amd64: publish `package`, as today. arm64 on an ARM runner:
+    # publish `package-arm64` with the same tags. Build context stays `package`.
+    architecture: arm64
+
     # Paths to diff for build triggering (multiline recommended)
     # Optional, defaults to nothing, which forces a build
     triggers: |
@@ -238,6 +242,27 @@ builds:
         triggers: ${{ matrix.triggers }}
 
 ```
+
+# ARM images
+
+OpenShift deploys the package named above. An ARM image for Apple Silicon is a second package, built on an ARM runner, and left out of the deploy job's `needs` list.
+
+```yaml
+build-arm64:
+  runs-on: ubuntu-24.04-arm
+  steps:
+    - uses: bcgov/actions/builder@vX.Y.Z
+      with:
+        package: backend
+        architecture: arm64
+        tag_fallback: latest
+        triggers: |
+          backend/
+```
+
+Developers pull `ghcr.io/<organization>/<repository>/backend-arm64:<tag>`. The tags are the same ones as `backend` (the pull request number and the commit). `image-tracker`, asked for `backend`, does not see this package.
+
+`architecture: arm64` on an Intel runner fails. Leaving `architecture` empty still builds whatever the runner is and publishes `backend`, which is the existing behavior.
 
 # Security Features
 
