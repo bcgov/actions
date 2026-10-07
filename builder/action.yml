@@ -18,6 +18,13 @@ inputs:
     description: Build context, not required for self-contained package/default directory
   build_file:
     description: Dockerfile with path, not required for self-contained package/default directory
+  platforms:
+    description: |
+      Target platform(s) to build for; e.g. linux/amd64,linux/arm64.
+      Defaults to empty, which builds for the runner's native architecture.
+      When set to platforms differing from the runner's architecture, QEMU is set up automatically.
+    required: false
+    default: ""
   sbom:
     default: "true"
     description: Generate a Software Bill of Materials (SBOM) for the container image. Enabled by default for better security practices.
@@ -105,6 +112,7 @@ runs:
       shell: bash
       env:
         INPUT_PACKAGE: ${{ inputs.package }}
+        INPUT_PLATFORMS: ${{ inputs.platforms }}
         INPUT_TAGS: ${{ inputs.tags }}
         INPUT_REPOSITORY: ${{ inputs.repository }}
         EVENT_NAME: ${{ github.event_name }}
@@ -112,6 +120,7 @@ runs:
         HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
         HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         EVENT_SHA: ${{ github.sha }}
+        RUNNER_ARCH: ${{ runner.arch }}
       run: |
         # Set variables.
         set -euo pipefail
@@ -167,6 +176,13 @@ runs:
         first_tag=$(printf '%s\n' "${tags}" | grep -v '^$' | head -n 1 | tr -cd '[:alnum:]._-' || true)
         first_tag="${first_tag:-artifact}"
         echo "first_tag=${first_tag}" >> "$GITHUB_OUTPUT"
+
+        if needs_qemu "${INPUT_PLATFORMS:-}" "${RUNNER_ARCH:-}"; then
+          needs_qemu=true
+        else
+          needs_qemu=false
+        fi
+        echo "needs_qemu=${needs_qemu}" >> "$GITHUB_OUTPUT"
 
     # Send triggers to diff action
     # Fork PRs: diff-triggers automatically detects fork PR context from
@@ -306,6 +322,10 @@ runs:
           echo "EOF"
         } >> "$GITHUB_OUTPUT"
 
+    - name: Set up QEMU
+      if: steps.build.outputs.triggered == 'true' && steps.vars.outputs.needs_qemu == 'true'
+      uses: docker/setup-qemu-action@v4
+
     - name: Set up Docker Buildx
       if: steps.build.outputs.triggered == 'true'
       uses: docker/setup-buildx-action@v4
@@ -367,6 +387,7 @@ runs:
       with:
         context: .builder-context/${{ inputs.build_context || inputs.package }}
         file: .builder-context/${{ inputs.build_file || format('{0}/Dockerfile', inputs.package) }}
+        platforms: ${{ inputs.platforms }}
         push: ${{ steps.vars.outputs.can_push == 'true' }}
         tags: ${{ steps.tags.outputs.final_tags }}
         labels: ${{ steps.tags.outputs.labels }}

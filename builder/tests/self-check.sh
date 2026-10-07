@@ -117,6 +117,24 @@ assert_contains "$pr_msg" "push to your fork" "fork PR notice points to fork pus
 assert_eq "$(is_fork_repository true && echo yes || echo no)" "yes" "is_fork_repository true"
 assert_eq "$(is_fork_repository false && echo yes || echo no)" "no" "is_fork_repository false"
 
+needs_qemu "" X64 && assert_eq "yes" "no" "empty platforms does not need QEMU on X64" || assert_eq "no" "no" "empty platforms does not need QEMU on X64"
+needs_qemu "   " X64 && assert_eq "yes" "no" "whitespace platforms does not need QEMU on X64" || assert_eq "no" "no" "whitespace platforms does not need QEMU on X64"
+needs_qemu "linux/amd64" X64 && assert_eq "yes" "no" "native linux/amd64 does not need QEMU on X64" || assert_eq "no" "no" "native linux/amd64 does not need QEMU on X64"
+needs_qemu "amd64" X64 && assert_eq "yes" "no" "native amd64 does not need QEMU on X64" || assert_eq "no" "no" "native amd64 does not need QEMU on X64"
+needs_qemu "linux/arm64" ARM64 && assert_eq "yes" "no" "native linux/arm64 does not need QEMU on ARM64" || assert_eq "no" "no" "native linux/arm64 does not need QEMU on ARM64"
+needs_qemu "arm64" ARM64 && assert_eq "yes" "no" "native arm64 does not need QEMU on ARM64" || assert_eq "no" "no" "native arm64 does not need QEMU on ARM64"
+
+needs_qemu "linux/arm64" X64 && assert_eq "yes" "yes" "linux/arm64 needs QEMU on X64" || assert_eq "no" "yes" "linux/arm64 needs QEMU on X64"
+needs_qemu "linux/amd64,linux/arm64" X64 && assert_eq "yes" "yes" "multi-platform with arm64 needs QEMU on X64" || assert_eq "no" "yes" "multi-platform with arm64 needs QEMU on X64"
+needs_qemu "linux/amd64,linux/arm64" ARM64 && assert_eq "yes" "yes" "multi-platform with amd64 needs QEMU on ARM64" || assert_eq "no" "yes" "multi-platform with amd64 needs QEMU on ARM64"
+needs_qemu "linux/amd64" ARM64 && assert_eq "yes" "yes" "linux/amd64 needs QEMU on ARM64" || assert_eq "no" "yes" "linux/amd64 needs QEMU on ARM64"
+
+multiline_qemu=$'linux/amd64\nlinux/arm64'
+needs_qemu "$multiline_qemu" X64 && assert_eq "yes" "yes" "multiline platforms with arm64 needs QEMU on X64" || assert_eq "no" "yes" "multiline platforms with arm64 needs QEMU on X64"
+
+multiline_native=$'linux/amd64\namd64'
+needs_qemu "$multiline_native" X64 && assert_eq "yes" "no" "multiline native platforms does not need QEMU on X64" || assert_eq "no" "no" "multiline native platforms does not need QEMU on X64"
+
 echo ""
 echo "Passed: ${passed}, Failed: ${failed}"
 [ "$failed" -eq 0 ]

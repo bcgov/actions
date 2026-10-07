@@ -93,6 +93,11 @@ Only GitHub Container Registry (`ghcr.io`) is supported.
     # Optional, defaults to {package}/Dockerfile or {build_context}/Dockerfile
     build_file: ./frontend/Dockerfile
 
+    # Target platform(s) to build for (e.g. linux/amd64,linux/arm64)
+    # Optional. Defaults to empty, building for the runner's native architecture.
+    # When requesting architectures different from the runner, QEMU emulation is set up automatically.
+    platforms: linux/amd64,linux/arm64
+
     # Fallback tag, used if no build was generated
     # Optional. Omit to always build fresh if triggers do not match
     # Non-matching or malformed tags are rejected, which forces a build
@@ -237,6 +242,82 @@ builds:
         token: ${{ secrets.GITHUB_TOKEN }}
         triggers: ${{ matrix.triggers }}
 
+```
+
+# Multi-Platform Builds
+
+By default, `builder` builds container images for the runner's native architecture (`linux/amd64` on standard `ubuntu-*` runners). This keeps builds fast and avoids any emulation overhead.
+
+## Simple Multi-Platform (QEMU Emulation)
+
+For lightweight applications or web services, specify `platforms` directly. When target platforms differ from the runner's architecture, `builder` automatically sets up QEMU via `docker/setup-qemu-action`:
+
+```yaml
+builds:
+  runs-on: ubuntu-24.04
+  steps:
+    - uses: bcgov/actions/builder@vX.Y.Z
+      with:
+        package: frontend
+        platforms: linux/amd64,linux/arm64
+        tag_fallback: test
+        triggers: |
+          frontend/
+```
+
+When using `tag_fallback`, `builder` resolves and retags existing multi-architecture images by digest without rebuilding or losing the multi-architecture manifest list.
+
+## Native-Runner Matrix + Merge Pattern (Heavy Images)
+
+QEMU emulation can be significantly slower for compile-heavy workloads (such as C++, Rust, GDAL, or compiled Python extensions). For heavy builds, run a matrix across native runners (`ubuntu-24.04` for AMD64 and `ubuntu-24.04-arm` for ARM64) to build each architecture natively without emulation, then merge the architecture tags into a unified multi-architecture manifest list using `docker buildx imagetools create`:
+
+```yaml
+name: Multi-Arch Native Build
+
+on:
+  pull_request:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: bcgov/actions/builder@vX.Y.Z
+        with:
+          package: backend
+          tags: ${{ github.event.number }}-${{ matrix.arch }}
+          tag_fallback: test-${{ matrix.arch }}
+          triggers: |
+            backend/
+
+  merge:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      packages: write
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create and push multi-arch manifest
+        run: |
+          docker buildx imagetools create \
+            -t ghcr.io/${{ github.repository }}/backend:${{ github.event.number }} \
+            ghcr.io/${{ github.repository }}/backend:${{ github.event.number }}-amd64 \
+            ghcr.io/${{ github.repository }}/backend:${{ github.event.number }}-arm64
 ```
 
 # Security Features

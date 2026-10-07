@@ -182,6 +182,72 @@ jobs:
             builder/
             .github/workflows/
 
+      - name: Test Multi-Platform Build
+        id: multi-platform
+        uses: $/builder
+        with:
+          package: builder-multiarch
+          build_context: builder/tests
+          build_file: builder/tests/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ github.event.number || github.run_id }}-multiarch
+          sbom: 'false'
+          triggers: |
+            builder/
+            .github/workflows/
+
+      - name: Verify Multi-Platform Build
+        if: steps.multi-platform.outputs.triggered == 'true'
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
+            echo "Fork PR: cannot push to GHCR; skip remote inspect."
+            exit 0
+          fi
+          image="${{ steps.multi-platform.outputs.registry_host }}${{ steps.multi-platform.outputs.image_path }}"
+          echo "Inspecting manifest for ${image}..."
+          inspect_out=$(docker buildx imagetools inspect "${image}")
+          echo "${inspect_out}"
+          echo "${inspect_out}" | grep -q "linux/amd64" || { echo "Missing linux/amd64 in manifest index"; exit 1; }
+          echo "${inspect_out}" | grep -q "linux/arm64" || { echo "Missing linux/arm64 in manifest index"; exit 1; }
+          echo "Verified multi-arch manifest index contains linux/amd64 and linux/arm64"
+
+      - name: Test Multi-Platform Fallback
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        id: multi-platform-fallback
+        uses: $/builder
+        with:
+          package: builder-multiarch
+          build_context: builder/tests
+          build_file: builder/tests/Dockerfile
+          tag_fallback: ${{ github.event.number || github.run_id }}-multiarch
+          tags: ${{ github.event.number || github.run_id }}-multiarch-fallback
+          sbom: 'false'
+          triggers: |
+            non-existent-path/
+
+      - name: Verify Multi-Platform Fallback
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          if [ "${{ steps.multi-platform-fallback.outputs.triggered }}" != "false" ]; then
+            echo "Expected fallback to NOT trigger a build, but triggered=${{ steps.multi-platform-fallback.outputs.triggered }}"
+            exit 1
+          fi
+          if [ -z "${{ steps.multi-platform-fallback.outputs.digest }}" ]; then
+            echo "Expected non-empty digest from multi-arch fallback"
+            exit 1
+          fi
+          if [ "${{ steps.multi-platform-fallback.outputs.digest }}" != "${{ steps.multi-platform.outputs.digest }}" ]; then
+            echo "Fallback digest mismatch: expected ${{ steps.multi-platform.outputs.digest }}, got ${{ steps.multi-platform-fallback.outputs.digest }}"
+            exit 1
+          fi
+          fallback_image="${{ steps.multi-platform-fallback.outputs.registry_host }}${{ steps.multi-platform-fallback.outputs.image_path }}"
+          inspect_out=$(docker buildx imagetools inspect "${fallback_image}")
+          echo "${inspect_out}"
+          echo "${inspect_out}" | grep -q "linux/amd64" || { echo "Missing linux/amd64 in retagged fallback"; exit 1; }
+          echo "${inspect_out}" | grep -q "linux/arm64" || { echo "Missing linux/arm64 in retagged fallback"; exit 1; }
+          echo "Verified multi-platform fallback successfully retagged and preserved multi-arch index."
+
+
   # ─── SCAN URL ───────────────────────────────────────────────────────────────
   test-scan-url:
     name: Test Scan URL

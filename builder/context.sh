@@ -149,3 +149,61 @@ refuse_reason() {
 
   printf '%s\n' "builder refuses pull_request_target from a fork. That event has write access to ghcr.io/${gh_repo} and this action checks out PR head, which would publish an untrusted image to the base registry. Use the same pull_request workflow instead; images publish on push to the fork. See ${BUILDER_FORK_DOCS_URL}"
 }
+
+# needs_qemu PLATFORMS RUNNER_ARCH
+# Exits 0 (true) if any requested platform requires QEMU emulation on the runner.
+# Exits 1 (false) if platforms is empty or all platforms match the runner architecture.
+needs_qemu() {
+  local platforms="$1"
+  local runner_arch="${2,,}"
+
+  local cleaned="${platforms//[[:space:],]/}"
+  if [ -z "$cleaned" ]; then
+    return 1
+  fi
+
+  local saved_shopts
+  saved_shopts="$(set +o)"
+  set -f
+
+  local p
+  local result=1
+  for p in $(printf '%s' "$platforms" | tr ',\n\r\t' ' '); do
+    p="${p,,}"
+    [ -z "$p" ] && continue
+
+    case "$runner_arch" in
+      x64|amd64)
+        case "$p" in
+          linux/amd64|amd64) ;;
+          *) result=0; break ;;
+        esac
+        ;;
+      arm64|aarch64)
+        case "$p" in
+          linux/arm64|arm64|linux/arm64/*) ;;
+          *) result=0; break ;;
+        esac
+        ;;
+      arm)
+        case "$p" in
+          linux/arm|arm|linux/arm/*) ;;
+          *) result=0; break ;;
+        esac
+        ;;
+      x86|386|i386)
+        case "$p" in
+          linux/386|386|linux/i386) ;;
+          *) result=0; break ;;
+        esac
+        ;;
+      *)
+        result=0
+        break
+        ;;
+    esac
+  done
+
+  eval "$saved_shopts"
+  return "$result"
+}
