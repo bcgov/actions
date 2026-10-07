@@ -275,8 +275,9 @@ jobs:
           for ref in "${IMAGE}-arm64:${TAG}" "${IMAGE}-arm64:${SHA}"; do
             [ "$(archs_of "${ref}")" = '["arm64"]' ] || { echo "::error::${ref} should be arm64 only, got $(archs_of "${ref}")"; exit 1; }
           done
-          # Neither the ARM build nor the failed unset run touched the deploy package
-          if docker buildx imagetools inspect "${IMAGE}:${TAG}-arm64" >/dev/null 2>&1 || docker buildx imagetools inspect "${IMAGE}:${{ github.event.number || github.run_id }}-must-not-exist" >/dev/null 2>&1; then
+          # Neither the ARM build nor the failed unset run touched the deploy package. Checked by
+          # commit SHA, since PR-number tags can be left over from earlier runs of the PR.
+          if docker buildx imagetools inspect "${IMAGE}:${SHA}-arm64" >/dev/null 2>&1 || docker buildx imagetools inspect "${IMAGE}:${{ github.event.number || github.run_id }}-must-not-exist" >/dev/null 2>&1; then
             echo "::error::an ARM image was pushed to the deploy package"; exit 1
           fi
           amd64=$(digest_of "${IMAGE}:${TAG}")
