@@ -83,10 +83,20 @@ ${tags}
 EOF
 }
 
-# valid_tag_suffix SUFFIX
-# True when SUFFIX is empty or only uses characters allowed in an image tag.
-valid_tag_suffix() {
-  [[ "$1" =~ ^[A-Za-z0-9._-]*$ ]]
+# list_architectures ARCHITECTURES
+# Prints each architecture once, lowercased, from a comma, space or newline separated list.
+list_architectures() {
+  printf '%s\n' "${1,,}" | tr ',[:blank:]' '\n' | awk 'NF && !seen[$0]++'
+}
+
+# normalize_arch RUNNER_ARCH
+# Maps runner.arch (X64, ARM64) to the image architecture name (amd64, arm64).
+normalize_arch() {
+  case "${1,,}" in
+    x64 | amd64 | x86_64) printf 'amd64\n' ;;
+    arm64 | aarch64) printf 'arm64\n' ;;
+    *) printf '%s\n' "${1,,}" ;;
+  esac
 }
 
 # is_external_repository INPUT_REPOSITORY GH_REPOSITORY

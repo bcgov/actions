@@ -107,10 +107,9 @@ Only GitHub Container Registry (`ghcr.io`) is supported.
       pr123
       demo
 
-    # Suffix appended to every tag, including the source commit SHA
-    # Optional. For native per-architecture builds merged by builder-merge;
-    # see "Example, Multi-arch Build"
-    tag_suffix: -amd64
+    # Architectures of a native multi-arch build, each run on a matching runner
+    # Optional. Omit for a single-architecture build; see "Example, Multi-arch Build"
+    architectures: amd64,arm64
 
     # Paths to diff for build triggering (multiline recommended)
     # Optional, defaults to nothing, which forces a build
@@ -246,18 +245,14 @@ builds:
 
 # Example, Multi-arch Build
 
-`builder` builds for the architecture of the runner it's on. To publish one image that runs natively on both amd64 and arm64 (e.g. for developers on Apple Silicon) without QEMU emulation, run `builder` once per architecture on a native runner with a `tag_suffix`, then merge the results into one multi-architecture tag with [`builder-merge`](../builder-merge/):
+`builder` builds for the architecture of the runner it's on. To publish one image that runs natively on both amd64 and arm64 (e.g. for developers on Apple Silicon) without QEMU emulation, set `architectures` and run `builder` once per architecture on a matching runner:
 
 ```yaml
 jobs:
   build:
     strategy:
       matrix:
-        include:
-          - runner: ubuntu-24.04
-            arch: amd64
-          - runner: ubuntu-24.04-arm
-            arch: arm64
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -266,29 +261,33 @@ jobs:
       - uses: bcgov/actions/builder@vX.Y.Z
         with:
           package: backend
-          tag_suffix: -${{ matrix.arch }}
+          architectures: amd64,arm64
           tag_fallback: test
           triggers: |
             backend/
 
-  merge:
+  deploy:
     needs: build
     runs-on: ubuntu-24.04
     permissions:
-      packages: write
-    outputs:
-      digest: ${{ steps.merge.outputs.digest }}
+      contents: read
+      packages: read
+      pull-requests: read
     steps:
-      - id: merge
-        uses: bcgov/actions/builder-merge@vX.Y.Z
+      - uses: actions/checkout@v7
+      - id: image
+        uses: bcgov/actions/image-tracker@vX.Y.Z
         with:
           package: backend
+      - run: echo "Deploying ${{ steps.image.outputs.image }}"
 ```
 
-- Each build pushes its tags with the suffix (`<pr>-amd64`, `<sha>-amd64`, ...), so the two builds never overwrite each other's tags, including the commit SHA tag.
-- `builder-merge` publishes the plain tags (`<pr>`, `<sha>`) as one multi-architecture index. Deploy with its `digest` output, not either build's.
-- `tag_fallback` is the normal multi-architecture tag (e.g. `test`). When nothing triggers, both builds retag it and `builder-merge` keeps it as is.
-- Fork pull requests can't push to GHCR, so the builds only validate and `builder-merge` skips with a notice.
+- Each run tags its image with its runner's architecture (`<pr>-amd64`, `<sha>-amd64`, ...), so the runs never overwrite each other's tags, including the commit SHA tag.
+- The last run to finish sees every architecture's image for the commit and merges them into the plain tags (`<pr>`, `<sha>`) as one multi-architecture index. Earlier runs log that they're waiting on the others. If two runs finish together and both merge, they publish the same images, so the result is the same.
+- `builder`'s `digest` output is that run's architecture only. Resolve the merged multi-architecture digest with [`image-tracker`](../image-tracker/), which finds the commit SHA tag and returns the index digest, so each machine pulls its own architecture.
+- `tag_fallback` is the normal multi-architecture tag (e.g. `test`). When nothing triggers, every run retags it and the merge keeps it as is.
+- Each architecture keeps its own build cache (`buildcache-amd64`, `buildcache-arm64`).
+- A run on a runner whose architecture isn't listed fails. Fork pull requests can't push to GHCR, so the runs only validate and nothing is merged.
 
 # Security Features
 
