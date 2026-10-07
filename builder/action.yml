@@ -36,9 +36,10 @@ inputs:
         test
   architecture:
     description: |
-      Empty or amd64 (the default): publish `package` for this runner's native
-      architecture, as today. arm64, on an ARM runner: publish `package-arm64`
-      with the same tags. The build context stays `package`. Any other value fails.
+      Omit for the quickstart-openshift `builds` job, which publishes `package`
+      from ubuntu-24.04. Empty or amd64 does that. arm64, on an ARM runner,
+      publishes `package-arm64` with the same tags. The build context stays
+      `package`. Any other value fails.
     required: false
     default: ""
   triggers:

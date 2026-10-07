@@ -107,9 +107,9 @@ Only GitHub Container Registry (`ghcr.io`) is supported.
       pr123
       demo
 
-    # Empty or amd64: publish `package`, as today. arm64 on an ARM runner:
-    # publish `package-arm64` with the same tags. Build context stays `package`.
-    architecture: arm64
+    # Omit on the quickstart-openshift `builds` job (ubuntu-24.04, packages
+    # backend, frontend, migrations). Empty publishes `package`. See "ARM images".
+    # architecture: arm64
 
     # Paths to diff for build triggering (multiline recommended)
     # Optional, defaults to nothing, which forces a build
@@ -245,24 +245,39 @@ builds:
 
 # ARM images
 
-OpenShift deploys the package named above. An ARM image for Apple Silicon is a second package, built on an ARM runner, and left out of the deploy job's `needs` list.
+[`quickstart-openshift`](https://github.com/bcgov/quickstart-openshift) `.github/workflows/pr-open.yml` is the workflow most consumers run. Its `builds` job is a matrix of `backend`, `frontend`, and `migrations` on `ubuntu-24.04`. It does not set `architecture`. Tags are the pull request number and the head SHA, and `tag_fallback` is `latest`. `deploys` needs only `builds` and passes the head SHA through `reusable-deploy.yml` as `IMAGE_TAG`. `merge.yml` deploys the pull request number, then retags `<package>:<pr>` to `prod`.
+
+Leave that `builds` job as it is. Add a second job for laptops. Do not add it to `deploys.needs`, or an ARM failure blocks the OpenShift deploy.
 
 ```yaml
 build-arm64:
+  name: ARM builds
   runs-on: ubuntu-24.04-arm
+  strategy:
+    matrix:
+      package: [backend, frontend, migrations]
+  permissions:
+    contents: read
+    packages: write
   steps:
     - uses: bcgov/actions/builder@vX.Y.Z
       with:
-        package: backend
+        package: ${{ matrix.package }}
         architecture: arm64
+        tags: |
+          ${{ github.event.number }}
+          ${{ github.event.pull_request.head.sha }}
         tag_fallback: latest
-        triggers: |
-          backend/
+        triggers: ('${{ matrix.package }}/', '.github/workflows/pr-open.yml')
 ```
 
-Developers pull `ghcr.io/<organization>/<repository>/backend-arm64:<tag>`. The tags are the same ones as `backend` (the pull request number and the commit). `image-tracker`, asked for `backend`, does not see this package.
+A Mac pulls `ghcr.io/<organization>/<repository>/backend-arm64:<pull request number>`. The cluster still pulls `backend` at the head SHA on a pull request, and at the pull request number after merge.
 
-`architecture: arm64` on an Intel runner fails. Leaving `architecture` empty still builds whatever the runner is and publishes `backend`, which is the existing behavior.
+`pr-open.yml`'s `results` job says every new job must be listed in its `needs`. This job is not a deploy gate. Leave it out of `results` and an unavailable ARM runner does not fail the pull request. Add it there and it does.
+
+`merge.yml` promote retags `backend`, `frontend`, and `migrations` to `prod`. It does not retag the `-arm64` packages. `tag_fallback: latest` on the ARM job looks for `<package>-arm64:latest`, which that promote step never writes, so the ARM job builds on every pull request until that tag exists.
+
+`architecture: arm64` on `ubuntu-24.04` fails. Omitting `architecture`, which is what `builds` does, still publishes `backend`, `frontend`, and `migrations`.
 
 # Security Features
 
