@@ -392,7 +392,7 @@ jobs:
         with:
           triggers: |
             .diff-triggers-fixture/
-          ref: ${{ github.event.pull_request.base.sha || 'HEAD~1' }}
+          ref: ${{ github.event.pull_request.base.sha }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Test Formats (Bash / Comma / Semi / JSON)
