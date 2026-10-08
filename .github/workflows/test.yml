@@ -201,7 +201,7 @@ jobs:
           architecture: arm64
           build_context: builder/tests
           build_file: builder/tests/Dockerfile
-          tags: ${{ github.event.number || github.run_id }}-armpkg
+          tags: ${{ github.event.number }}
           sbom: 'false'
           triggers: |
             builder/
@@ -240,7 +240,7 @@ jobs:
           architecture: arm64
           build_context: builder/tests
           build_file: builder/tests/Dockerfile
-          tags: ${{ github.event.number || github.run_id }}-armpkg-mismatch
+          tags: ${{ github.event.number }}
           sbom: 'false'
           triggers: |
             builder/
@@ -256,7 +256,7 @@ jobs:
           package: builder-arm-selftest
           build_context: builder/tests
           build_file: builder/tests/Dockerfile
-          tags: ${{ github.event.number || github.run_id }}-armpkg
+          tags: ${{ github.event.number }}
           sbom: 'false'
           triggers: |
             builder/
