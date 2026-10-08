@@ -451,7 +451,7 @@ Knip supports many JavaScript/TypeScript tools and frameworks out of the box. Fo
 
 # Semgrep - Static Analysis
 
-Optional, language-agnostic static analysis (Node, Java, Python and more) of `dir`. It runs after the tests and before the report step, in the pinned `semgrep/semgrep` container with metrics off, so the runner needs Docker (GitHub-hosted Ubuntu runners have it). It is **off by default**; existing callers see no change.
+Optional, language-agnostic static analysis (Node, Java, Python and more) of `dir`. It runs after the tests and before the report step, including when an earlier step has failed, in the pinned `semgrep/semgrep` container with metrics off, so the runner needs Docker (GitHub-hosted Ubuntu runners have it). It is **off by default**; existing callers see no change.
 
 | Input | Default | Meaning |
 | ----- | ------- | ------- |

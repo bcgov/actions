@@ -1277,7 +1277,7 @@ jobs:
   test-test-and-analyse-semgrep:
     name: Test Test and Analyse (Semgrep)
     needs: [filter]
-    if: contains(fromJSON(needs.filter.outputs.changes), 'test-and-analyse') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || contains(fromJSON(needs.filter.outputs.changes), 'lockfile') || github.event_name == 'workflow_dispatch'
+    if: contains(fromJSON(needs.filter.outputs.changes), 'test-and-analyse') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || contains(fromJSON(needs.filter.outputs.changes), 'lockfile')
     runs-on: ubuntu-24.04
     permissions:
       contents: read

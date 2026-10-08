@@ -437,7 +437,7 @@ runs:
 
     - name: Semgrep Scan
       id: semgrep
-      if: steps.final_triggered.outputs.triggered == 'true' && inputs.semgrep == 'true'
+      if: steps.final_triggered.outputs.triggered == 'true' && inputs.semgrep == 'true' && (success() || failure())
       shell: bash
       working-directory: ${{ inputs.dir }}
       env:
