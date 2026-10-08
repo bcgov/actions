@@ -2,10 +2,9 @@ name: Test Suite
 
 on:
   pull_request:
-  workflow_dispatch:
 
 concurrency:
-  group: test-suite-${{ github.event.pull_request.number || github.ref }}
+  group: test-suite-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 permissions: {}
@@ -69,7 +68,7 @@ jobs:
   test-builder-build:
     name: Test Builder (Build)
     needs: [filter]
-    if: contains(fromJSON(needs.filter.outputs.changes), 'builder') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    if: contains(fromJSON(needs.filter.outputs.changes), 'builder') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -110,7 +109,7 @@ jobs:
   test-builder-matrix:
     name: Test Builder (No Attestation / Advanced / Single Package / Metadata / Self)
     needs: [filter]
-    if: contains(fromJSON(needs.filter.outputs.changes), 'builder') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    if: contains(fromJSON(needs.filter.outputs.changes), 'builder') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -125,7 +124,7 @@ jobs:
           package: frontend
           build_context: frontend
           repository: bcgov/quickstart-openshift
-          tags: ${{ github.event.number || github.run_id }}-no-attestation
+          tags: ${{ github.event.number }}-no-attestation
           tag_fallback: test
           triggers: |
             frontend/
@@ -139,8 +138,8 @@ jobs:
           build_file: api/Dockerfile
           repository: bcgov/nr-fom
           tags: |
-            ${{ github.event.number || github.run_id }}
-            ${{ github.event.number || github.run_id }}-multiline
+            ${{ github.event.number }}
+            ${{ github.event.number }}-multiline
             pr-latest
 
       - name: Test Single Package Repo Format
@@ -152,7 +151,7 @@ jobs:
           build_file: ./Dockerfile
           repository: bcgov/nr-peach
           tags: |
-            ${{ github.event.number || github.run_id }}
+            ${{ github.event.number }}
             single-package-test
 
       - name: Test Custom Tags
@@ -163,7 +162,7 @@ jobs:
           build_context: frontend
           repository: bcgov/quickstart-openshift
           tags: |
-            ${{ github.event.number || github.run_id }}
+            ${{ github.event.number }}
             custom-tag
           tag_fallback: test
           triggers: |
@@ -176,7 +175,7 @@ jobs:
           package: builder-selftest
           build_context: builder/tests
           build_file: builder/tests/Dockerfile
-          tags: ${{ github.event.number || github.run_id }}-selftest
+          tags: ${{ github.event.number }}-selftest
           sbom: 'false'
           triggers: |
             builder/
@@ -295,7 +294,7 @@ jobs:
   test-scan-url:
     name: Test Scan URL
     needs: [filter]
-    if: contains(fromJSON(needs.filter.outputs.changes), 'scan-url') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    if: contains(fromJSON(needs.filter.outputs.changes), 'scan-url') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -367,7 +366,7 @@ jobs:
   test-scan-url-live:
     name: Test Scan URL (Live) (${{ matrix.name }})
     needs: [filter]
-    if: contains(fromJSON(needs.filter.outputs.changes), 'scan-url') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    if: contains(fromJSON(needs.filter.outputs.changes), 'scan-url') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
@@ -420,7 +419,7 @@ jobs:
   test-scan-url-matrix:
     name: Test Scan URL (Two URLs)
     needs: [filter, test-scan-url-live]
-    if: contains(fromJSON(needs.filter.outputs.changes), 'scan-url') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    if: contains(fromJSON(needs.filter.outputs.changes), 'scan-url') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
     runs-on: ubuntu-24.04
     permissions:
       actions: read
@@ -452,7 +451,7 @@ jobs:
   test-diff-triggers:
     name: Test Diff Triggers
     needs: [filter]
-    if: contains(fromJSON(needs.filter.outputs.changes), 'diff-triggers') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    if: contains(fromJSON(needs.filter.outputs.changes), 'diff-triggers') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -502,7 +501,7 @@ jobs:
         with:
           triggers: |
             .diff-triggers-fixture/
-          ref: ${{ github.event.pull_request.base.sha || 'HEAD~1' }}
+          ref: ${{ github.event.pull_request.base.sha }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Test Formats (Bash / Comma / Semi / JSON)
@@ -570,7 +569,7 @@ jobs:
   test-image-tracker:
     name: Test Image Tracker (${{ matrix.repo }} / ${{ matrix.package }})
     needs: [filter]
-    if: contains(fromJSON(needs.filter.outputs.changes), 'image-tracker') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    if: contains(fromJSON(needs.filter.outputs.changes), 'image-tracker') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -779,7 +778,7 @@ jobs:
   test-pr-description-add:
     name: Test PR Description Add
     needs: [filter]
-    if: contains(fromJSON(needs.filter.outputs.changes), 'pr-description-add') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || contains(fromJSON(needs.filter.outputs.changes), 'lockfile') || github.event_name == 'workflow_dispatch'
+    if: contains(fromJSON(needs.filter.outputs.changes), 'pr-description-add') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || contains(fromJSON(needs.filter.outputs.changes), 'lockfile')
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -809,7 +808,7 @@ jobs:
   test-pr-validate:
     name: Test PR Validate
     needs: [filter]
-    if: contains(fromJSON(needs.filter.outputs.changes), 'pr-validate') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    if: contains(fromJSON(needs.filter.outputs.changes), 'pr-validate') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -830,7 +829,7 @@ jobs:
   test-pr-validate-lint:
     name: Test PR Validate workflow lint
     needs: [filter]
-    if: contains(fromJSON(needs.filter.outputs.changes), 'pr-validate') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    if: contains(fromJSON(needs.filter.outputs.changes), 'pr-validate') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -877,7 +876,7 @@ jobs:
   test-workflow-results:
     name: Test Workflow Results
     needs: [filter]
-    if: contains(fromJSON(needs.filter.outputs.changes), 'workflow-results') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    if: contains(fromJSON(needs.filter.outputs.changes), 'workflow-results') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -994,7 +993,7 @@ jobs:
   test-notifier:
     name: Test Workflow Notifier
     needs: [filter]
-    if: contains(fromJSON(needs.filter.outputs.changes), 'workflow-notifier') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    if: contains(fromJSON(needs.filter.outputs.changes), 'workflow-notifier') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -1097,7 +1096,7 @@ jobs:
   test-sysdig-monitor:
     name: Test Sysdig Monitor
     needs: [filter]
-    if: contains(fromJSON(needs.filter.outputs.changes), 'sysdig-monitor') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    if: contains(fromJSON(needs.filter.outputs.changes), 'sysdig-monitor') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -1128,7 +1127,7 @@ jobs:
   test-test-and-analyse:
     name: Test Test and Analyse (${{ matrix.name }})
     needs: [filter]
-    if: contains(fromJSON(needs.filter.outputs.changes), 'test-and-analyse') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || contains(fromJSON(needs.filter.outputs.changes), 'lockfile') || github.event_name == 'workflow_dispatch'
+    if: contains(fromJSON(needs.filter.outputs.changes), 'test-and-analyse') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || contains(fromJSON(needs.filter.outputs.changes), 'lockfile')
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -1238,7 +1237,7 @@ jobs:
   test-test-and-analyse-shallow:
     name: Test Test and Analyse (Existing Shallow Checkout)
     needs: [filter]
-    if: contains(fromJSON(needs.filter.outputs.changes), 'test-and-analyse') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || contains(fromJSON(needs.filter.outputs.changes), 'lockfile') || github.event_name == 'workflow_dispatch'
+    if: contains(fromJSON(needs.filter.outputs.changes), 'test-and-analyse') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || contains(fromJSON(needs.filter.outputs.changes), 'lockfile')
     runs-on: ubuntu-24.04
     permissions:
       contents: read
