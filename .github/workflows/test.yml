@@ -34,6 +34,8 @@ jobs:
               - 'scan-url/**'
             diff-triggers:
               - 'diff-triggers/**'
+            ghcr-cleanup:
+              - 'ghcr-cleanup/**'
             image-tracker:
               - 'image-tracker/**'
             pr-description-add:
@@ -562,6 +564,80 @@ jobs:
             exit 1
           fi
           echo "Verified: caller's checkout left intact."
+
+  # ─── GHCR CLEANUP ───────────────────────────────────────────────────────────
+  # Selection logic is covered by fixtures; the live run is dry-run with a
+  # read-only token, against this repo's builder self-test packages.
+  test-ghcr-cleanup:
+    name: Test GHCR Cleanup
+    needs: [filter]
+    if: contains(fromJSON(needs.filter.outputs.changes), 'ghcr-cleanup') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Run Unit Tests
+        run: node --test ghcr-cleanup/tests/unit.test.js
+
+      - name: Validate action.yml
+        run: |
+          pip install pyyaml -q
+          python3 -c "
+          import yaml
+          with open('ghcr-cleanup/action.yml') as f:
+              action = yaml.safe_load(f)
+          assert action['runs'].get('using') == 'node24', 'runs.using must be node24'
+          assert action['inputs']['packages'].get('required') is True, 'packages must be required'
+          assert action['inputs']['dry_run'].get('default') == 'true', 'dry_run must default to true'
+          assert 'selected' in action['outputs'], 'missing selected output'
+          "
+
+      - name: Dry run (default)
+        id: dry_run
+        uses: $/ghcr-cleanup
+        with:
+          packages: |
+            builder-selftest
+            builder-arm-selftest
+            ghcr-cleanup-missing
+
+      - name: Invalid dry_run fails fast
+        id: invalid_dry_run
+        continue-on-error: true
+        uses: $/ghcr-cleanup
+        with:
+          packages: builder-selftest
+          dry_run: 'no'
+
+      - name: Invalid keep_digests fails fast
+        id: invalid_keep
+        continue-on-error: true
+        uses: $/ghcr-cleanup
+        with:
+          packages: builder-selftest
+          keep_digests: latest
+
+      - name: Verify outcomes
+        env:
+          SELECTED: ${{ steps.dry_run.outputs.selected }}
+        run: |
+          set -euo pipefail
+          jq -e 'type == "array"' <<<"${SELECTED}" >/dev/null || { echo "::error::selected is not a JSON array"; exit 1; }
+          echo "Dry run selected $(jq length <<<"${SELECTED}") version(s)"
+          if [ "${{ steps.invalid_dry_run.outcome }}" != "failure" ] || \
+             [ "${{ steps.invalid_keep.outcome }}" != "failure" ]; then
+            echo "::error::ghcr-cleanup must fail on an invalid dry_run or keep_digests"
+            exit 1
+          fi
 
   # ─── IMAGE TRACKER ──────────────────────────────────────────────────────────
   test-image-tracker:
@@ -1370,6 +1446,7 @@ jobs:
       - test-scan-url-live
       - test-scan-url-matrix
       - test-diff-triggers
+      - test-ghcr-cleanup
       - test-image-tracker
       - test-pr-description-add
       - test-pr-validate

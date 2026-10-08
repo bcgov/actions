@@ -23,6 +23,15 @@ Checks git diff for file and path changes to conditionally trigger workflow jobs
   uses: bcgov/actions/diff-triggers@vX.Y.Z # Replace with latest release tag
 ```
 
+### [ghcr-cleanup](./ghcr-cleanup/)
+Opt-in deletion of closed-PR and unreferenced untagged GHCR versions of the repository's own packages. Dry-run by default.
+
+```yaml
+- name: Clean up GHCR
+  uses: bcgov/actions/ghcr-cleanup@vX.Y.Z # Replace with latest release tag
+  with:
+    packages: backend, frontend, migrations
+```
 
 ### [image-tracker](./image-tracker/)
 Forensic history traversal to resolve stable image SHAs from Tags or SHAs.
@@ -106,6 +115,7 @@ In alignment with security best practices, you should always declare minimum exp
 Refer to each action's directory for its exact minimum required permissions block:
 - **[builder](./builder/)**: `contents: read`, `packages: write`, plus `id-token: write` and `attestations: write` (optional, for build provenance attestations)
 - **[diff-triggers](./diff-triggers/)**: `contents: read`
+- **[ghcr-cleanup](./ghcr-cleanup/)**: `contents: read`, `packages: write`, `pull-requests: read` (`packages: read` for a dry run)
 - **[image-tracker](./image-tracker/)**: `contents: read`, `pull-requests: read`, `packages: read`
 - **[pr-description-add](./pr-description-add/)**: `pull-requests: write`
 - **[pr-validate](./pr-validate/)**: `contents: read`, `pull-requests: read`, plus `pull-requests: write` when `add_markdown` is set
