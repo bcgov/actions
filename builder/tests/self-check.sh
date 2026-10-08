@@ -117,6 +117,22 @@ assert_contains "$pr_msg" "push to your fork" "fork PR notice points to fork pus
 assert_eq "$(is_fork_repository true && echo yes || echo no)" "yes" "is_fork_repository true"
 assert_eq "$(is_fork_repository false && echo yes || echo no)" "no" "is_fork_repository false"
 
+assert_eq "$(ghcr_package backend '')" "backend" "empty architecture keeps the package"
+assert_eq "$(ghcr_package backend amd64)" "backend" "amd64 keeps the package"
+assert_eq "$(ghcr_package Backend AMD64)" "backend" "amd64 package is lowercased"
+assert_eq "$(ghcr_package backend arm64)" "backend-arm64" "arm64 publishes a separate package"
+assert_eq "$(ghcr_package Backend ARM64)" "backend-arm64" "arm64 package is lowercased"
+assert_eq "$(image_path_for "$(ghcr_package actions '')" bcgov/actions actions)" "bcgov/actions" "empty architecture keeps a single-package repo path"
+assert_eq "$(image_path_for "$(ghcr_package actions arm64)" bcgov/actions actions)" "bcgov/actions/actions-arm64" "arm64 single-package repo publishes under a suffixed name"
+assert_eq "$(ghcr_package backend 'linux/arm64' >/dev/null && echo ok || echo rejected)" "rejected" "ghcr_package rejects a platform list"
+assert_eq "$(runner_matches '' X64 && echo yes || echo no)" "yes" "empty architecture accepts an Intel runner"
+assert_eq "$(runner_matches amd64 X64 && echo yes || echo no)" "yes" "amd64 accepts an Intel runner"
+assert_eq "$(runner_matches arm64 ARM64 && echo yes || echo no)" "yes" "arm64 accepts an ARM64 runner"
+assert_eq "$(runner_matches arm64 aarch64 && echo yes || echo no)" "yes" "arm64 accepts an aarch64 runner"
+assert_eq "$(runner_matches '' ARM64 && echo yes || echo no)" "no" "empty architecture rejects an ARM runner"
+assert_eq "$(runner_matches amd64 ARM64 && echo yes || echo no)" "no" "amd64 rejects an ARM runner"
+assert_eq "$(runner_matches arm64 X64 && echo yes || echo no)" "no" "arm64 rejects an Intel runner"
+
 echo ""
 echo "Passed: ${passed}, Failed: ${failed}"
 [ "$failed" -eq 0 ]

@@ -1,6 +1,41 @@
 # Image targeting helpers for builder. Sourced by action.yml and tests.
 # Not executed directly.
 
+# ghcr_package PACKAGE ARCHITECTURE
+# Package name published to GHCR. Empty and amd64 keep PACKAGE.
+# arm64 publishes PACKAGE-arm64. Any other value fails.
+ghcr_package() {
+  local package="${1,,}"
+  case "${2,,}" in
+    '' | amd64) printf '%s\n' "$package" ;;
+    arm64) printf '%s-arm64\n' "$package" ;;
+    *) return 1 ;;
+  esac
+}
+
+# runner_matches ARCHITECTURE RUNNER_ARCH
+# Deploy packages are amd64. Empty and amd64 require an amd64 runner.
+# arm64 is only the Mac/Podman package, and it requires an arm64 runner.
+runner_matches() {
+  local arch="${1,,}"
+  local runner="${2,,}"
+  case "$arch" in
+    '' | amd64)
+      case "$runner" in
+        x64 | amd64 | x86_64) return 0 ;;
+        *) return 1 ;;
+      esac
+      ;;
+    arm64)
+      case "$runner" in
+        arm64 | aarch64) return 0 ;;
+        *) return 1 ;;
+      esac
+      ;;
+    *) return 1 ;;
+  esac
+}
+
 # image_path_for PACKAGE GITHUB_REPOSITORY REPO_NAME
 # Prints owner/repo or owner/repo/package (lowercased).
 image_path_for() {
