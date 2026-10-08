@@ -171,6 +171,7 @@ runs:
         fi
 
         echo "image_path=${image_path}" >> "$GITHUB_OUTPUT"
+        echo "publish_package=${publish_package}" >> "$GITHUB_OUTPUT"
         echo "image_name=${registry}/${image_path}" >> "$GITHUB_OUTPUT"
         echo "registry_host=${registry}" >> "$GITHUB_OUTPUT"
         echo "source_sha=${sha}" >> "$GITHUB_OUTPUT"
@@ -420,7 +421,7 @@ runs:
         curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
 
         IMAGE="${{ steps.vars.outputs.registry_host }}/${{ steps.vars.outputs.image_path }}@${{ steps.build_and_push.outputs.digest }}"
-        PACKAGE_SANITIZED=$(echo "${{ inputs.package }}" | tr '/:' '-' | tr -d ' ')
+        PACKAGE_SANITIZED=$(echo "${{ steps.vars.outputs.publish_package }}" | tr '/:' '-' | tr -d ' ')
         echo "package_sanitized=${PACKAGE_SANITIZED}" >> $GITHUB_OUTPUT
 
         mkdir -p sboms
