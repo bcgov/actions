@@ -184,7 +184,7 @@ jobs:
   test-builder-arm64:
     name: Test Builder (arm64 package)
     needs: [filter]
-    if: contains(fromJSON(needs.filter.outputs.changes), 'builder') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch'
+    if: contains(fromJSON(needs.filter.outputs.changes), 'builder') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
     runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
@@ -222,7 +222,7 @@ jobs:
     needs: [filter, test-builder-arm64]
     if: |
       always() && needs.test-builder-arm64.result == 'success' &&
-      (contains(fromJSON(needs.filter.outputs.changes), 'builder') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || github.event_name == 'workflow_dispatch')
+      (contains(fromJSON(needs.filter.outputs.changes), 'builder') || contains(fromJSON(needs.filter.outputs.changes), 'workflows'))
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -262,14 +262,14 @@ jobs:
             .github/workflows/
 
       - name: Deploy package is still the unsuffixed image
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        if: github.event.pull_request.head.repo.full_name == github.repository
         id: track
         uses: $/image-tracker
         with:
           package: builder-arm-selftest
 
       - name: Tracker digest is the amd64 image
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        if: github.event.pull_request.head.repo.full_name == github.repository
         env:
           AMD_DIGEST: ${{ steps.amd.outputs.digest }}
           AMD_PATH: ${{ steps.amd.outputs.image_path }}
@@ -279,11 +279,9 @@ jobs:
         run: |
           set -euo pipefail
           case "${AMD_PATH}" in
+            *-arm64:*) echo "::error::amd64 image path is suffixed: ${AMD_PATH}"; exit 1 ;;
             */builder-arm-selftest:*) ;;
             *) echo "::error::amd64 image left its package: ${AMD_PATH}"; exit 1 ;;
-          esac
-          case "${AMD_PATH}" in
-            *-arm64:*) echo "::error::amd64 image path is suffixed: ${AMD_PATH}"; exit 1 ;;
           esac
           [ -n "${TRACK_DIGEST}" ] || { echo "::error::image-tracker returned no digest"; exit 1; }
           [ "${TRACK_DIGEST}" = "${AMD_DIGEST}" ] || { echo "::error::image-tracker resolved ${TRACK_DIGEST}, not the amd64 image ${AMD_DIGEST}"; exit 1; }
