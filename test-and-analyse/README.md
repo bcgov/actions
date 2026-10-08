@@ -98,6 +98,13 @@ permissions:
     # Knip dependency analysis (Node only). Options: off, warn (default), error
     dep_scan: warn
 
+    # Semgrep scan of dir (any language). Off by default; see Semgrep below.
+    semgrep: false
+    # Rules: registry rulesets or files relative to the workspace root, one per line
+    semgrep_config: p/default
+    # Fail on findings. Default false: findings are warnings
+    semgrep_fail: false
+
     # Package manager caching. Optional; auto-detected from project lockfiles
     # (npm/yarn/pnpm for Node, maven/gradle/sbt for Java, pip/poetry/pipenv for Python).
     # Set to 'none' to manually disable caching.
@@ -248,6 +255,8 @@ jobs:
 | Output    | Description                                |
 | --------- | ------------------------------------------ |
 | triggered | Whether the action was triggered based on path changes (true/false) |
+| semgrep_findings | Number of Semgrep findings (empty when the scan did not run) |
+| semgrep_sarif | Path to the Semgrep SARIF report (empty when the scan did not run) |
 
 Has the action been triggered by path changes? \[true|false\]
 
@@ -439,6 +448,40 @@ For complete configuration options, see the [Knip documentation](https://knip.de
 - Works best with projects that have clear entry points defined in configuration
 
 Knip supports many JavaScript/TypeScript tools and frameworks out of the box. For advanced configuration beyond exclusions, you can also use `knip.json` or `knip.ts` configuration files. See [Knip documentation](https://knip.dev/) for all available options.
+
+# Semgrep - Static Analysis
+
+Optional, language-agnostic static analysis (Node, Java, Python and more) of `dir`. It runs after the tests and before the report step, including when an earlier step has failed, in the pinned `semgrep/semgrep` container with metrics off, so the runner needs Docker (GitHub-hosted Ubuntu runners have it). It is **off by default**; existing callers see no change.
+
+| Input | Default | Meaning |
+| ----- | ------- | ------- |
+| `semgrep` | `false` | Run the scan |
+| `semgrep_config` | `p/default` | Rules, one per line: registry rulesets (`p/...`, `r/...`) or rule files relative to the workspace root |
+| `semgrep_fail` | `false` | `false`: findings are warnings and the action continues. `true`: any finding fails the action |
+
+Findings appear as warning annotations (first 50) and in the `semgrep_findings` and `semgrep_sarif` outputs. Each scan writes its own report, with paths relative to the workspace root. A scan error (bad rules, network failure fetching a registry ruleset) always fails the action; files Semgrep could only partly parse are reported as a warning.
+
+Semgrep's default ignore list applies (e.g. `node_modules/`, `dist/`, `test/`, `tests/`); add a `.semgrepignore` to change it.
+
+```yaml
+- id: test
+  uses: bcgov/actions/test-and-analyse@vX.Y.Z
+  with:
+    commands: npm ci && npm test
+    dir: backend
+    semgrep: true
+    # semgrep_fail: true   # enforce once findings are cleaned up
+```
+
+The SARIF report is not uploaded by this action, so no extra permission is needed. To show findings in code scanning, upload it in the calling job, which then needs `security-events: write`:
+
+```yaml
+- if: always() && steps.test.outputs.semgrep_sarif != ''
+  uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+  with:
+    sarif_file: ${{ steps.test.outputs.semgrep_sarif }}
+    category: semgrep
+```
 
 # Feedback
 

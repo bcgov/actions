@@ -90,6 +90,18 @@ inputs:
     description: "Path to custom Knip configuration file (relative to workspace root). If not provided, uses action's default configuration"
     default: ""
 
+  semgrep:
+    description: "Run a Semgrep scan of dir (true/false). Off by default. Needs Docker on the runner"
+    default: "false"
+
+  semgrep_config:
+    description: "Semgrep rules, one per line: registry rulesets (e.g. p/default) or rule files relative to the workspace root"
+    default: "p/default"
+
+  semgrep_fail:
+    description: "Fail the action when Semgrep reports findings (true/false). Default false: findings are warnings"
+    default: "false"
+
   ### Usually a bad idea / not recommended
   ref:
     description: Reference to compare against (e.g. branch name, tag, or commit SHA)
@@ -137,6 +149,12 @@ outputs:
   knip_config:
     description: The Knip configuration file that was auto-discovered or specified
     value: ${{ steps.knip_analysis.outputs.knip_config }}
+  semgrep_findings:
+    description: Number of Semgrep findings (empty when the scan did not run)
+    value: ${{ steps.semgrep.outputs.semgrep_findings }}
+  semgrep_sarif:
+    description: Path to the Semgrep SARIF report (empty when the scan did not run)
+    value: ${{ steps.semgrep.outputs.semgrep_sarif }}
 
 runs:
   using: composite
@@ -416,6 +434,18 @@ runs:
         KNIP_EXIT_CODE=$?
         npx -y knip --dependencies --exports ${KNIP_CONFIG} | sed 's/\u001b\[[0-9;]*[a-zA-Z]//g' > knip-summary.txt 2>&1
         set -e
+
+    - name: Semgrep Scan
+      id: semgrep
+      if: steps.final_triggered.outputs.triggered == 'true' && inputs.semgrep == 'true' && (success() || failure())
+      shell: bash
+      working-directory: ${{ inputs.dir }}
+      env:
+        SEMGREP_IMAGE: semgrep/semgrep:1.179.0@sha256:93963d9295a366f59e4850127b1550400ee7b388f04fe144e4a1f6325d96e01b
+        INPUT_SEMGREP_CONFIG: ${{ inputs.semgrep_config }}
+        INPUT_SEMGREP_FAIL: ${{ inputs.semgrep_fail }}
+      run: |
+        "${{ github.action_path }}/semgrep.sh"
 
     # Composite stays: this action installs the caller's toolchain and runs their
     # commands, Sonar and Knip. The reporter is a node24 action, so it uses the
