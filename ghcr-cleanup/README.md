@@ -45,6 +45,14 @@ pull request's image is deleted.
   nothing is deleted.
 - Logs show package names, version IDs, tags, digests and reasons only.
 - A package that does not exist is skipped with a log line.
+- A package linked to a different repository, or to none, fails with nothing
+  deleted from it. The packages API is owner-scoped, so this check keeps the
+  action on this repository's packages.
+- With `dry_run: false`, tags are read again just before deleting, and a
+  version that became protected in the meantime (for example promoted to
+  `prod`) is skipped. To also close the gap between that check and the delete,
+  share a `concurrency` group with the workflows that publish, tag or promote
+  these packages (example below).
 - A version that is already gone when deleted is logged and skipped.
 - If any pull request lookup or manifest read fails for a package, nothing is
   deleted from that package and the step fails after the other packages.
@@ -60,6 +68,11 @@ on:
     types: [closed]
 
 permissions: {}
+
+# Same group in the workflows that build, tag or promote these packages
+concurrency:
+  group: ghcr-${{ github.repository }}
+  cancel-in-progress: false
 
 jobs:
   cleanup:

@@ -150,40 +150,55 @@ function selectVersions({
   })
 }
 
-async function cleanPackage(pkg, {io, dryRun, keepDigests, openPrs}) {
+// Read versions, PR commits and manifests, reusing what the cache already holds.
+async function planPackage(pkg, {io, keepDigests, openPrs}, cache) {
   const versions = await io.listVersions(pkg)
-  if (versions === null) {
-    console.log(`${pkg}: package not found, nothing to do`)
-    return []
-  }
+  if (versions === null) return null
 
-  const numbers = new Set()
   for (const v of versions) {
     for (const tag of tagsOf(v)) {
       const pr = PR_TAG.exec(tag)
-      if (pr && !openPrs.has(Number(pr[1]))) numbers.add(Number(pr[1]))
+      const n = pr && Number(pr[1])
+      if (pr && !openPrs.has(n) && !cache.prs.has(n)) {
+        cache.prs.set(n, await io.prCommits(n))
+      }
     }
   }
-  const closedPrCommits = new Map()
-  for (const n of numbers) {
-    const shas = await io.prCommits(n)
-    if (shas) closedPrCommits.set(n, shas)
-  }
+  const closedPrCommits = new Map(
+    [...cache.prs].filter(([n, shas]) => shas && !openPrs.has(n))
+  )
 
-  const manifests = new Map()
-  for (let i = 0; i < versions.length; i += 10) {
-    const batch = versions.slice(i, i + 10)
+  const missing = versions.filter(v => !cache.manifests.has(v.name))
+  for (let i = 0; i < missing.length; i += 10) {
+    const batch = missing.slice(i, i + 10)
     const refs = await Promise.all(batch.map(v => io.manifest(pkg, v.name)))
-    batch.forEach((v, j) => manifests.set(v.name, refs[j]))
+    batch.forEach((v, j) => cache.manifests.set(v.name, refs[j]))
   }
 
-  const decisions = selectVersions({
+  return selectVersions({
     versions,
-    manifests,
+    manifests: cache.manifests,
     openPrs,
     closedPrCommits,
     keepDigests
   })
+}
+
+async function cleanPackage(pkg, opts) {
+  const {io, dryRun, repository} = opts
+  const linked = await io.packageRepository(pkg)
+  if (linked === null) {
+    console.log(`${pkg}: package not found, nothing to do`)
+    return []
+  }
+  if (linked.toLowerCase() !== repository.toLowerCase()) {
+    throw new Error(
+      `package is linked to '${linked}', not ${repository}; nothing deleted`
+    )
+  }
+
+  const cache = {prs: new Map(), manifests: new Map()}
+  const decisions = (await planPackage(pkg, opts, cache)) || []
   const verb = dryRun ? 'would delete' : 'delete'
   for (const d of decisions) {
     const action = d.remove ? verb : 'keep'
@@ -193,10 +208,21 @@ async function cleanPackage(pkg, {io, dryRun, keepDigests, openPrs}) {
   }
 
   const selected = decisions.filter(d => d.remove)
-  if (dryRun) return selected
+  if (dryRun || selected.length === 0) return selected
+
+  // Re-read tags just before deleting, so a promotion during the lookups wins.
+  const fresh = new Map(
+    ((await planPackage(pkg, opts, cache)) || []).map(d => [d.id, d])
+  )
+  const toDelete = []
+  for (const d of selected) {
+    const now = fresh.get(d.id)
+    if (now?.remove) toDelete.push(d)
+    else console.log(`${pkg} ${d.id}: ${now ? now.reason : 'gone'}, skipped`)
+  }
 
   let failed = 0
-  for (const d of selected) {
+  for (const d of toDelete) {
     try {
       const result = await io.deleteVersion(pkg, d.id)
       console.log(
@@ -210,7 +236,7 @@ async function cleanPackage(pkg, {io, dryRun, keepDigests, openPrs}) {
     }
   }
   if (failed) throw new Error(`${failed} deletion(s) failed`)
-  return selected
+  return toDelete
 }
 
 function liveIo({apiUrl, repository, token}) {
@@ -249,9 +275,9 @@ function liveIo({apiUrl, repository, token}) {
     return packagesBase
   }
 
-  function versionsPath(prefix, pkg) {
+  async function packagePath(pkg) {
     const {name} = packagePaths(pkg, repository)
-    return `${prefix}/packages/container/${encodeURIComponent(name)}/versions`
+    return `${await base()}/packages/container/${encodeURIComponent(name)}`
   }
 
   async function bearer(image) {
@@ -279,8 +305,16 @@ function liveIo({apiUrl, repository, token}) {
       const commits = await getAll(`/repos/${repository}/pulls/${n}/commits`)
       return commits && new Set(commits.map(c => c.sha))
     },
+    // The packages API is owner-scoped; the caller checks the linked repository.
+    async packageRepository(pkg) {
+      const path = await packagePath(pkg)
+      const res = await fetch(`${apiUrl}${path}`, {headers})
+      if (res.status === 404) return null
+      if (!res.ok) throw new Error(`GET ${path}: HTTP ${res.status}`)
+      return (await res.json()).repository?.full_name || ''
+    },
     async listVersions(pkg) {
-      return getAll(versionsPath(await base(), pkg))
+      return getAll(`${await packagePath(pkg)}/versions`)
     },
     async manifest(pkg, digest) {
       const {image} = packagePaths(pkg, repository)
@@ -303,7 +337,7 @@ function liveIo({apiUrl, repository, token}) {
       }
     },
     async deleteVersion(pkg, id) {
-      const path = `${versionsPath(await base(), pkg)}/${id}`
+      const path = `${await packagePath(pkg)}/versions/${id}`
       const res = await fetch(`${apiUrl}${path}`, {method: 'DELETE', headers})
       if (res.status === 404) return 'missing'
       if (!res.ok) throw new Error(`DELETE ${path}: HTTP ${res.status}`)

@@ -14,6 +14,7 @@ const version = (id, d, tags = []) => ({
   name: d,
   metadata: {container: {tags}}
 })
+const tagsOf = v => v.metadata.container.tags
 const image = () => ({children: [], subject: null})
 const index = children => ({children, subject: null})
 const referrer = subject => ({children: [], subject})
@@ -133,18 +134,30 @@ test('Exactly the expected versions are selected', () => {
   assert.deepStrictEqual(ids, [4, 5, 6, 9, 14])
 })
 
-function fakeIo({missingPackage = false, failManifest = false} = {}) {
+function fakeIo({
+  linked = 'bcgov/quickstart-openshift',
+  failManifest = false,
+  promoteDuringLookups = false
+} = {}) {
   const deleted = []
+  let promoted = false
   return {
     deleted,
+    async packageRepository() {
+      return linked
+    },
     async listVersions() {
-      return missingPackage ? null : versions
+      if (!promoted) return versions
+      return versions.map(v =>
+        v.id === 4 ? version(4, v.name, ['prod', ...tagsOf(v)]) : v
+      )
     },
     async prCommits(n) {
       return closedPrCommits.get(n) || null
     },
     async manifest(pkg, d) {
       if (failManifest && d === digest('7')) throw new Error('HTTP 500')
+      if (promoteDuringLookups) promoted = true
       return manifests.get(d)
     },
     async deleteVersion(pkg, id) {
@@ -160,7 +173,8 @@ test('Dry run selects but deletes nothing', async () => {
     io,
     dryRun: true,
     keepDigests: new Set(),
-    openPrs
+    openPrs,
+    repository: 'bcgov/quickstart-openshift'
   })
   assert.deepStrictEqual(
     selected.map(d => d.id),
@@ -175,18 +189,20 @@ test('Apply deletes exactly the selected versions; a vanished one is a no-op', a
     io,
     dryRun: false,
     keepDigests: new Set(),
-    openPrs
+    openPrs,
+    repository: 'bcgov/quickstart-openshift'
   })
   assert.deepStrictEqual(io.deleted, [4, 5, 6, 9, 14])
 })
 
 test('Missing package is a no-op', async () => {
-  const io = fakeIo({missingPackage: true})
+  const io = fakeIo({linked: null})
   const selected = await cleanPackage('nope', {
     io,
     dryRun: false,
     keepDigests: new Set(),
-    openPrs
+    openPrs,
+    repository: 'bcgov/quickstart-openshift'
   })
   assert.deepStrictEqual(selected, [])
   assert.deepStrictEqual(io.deleted, [])
@@ -199,11 +215,45 @@ test('Unresolved protection data fails the package before any delete', async () 
       io,
       dryRun: false,
       keepDigests: new Set(),
-      openPrs
+      openPrs,
+      repository: 'bcgov/quickstart-openshift'
     }),
     /HTTP 500/
   )
   assert.deepStrictEqual(io.deleted, [])
+})
+
+test('Promotion during the lookups wins over the first selection', async () => {
+  const io = fakeIo({promoteDuringLookups: true})
+  const deleted = await cleanPackage('backend', {
+    io,
+    dryRun: false,
+    keepDigests: new Set(),
+    openPrs,
+    repository: 'bcgov/quickstart-openshift'
+  })
+  assert.deepStrictEqual(io.deleted, [6, 9, 14])
+  assert.deepStrictEqual(
+    deleted.map(d => d.id),
+    [6, 9, 14]
+  )
+})
+
+test('A package linked to another repository fails before any delete', async () => {
+  for (const linked of ['bcgov/other-repo', '']) {
+    const io = fakeIo({linked})
+    await assert.rejects(
+      cleanPackage('backend', {
+        io,
+        dryRun: false,
+        keepDigests: new Set(),
+        openPrs,
+        repository: 'bcgov/quickstart-openshift'
+      }),
+      /linked to/
+    )
+    assert.deepStrictEqual(io.deleted, [])
+  }
 })
 
 const env = {
