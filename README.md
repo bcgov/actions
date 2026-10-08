@@ -30,7 +30,7 @@ Opt-in deletion of closed-PR and unreferenced untagged GHCR versions of the repo
 - name: Clean up GHCR
   uses: bcgov/actions/ghcr-cleanup@vX.Y.Z # Replace with latest release tag
   with:
-    packages: backend, frontend
+    packages: backend, frontend, migrations
 ```
 
 ### [image-tracker](./image-tracker/)

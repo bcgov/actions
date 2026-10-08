@@ -52,7 +52,7 @@ pull request's image is deleted.
   version that became protected in the meantime (for example promoted to
   `prod`) is skipped. To also close the gap between that check and the delete,
   share a `concurrency` group with the workflows that publish, tag or promote
-  these packages (example below).
+  these packages.
 - A version that is already gone when deleted is logged and skipped.
 - If any pull request lookup or manifest read fails for a package, nothing is
   deleted from that package and the step fails after the other packages.
@@ -60,22 +60,17 @@ pull request's image is deleted.
 
 ## Usage
 
-Run on pull request close, with the digests your environments run:
+Quickstart-style repos already have a `pr-close.yml` that cleans up OpenShift and promotes images on merge. Add a second job there that runs **after** that one (`needs: cleanup`), so images are promoted before anything gets deleted:
 
 ```yaml
-on:
-  pull_request:
-    types: [closed]
-
-permissions: {}
-
-# Same group in the workflows that build, tag or promote these packages
-concurrency:
-  group: ghcr-${{ github.repository }}
-  cancel-in-progress: false
-
+# .github/workflows/pr-close.yml (existing workflow; add this job)
 jobs:
   cleanup:
+    # ...existing helpers cleanup/promotion job, unchanged...
+
+  ghcr-cleanup:
+    name: GHCR Cleanup
+    needs: [cleanup]
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -87,22 +82,29 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 0
 
-      # The images the default branch deploys now
+      # Digests the default branch deploys now, so they're never deleted
       - id: deployed
-        uses: bcgov/actions/image-tracker@vX.Y.Z
+        uses: bcgov/actions/image-tracker@<sha> # vX.Y.Z
         with:
-          package: backend, frontend
+          package: backend, frontend, migrations
           repository: ${{ github.repository }}
           max_depth: 100
 
-      - uses: bcgov/actions/ghcr-cleanup@vX.Y.Z
+      - uses: bcgov/actions/ghcr-cleanup@<sha> # vX.Y.Z
         with:
-          packages: backend, frontend
+          packages: backend, frontend, migrations
           keep_digests: ${{ join(fromJSON(steps.deployed.outputs.digests).*, ' ') }}
-          dry_run: false
+          # dry_run defaults to true: read a few run logs before setting false
 ```
 
-Run it with the default `dry_run: true` first and read the log.
+Optionally copy the same job, minus `needs`, into `scheduled.yml` as a weekly sweep. That catches the backlog from before adoption, failed runs, and PRs from forks, whose token can't delete packages.
+
+Rollout:
+1. Use the default `dry_run: true` and check the logged decisions on a few closed PRs.
+2. Then set `dry_run: false`.
+3. Use the same package names as `pr-close.yml` already passes to the helpers (`backend frontend migrations`).
+
+**Watch out:** `image-tracker` doesn't store deployed digests. If you deploy an image by digest without giving it a non-PR tag (`prod`, `test`, `latest`, a release tag or the merge SHA), it has to be listed in `keep_digests`, or it's deleted once its PR closes. The `image-tracker` step above covers whatever the default branch deploys.
 
 ## Permissions
 
