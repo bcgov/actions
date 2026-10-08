@@ -124,62 +124,14 @@ assert_eq "$(ghcr_package backend arm64)" "backend-arm64" "arm64 publishes a sep
 assert_eq "$(ghcr_package Backend ARM64)" "backend-arm64" "arm64 package is lowercased"
 assert_eq "$(image_path_for "$(ghcr_package actions '')" bcgov/actions actions)" "bcgov/actions" "empty architecture keeps a single-package repo path"
 assert_eq "$(image_path_for "$(ghcr_package actions arm64)" bcgov/actions actions)" "bcgov/actions/actions-arm64" "arm64 single-package repo publishes under a suffixed name"
-if ghcr_package backend 'linux/arm64' >/dev/null; then
-  echo "FAIL  ghcr_package rejects a platform list"
-  failed=$((failed + 1))
-else
-  echo "ok  ghcr_package rejects a platform list"
-  passed=$((passed + 1))
-fi
-if runner_matches '' X64; then
-  echo "ok  empty architecture accepts an Intel runner"
-  passed=$((passed + 1))
-else
-  echo "FAIL  empty architecture accepts an Intel runner"
-  failed=$((failed + 1))
-fi
-if runner_matches amd64 X64; then
-  echo "ok  amd64 accepts an Intel runner"
-  passed=$((passed + 1))
-else
-  echo "FAIL  amd64 accepts an Intel runner"
-  failed=$((failed + 1))
-fi
-if runner_matches arm64 ARM64; then
-  echo "ok  arm64 accepts an ARM64 runner"
-  passed=$((passed + 1))
-else
-  echo "FAIL  arm64 accepts an ARM64 runner"
-  failed=$((failed + 1))
-fi
-if runner_matches arm64 aarch64; then
-  echo "ok  arm64 accepts an aarch64 runner"
-  passed=$((passed + 1))
-else
-  echo "FAIL  arm64 accepts an aarch64 runner"
-  failed=$((failed + 1))
-fi
-if runner_matches '' ARM64; then
-  echo "FAIL  empty architecture rejects an ARM runner"
-  failed=$((failed + 1))
-else
-  echo "ok  empty architecture rejects an ARM runner"
-  passed=$((passed + 1))
-fi
-if runner_matches amd64 ARM64; then
-  echo "FAIL  amd64 rejects an ARM runner"
-  failed=$((failed + 1))
-else
-  echo "ok  amd64 rejects an ARM runner"
-  passed=$((passed + 1))
-fi
-if runner_matches arm64 X64; then
-  echo "FAIL  arm64 rejects an Intel runner"
-  failed=$((failed + 1))
-else
-  echo "ok  arm64 rejects an Intel runner"
-  passed=$((passed + 1))
-fi
+assert_eq "$(ghcr_package backend 'linux/arm64' >/dev/null && echo ok || echo rejected)" "rejected" "ghcr_package rejects a platform list"
+assert_eq "$(runner_matches '' X64 && echo yes || echo no)" "yes" "empty architecture accepts an Intel runner"
+assert_eq "$(runner_matches amd64 X64 && echo yes || echo no)" "yes" "amd64 accepts an Intel runner"
+assert_eq "$(runner_matches arm64 ARM64 && echo yes || echo no)" "yes" "arm64 accepts an ARM64 runner"
+assert_eq "$(runner_matches arm64 aarch64 && echo yes || echo no)" "yes" "arm64 accepts an aarch64 runner"
+assert_eq "$(runner_matches '' ARM64 && echo yes || echo no)" "no" "empty architecture rejects an ARM runner"
+assert_eq "$(runner_matches amd64 ARM64 && echo yes || echo no)" "no" "amd64 rejects an ARM runner"
+assert_eq "$(runner_matches arm64 X64 && echo yes || echo no)" "no" "arm64 rejects an Intel runner"
 
 echo ""
 echo "Passed: ${passed}, Failed: ${failed}"

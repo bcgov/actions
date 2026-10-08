@@ -245,9 +245,9 @@ builds:
 
 # ARM images
 
-[`quickstart-openshift`](https://github.com/bcgov/quickstart-openshift) `.github/workflows/pr-open.yml` is the workflow most consumers run. Its `builds` job is a matrix of `backend`, `frontend`, and `migrations` on `ubuntu-24.04`. It does not set `architecture`. Tags are the pull request number and the head SHA, and `tag_fallback` is `latest`. `deploys` needs only `builds` and passes the head SHA through `reusable-deploy.yml` as `IMAGE_TAG`. `merge.yml` deploys the pull request number, then retags `<package>:<pr>` to `prod`.
+[`quickstart-openshift`](https://github.com/bcgov/quickstart-openshift) `.github/workflows/pr-open.yml` is the workflow most consumers run. Its `builds` job is a matrix of `backend`, `frontend`, and `migrations` on `ubuntu-24.04`. It does not set `architecture`. Tags are the pull request number and the head SHA, and `tag_fallback` is `latest`. `deploys` needs only `builds` and passes the head SHA through `reusable-deploy.yml` as `IMAGE_TAG`.
 
-Leave that `builds` job as it is. Add a second job for laptops. Do not add it to `deploys.needs`, or an ARM failure blocks the OpenShift deploy.
+Leave that `builds` job as it is. Add a second job for ARM builds. Do not add it to `deploys.needs`, or an ARM failure blocks the OpenShift deploy.
 
 ```yaml
 build-arm64:
@@ -275,7 +275,7 @@ A Mac pulls `ghcr.io/<organization>/<repository>/backend-arm64:<pull request num
 
 `pr-open.yml`'s `results` job says every new job must be listed in its `needs`. This job is not a deploy gate. Leave it out of `results` and an unavailable ARM runner does not fail the pull request. Add it there and it does.
 
-`merge.yml` promote retags `backend`, `frontend`, and `migrations` to `prod`. It does not retag the `-arm64` packages. `tag_fallback: latest` on the ARM job looks for `<package>-arm64:latest`, which that promote step never writes, so the ARM job builds on every pull request until that tag exists.
+`tag_fallback: latest` on the ARM job looks for `<package>-arm64:latest`. Promotion writes `prod` on `backend`, `frontend`, and `migrations` only, so that tag is never created and the ARM job builds on every pull request.
 
 `builds` omits `architecture`, so it stays `amd64` and publishes `backend`, `frontend`, and `migrations`. An ARM runner that omits it, or sets `amd64`, fails. That keeps an ARM image off the package OpenShift deploys. `architecture: arm64` is the Mac and Podman package, and it fails on `ubuntu-24.04`.
 
