@@ -1,0 +1,36 @@
+name: 'GHCR Cleanup'
+description: 'Delete closed-PR and unreferenced untagged GHCR versions of this repository''s packages. Dry-run by default.'
+branding:
+  icon: trash-2
+  color: red
+
+inputs:
+  packages:
+    description: |
+      One or more package names in this repository (comma, space, or newline
+      separated). Same mapping as image-tracker: `<owner>/<repo>/<package>`, or
+      `<owner>/<repo>` when the package name matches the repository name.
+    required: true
+  dry_run:
+    description: 'Log what would be deleted and delete nothing. Set to false to delete.'
+    default: 'true'
+  keep_digests:
+    description: |
+      Deployed manifest digests to keep (sha256:..., comma, space, or newline
+      separated), e.g. image-tracker `digests` values. Their index children
+      are kept too.
+    required: false
+  token:
+    description: 'Token that can list (and, with dry_run false, delete) versions of this repository''s packages.'
+    default: ${{ github.token }}
+    required: false
+
+outputs:
+  selected:
+    description: |
+      JSON array of the versions selected for deletion (deleted unless
+      dry_run): `[{"package": "...", "id": 1, "digest": "sha256:...", "tags": []}]`.
+
+runs:
+  using: 'node24'
+  main: 'index.js'
