@@ -45,7 +45,7 @@ runs:
     # title failure is the one that tells the author to edit and wait for a re-run.
     - name: Checkout workflows
       if: hashFiles('.github/workflows/*.yml', '.github/workflows/*.yaml') == ''
-      uses: actions/checkout@v7
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         clean: false
 
