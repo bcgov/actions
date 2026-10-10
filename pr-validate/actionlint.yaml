@@ -1,3 +1,10 @@
+# GitHub-hosted runner labels newer than actionlint 1.7.12's built-in list.
+# lint-workflows.sh appends the caller's own self-hosted-runner labels after the
+# "  labels:" line below, so keep exactly one such line in this file.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04
+    - ubuntu-26.04-arm
 # ponytail: actionlint 1.7.x does not yet recognize GitHub's $/ self-repository syntax.
 # Remove when rhysd/actionlint adds support. Bundled in this action so a sparse
 # checkout of pr-validate still loads it.
