@@ -170,6 +170,9 @@ rm "$fixture/.github/actionlint.yaml"
 printf 'self-hosted-runner:\n  labels: [quoted-runner, "my-runner"] # flow list\n' > "$fixture/.github/actionlint.yml"
 lint_fixture pass "caller .github/actionlint.yml flow-list labels are added"
 
+printf 'self-hosted-runner:\n  labels:\n    - quoted-runner\n    - "my-*"\n' > "$fixture/.github/actionlint.yml"
+lint_fixture pass "caller glob pattern label matches"
+
 printf 'self-hosted-runner:\n  labels:\n    - other-runner\n' > "$fixture/.github/actionlint.yml"
 lint_fixture fail "caller config without the label still fails"
 rm "$fixture/.github/actionlint.yml"

@@ -82,12 +82,9 @@ for caller_config in .github/actionlint.yaml .github/actionlint.yml; do
   [[ -f "$caller_config" ]] || continue
   merged="${RUNNER_TEMP:-/tmp}/pr-validate-actionlint.yaml"
   extra=""
+  # Single-quoted YAML keeps glob patterns (private-linux-*) and other characters literal.
   while IFS= read -r label; do
-    if [[ "$label" =~ ^[A-Za-z0-9._/-]+$ ]]; then
-      extra+="    - ${label}"$'\n'
-    else
-      echo "::warning title=actionlint runner label skipped::${caller_config}: '${label}'"
-    fi
+    extra+="    - '${label//\'/\'\'}'"$'\n'
   done < <(caller_runner_labels "$caller_config")
   awk -v extra="$extra" '{ print } /^  labels:$/ { printf "%s", extra }' "$config" > "$merged"
   config="$merged"
