@@ -100,6 +100,83 @@ else
   failed=$((failed + 1))
 fi
 
+# Runner labels: bundled ubuntu-26.04 labels, plus the caller's own labels.
+lint_fixture() { # expected-status label
+  local expected="$1" label="$2" status
+  set +e
+  ACTIONLINT_CONFIG="$config" ACTIONLINT_WORKSPACE="$fixture" RUNNER_TEMP="$fixture" bash "$lint" >/tmp/pr-validate-labels.txt 2>&1
+  status=$?
+  set -e
+  if { [[ "$expected" == pass ]] && [[ "$status" -eq 0 ]]; } ||
+    { [[ "$expected" == fail ]] && [[ "$status" -ne 0 ]] && grep -q 'is unknown' /tmp/pr-validate-labels.txt; }; then
+    echo "ok  $label"
+    passed=$((passed + 1))
+  else
+    echo "FAIL  $label"
+    cat /tmp/pr-validate-labels.txt
+    failed=$((failed + 1))
+  fi
+}
+
+cat > "$fixture/.github/workflows/ok.yml" <<'EOF'
+name: labels
+on: push
+jobs:
+  amd64:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: $/pr-validate
+  arm64:
+    runs-on: ubuntu-26.04-arm
+    steps:
+      - run: echo ok
+EOF
+lint_fixture pass "ubuntu-26.04 and ubuntu-26.04-arm are known runner labels"
+
+cat >> "$fixture/.github/workflows/ok.yml" <<'EOF'
+  custom:
+    runs-on: [self-hosted, my-runner, quoted-runner]
+    steps:
+      - run: echo ok
+EOF
+lint_fixture fail "unknown runner label fails without a caller config"
+
+config_before="$(cat "$config")"
+cat > "$fixture/.github/actionlint.yaml" <<'EOF'
+# caller config, block list
+self-hosted-runner:
+  labels:
+    - my-runner # comment
+    - "quoted-runner"
+paths:
+  '**/*.yml':
+    ignore:
+      - 'anything'
+EOF
+lint_fixture pass "caller .github/actionlint.yaml labels are added to the bundled ones"
+merged="$fixture/pr-validate-actionlint.yaml"
+if grep -q 'my-runner' "$merged" && grep -q 'quoted-runner' "$merged" &&
+  grep -q 'ubuntu-26.04-arm' "$merged" && grep -q 'specifying action' "$merged" &&
+  ! grep -q 'anything' "$merged" && [[ "$(cat "$config")" == "$config_before" ]]; then
+  echo "ok  merged config keeps the bundled labels and ignores, bundled file unchanged"
+  passed=$((passed + 1))
+else
+  echo "FAIL  merged config keeps the bundled labels and ignores, bundled file unchanged"
+  cat "$merged"
+  failed=$((failed + 1))
+fi
+rm "$fixture/.github/actionlint.yaml"
+
+printf 'self-hosted-runner:\n  labels: [quoted-runner, "my-runner"] # flow list\n' > "$fixture/.github/actionlint.yml"
+lint_fixture pass "caller .github/actionlint.yml flow-list labels are added"
+
+printf 'self-hosted-runner:\n  labels:\n    - quoted-runner\n    - "my-*"\n' > "$fixture/.github/actionlint.yml"
+lint_fixture pass "caller glob pattern label matches"
+
+printf 'self-hosted-runner:\n  labels:\n    - other-runner\n' > "$fixture/.github/actionlint.yml"
+lint_fixture fail "caller config without the label still fails"
+rm "$fixture/.github/actionlint.yml"
+
 rm -rf "$fixture"
 
 echo ""

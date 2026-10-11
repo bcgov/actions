@@ -50,6 +50,48 @@ if [[ ! -x "$bin" ]]; then
 fi
 
 cd "$workspace"
+
+# caller_runner_labels FILE: print the self-hosted-runner labels in a caller's
+# actionlint config, one per line. Handles block (- label) and flow ([a, b]) lists.
+caller_runner_labels() {
+  awk '
+    function emit(v) {
+      gsub(/^[[:space:]"\047]+|[[:space:]"\047]+$/, "", v)
+      if (v != "") print v
+    }
+    /^[^[:space:]#]/ { in_runner = ($0 ~ /^self-hosted-runner:/); in_labels = 0; next }
+    in_runner && /^[[:space:]]+labels:/ {
+      v = $0; sub(/^[^:]*:/, "", v); sub(/[[:space:]]#.*$/, "", v)
+      if (v ~ /\[/) {
+        gsub(/[][]/, "", v); n = split(v, items, ",")
+        for (i = 1; i <= n; i++) emit(items[i])
+      } else {
+        in_labels = 1
+      }
+      next
+    }
+    in_labels && /^[[:space:]]*-/ { v = $0; sub(/^[[:space:]]*-/, "", v); sub(/[[:space:]]#.*$/, "", v); emit(v); next }
+    in_labels && /^[[:space:]]*(#.*)?$/ { next }
+    in_labels { in_labels = 0 }
+  ' "$1"
+}
+
+# A caller's .github/actionlint.yaml (or .yml) adds its self-hosted-runner labels to
+# the bundled config. Only the labels are read; its other settings are not used.
+for caller_config in .github/actionlint.yaml .github/actionlint.yml; do
+  [[ -f "$caller_config" ]] || continue
+  merged="${RUNNER_TEMP:-/tmp}/pr-validate-actionlint.yaml"
+  extra=""
+  # Single-quoted YAML keeps glob patterns (private-linux-*) and other characters literal.
+  while IFS= read -r label; do
+    extra+="    - '${label//\'/\'\'}'"$'\n'
+  done < <(caller_runner_labels "$caller_config")
+  awk -v extra="$extra" '{ print } /^  labels:$/ { printf "%s", extra }' "$config" > "$merged"
+  config="$merged"
+  echo "Runner labels from ${caller_config}: $(printf '%s' "$extra" | sed 's/^ *- //' | paste -sd' ' -)"
+  break
+done
+
 shopt -s nullglob
 workflow_files=(.github/workflows/*.yml .github/workflows/*.yaml)
 if (( ${#workflow_files[@]} == 0 )); then
