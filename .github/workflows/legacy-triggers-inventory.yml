@@ -1,0 +1,64 @@
+name: Legacy Triggers Inventory
+
+# Quarterly count of bcgov workflows still using the legacy diff-triggers
+# formats (#218).  Results go to the job summary; nothing is posted or opened.
+# Legacy parser removal is safe once the parenthesized count is zero, apart
+# from archived repos and intentional test fixtures.
+on:
+  schedule:
+    - cron: "0 16 1 1,4,7,10 *" # 1st of Jan/Apr/Jul/Oct, 8-9 AM Pacific
+  workflow_dispatch:
+  pull_request:
+    paths: [".github/workflows/legacy-triggers-inventory.yml"]
+
+permissions: {}
+
+jobs:
+  inventory:
+    name: Inventory
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Search bcgov code
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # label|query; code search allows 10 requests a minute, so pause between them
+          searches=(
+            "Parenthesized (org)|org:bcgov \"triggers: (\""
+            "Comma-separated (org)|org:bcgov \"triggers: backend/,\""
+            "Semicolon-separated (org)|org:bcgov \"triggers: backend/;\""
+            "Parenthesized (bcgov/actions)|repo:bcgov/actions \"triggers: (\""
+            "Parenthesized (bcgov/quickstart-openshift)|repo:bcgov/quickstart-openshift \"triggers: (\""
+          )
+          {
+            echo "## Legacy diff-triggers inventory ($(date -u +%Y-%m-%d))"
+            echo
+            echo "| Search | Files | Repos (first 100 hits) |"
+            echo "| --- | --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          repos_file="$(mktemp)"
+          for entry in "${searches[@]}"; do
+            label="${entry%%|*}"
+            query="${entry#*|}"
+            result="$(gh api -X GET search/code -f q="$query" -F per_page=100)"
+            total="$(jq '.total_count' <<< "$result")"
+            repos="$(jq '[.items[].repository.full_name] | unique | length' <<< "$result")"
+            echo "${label}: ${total} files (${repos} repos in the first 100 hits)"
+            echo "| ${label} | ${total} | ${repos} |" >> "$GITHUB_STEP_SUMMARY"
+            if [[ "$label" == "Parenthesized (org)" ]]; then
+              jq -r '.items[].repository.full_name' <<< "$result" | sort | uniq -c | sort -rn > "$repos_file"
+            fi
+            sleep 7
+          done
+          {
+            echo
+            echo "<details><summary>Repos with parenthesized triggers (first 100 hits)</summary>"
+            echo
+            awk '{ printf "- `%s` (%s)\n", $2, $1 }' "$repos_file"
+            echo
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
