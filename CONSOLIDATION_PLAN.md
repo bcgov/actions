@@ -70,9 +70,9 @@ actions-openshift/
 
 **Phase 2: Migration with Backwards Compatibility** *(general suite)*
 1. [x] Migrate general actions into `bcgov/actions` subdirectories (`builder/`, etc.).
-2. [x] Add **::warning::** deprecation notices to the old standalone action repositories. *(Thin wrappers were abandoned due to logging problems.)*
+2. [x] Add **::warning::** notices with the new paths to the old standalone action repositories. *(Thin wrappers were abandoned due to logging problems.)*
 
-**Phase 3: Update Workflows & Deprecation**
+**Phase 3: Update Workflows**
 1. [x] Update internal suite workflows to sibling `uses: $/…` paths.
 2. [ ] After a release that includes the `builder-ghcr` → `builder` rename: notify soak-group adopters (#214). Never pin consumers to `@main` or a commit SHA.
 3. [ ] After `v1.0.0`: archive old standalone repos and drive Renovate replacements.

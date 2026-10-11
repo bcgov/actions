@@ -29,11 +29,6 @@ permissions:
   actions: write  # (optional, required if using caching; set cache: none to disable)
 ```
 
-
-
-> [!IMPORTANT]
-> **Deprecation Notice**: The Java-specific action (`bcgov/actions/test-and-analyse-java`) has been removed. Please migrate to this universal action (`bcgov/actions/test-and-analyse`) with `language: java` specified.
- 
  Conditional triggers are used to determine whether tests need to be run. If triggers are matched, the appropriate code is tested. Tests always run if no triggers are provided.
  
  **Supported Languages:**
