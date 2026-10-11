@@ -41,6 +41,59 @@ permissions:
  - **Java**: Native support for Maven/Gradle with integrated JUnit reporting and SonarCloud plugin support.
  - **Python**: Support for Pytest/Unittest with JUnit XML results and SonarCloud analysis.
 
+# Migrating from the standalone actions
+
+`bcgov/action-test-and-analyse` and `bcgov/action-test-and-analyse-java` are retiring. Replace either with this action, pinned to a release.
+
+## From `bcgov/action-test-and-analyse` (Node and others)
+
+```yaml
+- uses: bcgov/actions/test-and-analyse@vX.Y.Z
+  with:
+    commands: |
+      npm ci
+      npm run test:cov
+    dir: frontend
+    sonar_token: ${{ secrets.SONAR_TOKEN }}
+    triggers: |
+      frontend/
+```
+
+| Old input | New input |
+| --- | --- |
+| `diff_branch` | `ref` |
+| `skip_checkout` | Removed. Checkout is skipped automatically when `checkout_path` already holds a checkout. |
+
+Every other input keeps its name.
+
+## From `bcgov/action-test-and-analyse-java`
+
+```yaml
+- uses: bcgov/actions/test-and-analyse@vX.Y.Z
+  with:
+    language: java
+    java_version: "21"
+    commands: |
+      mvn -B verify sonar:sonar \
+        -Dsonar.organization=bcgov-sonarcloud \
+        -Dsonar.projectKey=bcgov_your-project-key
+    dir: backend
+    sonar_token: ${{ secrets.SONAR_TOKEN }}
+    triggers: |
+      backend/
+```
+
+| Old input | New input |
+| --- | --- |
+| _(none)_ | `language: java` (required) |
+| `java-version` | `java_version` |
+| `java-distribution` | `java_distribution` |
+| `java-cache` | `cache` (`maven` or `gradle`; auto-detected if omitted) |
+| `diff_branch` | `ref` |
+| `sonar_enforce_compliance` | Removed. The old action ran the Sonar scanner itself; now Sonar runs inside `commands`, so a failing Sonar step fails the job like any other command. `require_sonar` is not a replacement: it only fails when `sonar_token` is empty. |
+
+`commands`, `dir`, `sonar_args`, `sonar_token`, `triggers`, `repository` and `branch` keep their names. Add the Sonar goal to `commands` (see the [Java example](#example-java-maven-with-native-sonarcloud-reporting)).
+
 # Usage
 
 ```yaml

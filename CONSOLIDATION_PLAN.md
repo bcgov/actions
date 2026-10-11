@@ -5,15 +5,16 @@
 This plan consolidates scattered bcgov GitHub Actions into two centralized repositories:
 
 - **bcgov/actions** (current repo): For non-OpenShift/general actions
-- **bcgov/actions-openshift** (new repo): For OpenShift-specific actions
+- **bcgov/actions-openshift**: For OpenShift-specific actions
 
 Each action will live in its own subdirectory within the appropriate repository.
 
 **Status (2026-09):** The general suite in `bcgov/actions` is feature-complete for the
 `v1.0.0` stabilization epic (#209): `builder/` (renamed from `builder-ghcr`),
 `diff-triggers`, `image-tracker` (replaces standalone `get-pr` usage), and the other
-actions listed below. Creating and migrating **`bcgov/actions-openshift`** is a later
-sprint and is out of scope for the `v1.0.0` tag.
+actions listed below. **`bcgov/actions-openshift`** exists and holds the OpenShift
+actions, including `deployer/` (formerly `action-deployer-openshift`). `action-postgres`
+was not migrated.
 
 ## Versioning Strategy
 
@@ -31,9 +32,11 @@ All actions in each repository are versioned and released together as a **single
 actions/
 ├── builder/
 ├── diff-triggers/
+├── ghcr-cleanup/
 ├── image-tracker/
 ├── pr-description-add/
 ├── pr-validate/
+├── scan-url/
 ├── sysdig-monitor/
 ├── test-and-analyse/
 ├── workflow-notifier/  # (Formerly report-failures)
@@ -42,14 +45,18 @@ actions/
 └── LICENSE
 ```
 
-### bcgov/actions-openshift (OpenShift Actions - New Repo)
+### bcgov/actions-openshift (OpenShift Actions)
 
 ```
 actions-openshift/
+├── cert-expiry/
+├── cleanup-pr/
 ├── crunchy/
+├── deployer/
+├── image-import/
 ├── oc-runner/
-├── deployer-openshift/
-├── postgres/
+├── pg-upgrade/
+├── route-tls/
 ├── README.md
 └── LICENSE
 ```
@@ -58,7 +65,7 @@ actions-openshift/
 
 **Phase 1: Assessment & Setup**
 - [x] Create `bcgov/actions` (using current repo)
-- [ ] Create `bcgov/actions-openshift` *(later sprint — not required for suite `v1.0.0`)*
+- [x] Create `bcgov/actions-openshift`
 - [x] Establish repository structure and documentation standards
 
 **Phase 2: Migration with Backwards Compatibility** *(general suite)*
@@ -69,6 +76,6 @@ actions-openshift/
 1. [x] Update internal suite workflows to sibling `uses: $/…` paths.
 2. [ ] After a release that includes the `builder-ghcr` → `builder` rename: notify soak-group adopters (#214). Never pin consumers to `@main` or a commit SHA.
 3. [ ] After `v1.0.0`: archive old standalone repos and drive Renovate replacements.
-4. [ ] OpenShift actions → `bcgov/actions-openshift` (separate epic).
+4. [x] OpenShift actions → `bcgov/actions-openshift`.
 
 Internal workflows in `bcgov/actions` use GitHub's self-repository syntax (`uses: $/action-name`) for sibling actions and reusable workflows at the running commit. Downstream consumers continue to pin `bcgov/actions/<name>@vX.Y.Z`.

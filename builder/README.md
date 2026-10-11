@@ -72,6 +72,29 @@ Pull with: `docker pull ghcr.io/<organization>/<repository>/<package>:<tag>`
 
 Only GitHub Container Registry (`ghcr.io`) is supported.
 
+# Migrating from action-builder-ghcr
+
+`bcgov/action-builder-ghcr` is retiring. Replace it with `bcgov/actions/builder`, pinned to a release:
+
+```yaml
+- uses: bcgov/actions/builder@vX.Y.Z
+  with:
+    package: backend
+    tag_fallback: latest
+    triggers: |
+      backend/
+```
+
+| `action-builder-ghcr` input | `bcgov/actions/builder` |
+| --- | --- |
+| `github_token` | `token` |
+| `diff_branch` | `ref` |
+| `metadata_tags` | Removed. OCI labels from `docker/metadata-action` are always applied. |
+| `metadata_flavor` | Removed. |
+| `metadata_tag_rules` | Removed. Custom tag rules are gone: images get the tags in `tags` (default: the PR number) plus the source commit SHA. |
+
+Every other input keeps its name. `triggers` still accepts the legacy parenthesized list, but prefer the multiline form above.
+
 # Usage
 
 ```yaml
