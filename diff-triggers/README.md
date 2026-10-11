@@ -35,6 +35,8 @@ The action supports multiple formats for the `triggers` input:
 
 > **Legacy note:** Parenthesized and delimiter forms remain parsed for compatibility ([#212](https://github.com/bcgov/actions/issues/212)). New suite examples and adopters should use multiline `triggers: |` only.
 
+> To see how many bcgov workflows still use the legacy formats, run [`scripts/legacy-inventory.sh`](scripts/legacy-inventory.sh) under your own `gh` login (read-only, about a minute).  Run it quarterly, and before any v2.0.0 parser-removal discussion.
+
 # Usage
 
 ```yaml
