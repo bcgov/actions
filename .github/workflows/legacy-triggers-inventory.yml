@@ -17,7 +17,7 @@ jobs:
   inventory:
     name: Inventory
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
@@ -40,11 +40,25 @@ jobs:
             echo "| Search | Files | Repos (first 100 hits) |"
             echo "| --- | --- | --- |"
           } >> "$GITHUB_STEP_SUMMARY"
+          # Code search rate limits often answer 429 at first; wait and retry
+          search() {
+            local attempt
+            for attempt in 1 2 3 4 5; do
+              if gh api -X GET search/code -f q="$1" -F per_page=100 2> "${RUNNER_TEMP}/search.err"; then
+                return 0
+              fi
+              grep -q 'HTTP 429\|HTTP 403' "${RUNNER_TEMP}/search.err" || { cat "${RUNNER_TEMP}/search.err" >&2; return 1; }
+              echo "Rate limited (attempt ${attempt}); waiting $((attempt * 20))s" >&2
+              sleep $((attempt * 20))
+            done
+            cat "${RUNNER_TEMP}/search.err" >&2
+            return 1
+          }
           repos_file="$(mktemp)"
           for entry in "${searches[@]}"; do
             label="${entry%%|*}"
             query="${entry#*|}"
-            result="$(gh api -X GET search/code -f q="$query" -F per_page=100)"
+            result="$(search "$query")"
             total="$(jq '.total_count' <<< "$result")"
             repos="$(jq '[.items[].repository.full_name] | unique | length' <<< "$result")"
             echo "${label}: ${total} files (${repos} repos in the first 100 hits)"
