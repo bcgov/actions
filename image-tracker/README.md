@@ -48,7 +48,7 @@ The target images **must** be built with OCI labels populated. The easiest way
 is [`docker/metadata-action`](https://github.com/docker/metadata-action), which
 sets the labels by default. At bcgov, the
 [`bcgov/actions/builder`](../builder/)
-wrapper does this for you when `metadata_tags: true` (the default from v4.3.0).
+wrapper always sets them.
 
 Images that lack the `org.opencontainers.image.revision` label cannot be
 resolved — there is no workaround short of rebuilding them with proper labels.
