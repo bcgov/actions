@@ -41,9 +41,9 @@ permissions:
  - **Java**: Native support for Maven/Gradle with integrated JUnit reporting and SonarCloud plugin support.
  - **Python**: Support for Pytest/Unittest with JUnit XML results and SonarCloud analysis.
 
-# Migrating from the standalone actions
+# Moving from the standalone actions
 
-`bcgov/action-test-and-analyse` and `bcgov/action-test-and-analyse-java` are retiring. Replace either with this action, pinned to a release.
+If you're moving from `bcgov/action-test-and-analyse` or `bcgov/action-test-and-analyse-java`, these inputs changed.
 
 ## From `bcgov/action-test-and-analyse` (Node and others)
 
@@ -92,7 +92,7 @@ Every other input keeps its name.
 | `diff_branch` | `ref` |
 | `sonar_enforce_compliance` | Removed. The old action ran the Sonar scanner itself; now Sonar runs inside `commands`, so a failing Sonar step fails the job like any other command. `require_sonar` is not a replacement: it only fails when `sonar_token` is empty. |
 
-`commands`, `dir`, `sonar_args`, `sonar_token`, `triggers`, `repository` and `branch` keep their names. Add the Sonar goal to `commands` (see the [Java example](#example-java-maven-with-native-sonarcloud-reporting)).
+`commands`, `dir`, `sonar_args`, `sonar_token`, `triggers`, `repository` and `branch` keep their names. In this action, Sonar runs from `commands` (see the [Java example](#example-java-maven-with-native-sonarcloud-reporting)).
 
 # Usage
 

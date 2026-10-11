@@ -72,9 +72,9 @@ Pull with: `docker pull ghcr.io/<organization>/<repository>/<package>:<tag>`
 
 Only GitHub Container Registry (`ghcr.io`) is supported.
 
-# Migrating from action-builder-ghcr
+# Moving from action-builder-ghcr
 
-`bcgov/action-builder-ghcr` is retiring. Replace it with `bcgov/actions/builder`, pinned to a release:
+If you're moving from `bcgov/action-builder-ghcr`, these inputs changed. A minimal step looks like this:
 
 ```yaml
 - uses: bcgov/actions/builder@vX.Y.Z
