@@ -1,8 +1,8 @@
 
 **BREAKING CHANGES in v1.0:**
-* **node_version default is now 24 (previously defaulted to 16)**
-* **sonar_comment_token has been removed (ignored by SonarCloud)**
-* **sonar_project_token has been renamed sonar_token**
+* **`node_version` is auto-detected; when nothing is found the fallback is `24` (previously a hard default of `16`)**
+* **`sonar_comment_token` has been removed (ignored by SonarCloud)**
+* **`sonar_project_token` has been renamed `sonar_token`**
 
 
 
@@ -89,6 +89,30 @@ Every other input keeps its name.
 
 `commands`, `dir`, `sonar_args`, `sonar_token`, `triggers`, `repository` and `branch` keep their names. In this action, Sonar runs from `commands` (see the [Java example](#example-java-maven-with-native-sonarcloud-reporting)).
 
+
+## Defaults
+
+| Input | Default | Notes |
+| --- | --- | --- |
+| `language` | `node` | Options: `node`, `java`, `python` |
+| `node_version` | _(auto)_ | Detected from project files; falls back to `24` |
+| `java_version` | _(auto)_ | Detected from project files; falls back to `21` |
+| `java_distribution` | `temurin` | |
+| `python_version` | _(auto)_ | Detected from project files; falls back to `3.12` |
+| `cache` | _(auto)_ | Detected from lockfiles; set `none` to disable |
+| `sonar_args` | bcgov-sonarcloud org + `bcgov_${{ github.repository }}` project key | |
+| `supply_scan` | `true` | Node only (`@aikidosec/safe-chain`) |
+| `dep_scan` | `warn` | Node only (Knip); options: `off`, `warn`, `error` |
+| `semgrep` | `false` | |
+| `semgrep_config` | `p/default` | |
+| `semgrep_fail` | `false` | Findings warn unless `true` |
+| `annotations` / debug | `debug: false` | |
+| `require_sonar` | `false` | Skip Sonar quietly when token empty |
+| `triggers` | _(omitted)_ | When omitted, tests always run |
+| `ref` | repository default branch | Comparison ref for triggers |
+| `token` | `${{ github.token }}` | |
+| `checkout_path` | `.` | |
+
 # Usage
 
 ```yaml
@@ -136,9 +160,10 @@ Every other input keeps its name.
         -Dsonar.organization=bcgov-sonarcloud
         -Dsonar.projectKey=bcgov_${{ github.repository }}
 
-    # Bash array to diff for build triggering (e.g., ('frontend/'))
+    # Paths to diff for build triggering (multiline preferred).
     # Optional; if omitted, tests always run.
-    triggers: ""
+    # triggers: |
+    #   frontend/
 
     # Enable supply chain attack detection (Node only). Default: true
     supply_scan: true

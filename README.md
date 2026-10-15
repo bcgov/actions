@@ -7,6 +7,11 @@
 
 A centralized repository for custom GitHub Actions and workflows provided to the `bcgov` organization. These are often consumed as part of the [QuickStart for OpenShift](https://github.com/bcgov/quickstart-openshift).
 
+
+## Experimental actions (not covered by the 1.0 semver promise)
+
+`pg-upgrade` and `sysdig-monitor` (both in [`bcgov/actions-openshift`](https://github.com/bcgov/actions-openshift)) are experimental. Their inputs, outputs and behaviour may change in any release, including patch releases. Do not rely on them for a stable 1.0 contract.
+
 ### [builder](./builder/)
 Conditional container builder with automatic tag management. Publishes to GitHub Container Registry (`ghcr.io`).
 
@@ -67,13 +72,8 @@ Scan a running site's URL with ZAP and Nuclei and upload SARIF to the Security t
     url: https://my-app-test.apps.silver.devops.gov.bc.ca
 ```
 
-### [sysdig-monitor](./sysdig-monitor/)
-Create or update Sysdig email alerts for an app on PROD deploy. Idempotent, additive and non-blocking.
-
-```yaml
-- name: Sysdig Monitoring
-  uses: bcgov/actions/sysdig-monitor@vX.Y.Z # Replace with latest release tag
-```
+### sysdig-monitor (moved)
+`sysdig-monitor` moved to [`bcgov/actions-openshift/sysdig-monitor`](https://github.com/bcgov/actions-openshift/tree/main/sysdig-monitor). Update callers to `bcgov/actions-openshift/sysdig-monitor@vX.Y.Z` after that suite releases. It is experimental (see below).
 
 ### [test-and-analyse](./test-and-analyse/)
 Universal Test and Analyze with Triggers, SonarCloud, and Multi-Language Support. Supports the following runtimes:
@@ -116,7 +116,6 @@ Refer to each action's directory for its exact minimum required permissions bloc
 - **[pr-description-add](./pr-description-add/)**: `pull-requests: write`
 - **[pr-validate](./pr-validate/)**: `contents: read`, `pull-requests: read`, plus `pull-requests: write` when `add_markdown` is set
 - **[scan-url](./scan-url/)**: `contents: read`, `issues: write`, `security-events: write`
-- **[sysdig-monitor](./sysdig-monitor/)**: `contents: read` (alert templates are read from the consuming repo's checkout)
 - **[test-and-analyse](./test-and-analyse/)**: `contents: read`, `actions: write` (optional, for caching)
 - **[workflow-notifier](./workflow-notifier/)**: `contents: read`, `issues: write`, `pull-requests: read` (optional, for PR merge author resolution)
 - **[workflow-results](./workflow-results/)**: `permissions: {}` (no permissions required)

@@ -19,15 +19,15 @@ function stripQuotes(s) {
 }
 
 /**
- * Parse trigger paths from various input formats.
+ * Parse trigger paths.
  *
  * Supported formats:
- *   - JSON array:              ["frontend/", "backend/"]
- *   - Parenthesized (bash):    ('frontend/' 'backend/')
- *   - Comma-separated:         frontend/,backend/
- *   - Semicolon-separated:     frontend/;backend/
- *   - Space-separated:         frontend/ backend/
- *   - Quoted (single/double):  "frontend/" "backend/"
+ *   - Multiline string: one path per line (preferred)
+ *   - JSON array:       ["frontend/", "backend/"]
+ *   - Single path:      one path on a single line
+ *
+ * Legacy bash-style parenthesized lists and delimiter-separated single-line
+ * lists (comma / semicolon / space) are no longer accepted.
  *
  * @param {string} raw - Raw trigger input string
  * @returns {string[]} Parsed trigger paths
@@ -46,13 +46,11 @@ function parseTriggers(raw) {
         process.exit(1);
       }
     } catch {
-      // Not valid JSON — fall through to other methods
+      // Not valid JSON — fall through
     }
   }
 
-
-  // 2. Multiline string (true GitHub Actions standard)
-  // If there are newlines, split line-by-line and allow spaces per line
+  // 2. Multiline string (preferred)
   if (trimmed.includes('\n')) {
     return trimmed
       .split(/\r?\n/)
@@ -60,37 +58,31 @@ function parseTriggers(raw) {
       .filter(Boolean);
   }
 
-  // 3. Strip outer parentheses (bash-style)
-  let cleaned = trimmed;
-  let isLegacyFormat = false;
-  if (cleaned.startsWith('(') && cleaned.endsWith(')')) {
-    cleaned = cleaned.slice(1, -1).trim();
-    isLegacyFormat = true;
+  // 3. Reject legacy list formats
+  const fullyQuoted =
+    (trimmed.startsWith("'") && trimmed.endsWith("'") && trimmed.length >= 2) ||
+    (trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2);
+  if (
+    (trimmed.startsWith('(') && trimmed.endsWith(')')) ||
+    /[,;]/.test(trimmed) ||
+    (trimmed.match(/['"]/g) || []).length >= 4 ||
+    (/\s/.test(trimmed) && !fullyQuoted)
+  ) {
+    console.error(
+      '::error::Legacy trigger formats (bash-style parenthesized lists and ' +
+        'comma/semicolon/space-delimited single-line lists) are no longer ' +
+        'supported. Use a multiline `triggers: |` block or a JSON array.'
+    );
+    process.exit(1);
   }
 
-  // 4. Extract quoted strings (single or double quotes)
-  const quoted = [];
-  const quoteRegex = /(['"])(.*?)\1/g;
-  let match;
-  while ((match = quoteRegex.exec(cleaned)) !== null) {
-    const val = match[2].trim();
-    if (val) quoted.push(val);
-  }
-  if (quoted.length > 0) {
-    if (isLegacyFormat) {
-      console.log('::warning::Legacy bash-style parenthesized trigger list formatting is deprecated. Please migrate to newline-separated multiline strings.');
-    }
-    return quoted;
-  }
-
-  // 5. Split on whitespace, commas, or semicolons
-  const tokens = cleaned.split(/[\s,;]+/).filter(Boolean);
-  if (tokens.length === 0) {
+  // 4. Single path on one line
+  const single = stripQuotes(trimmed);
+  if (!single) {
     console.error(`::error::Could not parse any triggers from input: ${raw}`);
     process.exit(1);
   }
-  console.log('::warning::Delimiter-separated single line trigger formats are deprecated. Please migrate to newline-separated multiline strings.');
-  return tokens;
+  return [single];
 }
 
 const RESERVED_OUTPUT_KEYS = new Set(['triggered', 'changes']);
