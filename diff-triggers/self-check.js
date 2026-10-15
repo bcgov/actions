@@ -4,7 +4,7 @@
  * Fails loudly if the catastrophic silent-miss bug returns.
  */
 const assert = require('assert');
-const { parseFilters, stripQuotes } = require('./index.js');
+const { parseFilters, parseTriggers, stripQuotes } = require('./index.js');
 
 assert.strictEqual(stripQuotes("'diff-triggers/**'"), 'diff-triggers/**');
 assert.strictEqual(stripQuotes('"builder-ghcr/**"'), 'builder-ghcr/**');
@@ -46,5 +46,37 @@ assert.throws(() => {
 assert.throws(() => {
   parseFilters('changes: [bar/]\n');
 }, /Filter name 'changes' is reserved/);
+
+// parseTriggers: supported formats
+assert.deepStrictEqual(parseTriggers('frontend/\nbackend/'), ['frontend/', 'backend/']);
+assert.deepStrictEqual(parseTriggers('["frontend/", "backend/"]'), ['frontend/', 'backend/']);
+assert.deepStrictEqual(parseTriggers('frontend/'), ['frontend/']);
+assert.deepStrictEqual(parseTriggers('"my path/"'), ['my path/']);
+
+// parseTriggers: legacy formats must fail
+function expectLegacyFail(raw) {
+  let exitCode = 0;
+  const origExit = process.exit;
+  const origErr = console.error;
+  console.error = () => {};
+  process.exit = (code) => {
+    exitCode = code;
+    throw new Error('exit');
+  };
+  try {
+    parseTriggers(raw);
+    assert.fail(`expected legacy reject for: ${raw}`);
+  } catch (e) {
+    if (e.message !== 'exit') throw e;
+    assert.strictEqual(exitCode, 1, `expected exit 1 for: ${raw}`);
+  } finally {
+    process.exit = origExit;
+    console.error = origErr;
+  }
+}
+expectLegacyFail("('frontend/' 'backend/')");
+expectLegacyFail('frontend/,backend/');
+expectLegacyFail('frontend/;backend/');
+expectLegacyFail('frontend/ backend/');
 
 console.log('diff-triggers self-check: ok');

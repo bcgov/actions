@@ -18,22 +18,20 @@ permissions:
 - ✅ **Push Event Support**: Works with push events for deployer workflows
 - ✅ **Flexible Ref Comparison**: Compare against any ref (branch, commit SHA, HEAD^, etc.)
 - ✅ **Smart Path Matching**: Uses git pathspec matching for accurate trigger detection
-- ✅ **Multiple Trigger Formats**: Multiline (recommended); JSON arrays supported; legacy delimited / parenthesized still accepted through v1.0
+- ✅ **Multiple Trigger Formats**: Multiline (recommended); JSON arrays; single path on one line
 - ✅ **Visible Logging**: Prominent banners and collapsible details in step logs, plus notice annotations in workflow summary and annotations views
 
 ## Trigger Formats
 
-The action supports multiple formats for the `triggers` input:
+The action supports these formats for the `triggers` input:
 
 | Format | Example | Description |
 |---|---|---|
-| **Multiline string (recommended)** | `triggers: \|` then one path per line | Preferred for new workflows. Supports spaces in paths without quotes. |
+| **Multiline string (recommended)** | `triggers: \|` then one path per line | Preferred. Supports spaces in paths without quotes. |
 | **JSON array** | `triggers: '["backend/", "frontend/"]'` | Inline list. Requires quotes to escape YAML parsing. |
-| **Comma-separated (legacy)** | `triggers: backend/,frontend/` | Still accepted through v1.0; do not use for new workflows. |
-| **Semicolon-separated (legacy)** | `triggers: backend/;frontend/` | Still accepted through v1.0; do not use for new workflows. |
-| **Parenthesized (legacy)** | `triggers: ('backend/' 'frontend/')` | Still accepted through v1.0; do not use for new workflows. |
+| **Single path** | `triggers: backend/` | One path on a single line. |
 
-> **Legacy note:** Parenthesized and delimiter forms remain parsed for compatibility ([#212](https://github.com/bcgov/actions/issues/212)). New suite examples and adopters should use multiline `triggers: |` only.
+Bash-style parenthesized lists and comma/semicolon/space-delimited single-line lists are no longer accepted. Migrate those callers to a multiline `triggers: |` block or a JSON array.
 
 # Usage
 

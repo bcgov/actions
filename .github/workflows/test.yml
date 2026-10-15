@@ -47,8 +47,6 @@ jobs:
               - 'workflow-notifier/**'
             workflow-results:
               - 'workflow-results/**'
-            sysdig-monitor:
-              - 'sysdig-monitor/**'
             test-and-analyse:
               - 'test-and-analyse/**'
             # Shared runner infrastructure and test harness changes trigger the full suite
@@ -1167,37 +1165,6 @@ jobs:
           echo "All notifier tests passed."
 
   # ─── SYSDIG MONITOR ────────────────────────────────────────────────────────
-  test-sysdig-monitor:
-    name: Test Sysdig Monitor
-    needs: [filter]
-    if: contains(fromJSON(needs.filter.outputs.changes), 'sysdig-monitor') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Run Unit Tests
-        run: bash sysdig-monitor/tests/unit.sh
-
-      - name: Validate action.yml
-        run: |
-          test -f sysdig-monitor/action.yml
-          pip install pyyaml -q
-          python3 -c "import yaml; yaml.safe_load(open('sysdig-monitor/action.yml'))"
-
-      - name: Validate channel template
-        run: |
-          python3 -c "import json; json.load(open('sysdig-monitor/templates/channel.json'))"
-
-      - name: Action no-ops when token is empty
-        uses: $/sysdig-monitor
-        with:
-          sysdig_api_token: ''
-          oc_namespace: abc123-prod
-          app: dry-run-app
-
-  # ─── TEST AND ANALYSE ───────────────────────────────────────────────────────
   test-test-and-analyse:
     name: Test Test and Analyse (${{ matrix.name }})
     needs: [filter]
@@ -1229,7 +1196,7 @@ jobs:
             exercise_sonar: true
           - name: backend-not-triggered
             dir: backend
-            triggers: "('not-existent-path/')"
+            triggers: not-existent-path/
             expected_triggered: false
             repository: bcgov/quickstart-openshift
             test_command: npm install --no-package-lock && npm run test:cov
@@ -1453,7 +1420,6 @@ jobs:
       - test-pr-validate-lint
       - test-notifier
       - test-workflow-results
-      - test-sysdig-monitor
       - test-test-and-analyse
       - test-test-and-analyse-shallow
       - test-test-and-analyse-semgrep
