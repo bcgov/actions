@@ -17,7 +17,8 @@ The build will return a PR number as output.
   uses: bcgov/actions/get-pr@vX.Y.Z # Replace with latest release tag
 
 - name: Echo PR number
-  run: echo "PR: ${{ steps.vars.outputs.pr }}"
+  run: |
+    echo "PR: ${{ steps.vars.outputs.pr }}"
 ```
 
 # Private Repositories
@@ -31,7 +32,8 @@ Private repositories may need to provide a GitHub token.
     github_token: ${{ secrets.GITHUB_TOKEN }}
 
 - name: Echo PR number
-  run: echo "PR: ${{ steps.vars.outputs.pr }}"
+  run: |
+    echo "PR: ${{ steps.vars.outputs.pr }}"
 ```
 
 <!-- # Acknowledgements
