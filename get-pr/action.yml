@@ -1,0 +1,21 @@
+name: Get PR Number
+description: Get PR number for merge queues, squash merges, and releases
+branding:
+  icon: package
+  color: blue
+
+inputs:
+  debug:
+    description: Enable debug logging
+    default: "false"
+  github_token:
+    description: Specify token (GH or PAT), instead of inheriting one from the calling workflow
+    default: ${{ github.token }}
+
+outputs:
+  pr:
+    description: "Associated pull request number"
+
+runs:
+  using: node24
+  main: index.js
