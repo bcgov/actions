@@ -8,10 +8,6 @@
 A centralized repository for custom GitHub Actions and workflows provided to the `bcgov` organization. These are often consumed as part of the [QuickStart for OpenShift](https://github.com/bcgov/quickstart-openshift).
 
 
-## Experimental actions (not covered by the 1.0 semver promise)
-
-`pg-upgrade` and `sysdig-monitor` (both in [`bcgov/actions-openshift`](https://github.com/bcgov/actions-openshift)) are experimental. Their inputs, outputs and behaviour may change in any release, including patch releases. Do not rely on them for a stable 1.0 contract.
-
 ### [builder](./builder/)
 Conditional container builder with automatic tag management. Publishes to GitHub Container Registry (`ghcr.io`).
 
@@ -73,7 +69,7 @@ Scan a running site's URL with ZAP and Nuclei and upload SARIF to the Security t
 ```
 
 ### sysdig-monitor (moved)
-`sysdig-monitor` moved to [`bcgov/actions-openshift/sysdig-monitor`](https://github.com/bcgov/actions-openshift/tree/main/sysdig-monitor). Update callers to `bcgov/actions-openshift/sysdig-monitor@vX.Y.Z` after that suite releases. It is experimental (see below).
+`sysdig-monitor` moved to [`bcgov/actions-openshift/sysdig-monitor`](https://github.com/bcgov/actions-openshift/tree/main/sysdig-monitor). Update callers to `bcgov/actions-openshift/sysdig-monitor@vX.Y.Z` after that suite releases.
 
 ### [test-and-analyse](./test-and-analyse/)
 Universal Test and Analyze with Triggers, SonarCloud, and Multi-Language Support. Supports the following runtimes:
