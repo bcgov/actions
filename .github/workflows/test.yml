@@ -38,6 +38,9 @@ jobs:
             diff-triggers:
               - 'diff-triggers/**'
               - '!*.md'
+            get-pr:
+              - 'get-pr/action.yml'
+              - 'get-pr/index.js'
             ghcr-cleanup:
               - 'ghcr-cleanup/**'
               - '!*.md'
@@ -1411,6 +1414,40 @@ jobs:
           [ -z "$OFF_FINDINGS" ] || { echo "❌ Scan should not run when semgrep is off"; exit 1; }
           echo "✅ Semgrep: clean passes, findings warn, semgrep_fail fails, off by default"
 
+  # ─── GET PR ────────────────────────────────────────────────────────────────
+
+  test-get-pr:
+    name: Test Get PR
+    needs: [filter]
+    if: contains(fromJSON(needs.filter.outputs.changes), 'get-pr') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Run Unit Tests
+        run: node --test get-pr/tests/unit.test.js
+
+      - name: Get PR number
+        id: pr
+        uses: $/get-pr
+
+      - name: Verify PR number
+        env:
+          GOT: ${{ steps.pr.outputs.pr }}
+          WANT: ${{ github.event.pull_request.number }}
+        run: |
+          [ "${GOT}" = "${WANT}" ] || { echo "::error::get-pr returned '${GOT}', expected '${WANT}'"; exit 1; }
+          echo "✅ get-pr returned PR ${GOT}"
+
   # ─── RESULTS AGGREGATOR ─────────────────────────────────────────────────────
   results:
     name: PR Results
@@ -1424,6 +1461,7 @@ jobs:
       - test-scan-url-live
       - test-scan-url-matrix
       - test-diff-triggers
+      - test-get-pr
       - test-ghcr-cleanup
       - test-image-tracker
       - test-pr-description-add
