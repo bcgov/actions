@@ -27,28 +27,39 @@ jobs:
         id: diff
         uses: $/diff-triggers
         with:
+          # '!*.md' keeps README and docs-only changes from starting an action's tests
           filters: |
             builder:
               - 'builder/**'
+              - '!*.md'
             scan-url:
               - 'scan-url/**'
+              - '!*.md'
             diff-triggers:
               - 'diff-triggers/**'
+              - '!*.md'
             ghcr-cleanup:
               - 'ghcr-cleanup/**'
+              - '!*.md'
             image-tracker:
               - 'image-tracker/**'
+              - '!*.md'
             pr-description-add:
               - 'pr-description-add/**'
+              - '!*.md'
             pr-validate:
               - 'pr-validate/**'
               - '.github/workflows/pr-validate.yml'
+              - '!*.md'
             workflow-notifier:
               - 'workflow-notifier/**'
+              - '!*.md'
             workflow-results:
               - 'workflow-results/**'
+              - '!*.md'
             test-and-analyse:
               - 'test-and-analyse/**'
+              - '!*.md'
             # Shared runner infrastructure and test harness changes trigger the full suite
             # rather than triggering blanket integration runs across unrelated actions.
             workflows:

@@ -22,6 +22,14 @@ Pipeline: build, then `image-tracker`, then deploy by digest (`outputs.digest` /
 - Then `npm ci` and `npm run build`. When `pr-description-add/dist/` or `test-and-analyse/dist/` differ, commit that subject and create the tag on the new commit. When they match, create the tag on the original commit. `gh release create` keeps the saved title, notes, and prerelease flag. Do not push `main`. Do not commit `dist/` on pull requests.
 - Consumers pin the tag, or that tag's SHA after this workflow succeeds. `@main` does not contain the rebuild. `uses: $/…` in this repo loads the workflow commit, not a workspace ncc overwrite.
 
+## PR triggers
+
+PR workflows must not fire unnecessarily.
+
+- Gate heavy jobs (matrices, container tests, deploys) with `diff-triggers` or path filters that list only the files each job depends on, never a whole action folder with its README.
+- Markdown and docs-only changes never start heavy jobs.
+- Skipped jobs still report through `workflow-results`, with the standard job names and no `title`, so required checks stay stable.
+
 ## README usage examples
 
 - Usage examples in action READMEs show how `bcgov/quickstart-openshift` would call the action: its workflows (`pr-open.yml`, `pr-close.yml`, `merge.yml`, `scheduled.yml`), its packages (`backend`, `frontend`, `migrations`) and its job order. Add a separate example only when the quickstart shape does not fit. Never say quickstart uses an action it does not use; read its workflows first.
