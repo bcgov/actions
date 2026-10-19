@@ -257,7 +257,7 @@ test('A package linked to another repository fails before any delete', async () 
 })
 
 const env = {
-  INPUT_PACKAGES: 'backend, frontend\nmigrations',
+  INPUT_PACKAGES: 'backend\nfrontend\nmigrations',
   INPUT_DRY_RUN: 'true',
   INPUT_KEEP_DIGESTS: `${digest('1')}\n${digest('2')}`,
   INPUT_TOKEN: 'x',
@@ -270,6 +270,14 @@ test('Inputs parse lists and dry_run', () => {
   assert.deepStrictEqual(inputs.packages, ['backend', 'frontend', 'migrations'])
   assert.strictEqual(inputs.dryRun, true)
   assert.strictEqual(inputs.keepDigests.size, 2)
+  assert.deepStrictEqual(
+    parseInputs({...env, INPUT_PACKAGES: 'backend, frontend'}).packages,
+    ['backend', 'frontend']
+  )
+  assert.deepStrictEqual(
+    parseInputs({...env, INPUT_PACKAGES: '["backend"]'}).packages,
+    ['backend']
+  )
   assert.strictEqual(
     parseInputs({...env, INPUT_DRY_RUN: 'false'}).dryRun,
     false
@@ -285,6 +293,10 @@ test('Invalid inputs fail fast', () => {
     /keep_digests/
   )
   assert.throws(() => parseInputs({...env, INPUT_TOKEN: ''}), /token/)
+  assert.throws(
+    () => parseInputs({...env, INPUT_PACKAGES: 'backend frontend'}),
+    /Invalid packages input/
+  )
 })
 
 test('Package paths follow the image-tracker convention', () => {

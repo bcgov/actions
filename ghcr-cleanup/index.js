@@ -12,22 +12,20 @@ const MANIFEST_ACCEPT = [
   'application/vnd.docker.distribution.manifest.v2+json'
 ].join(', ')
 
-function splitList(input) {
-  return (input || '').split(/[\s,]+/).filter(Boolean)
-}
+const {InputError, getToken, parseList} = require('../shared/inputs.js')
 
 function parseInputs(env) {
-  const packages = splitList(env.INPUT_PACKAGES)
+  const packages = parseList(env.INPUT_PACKAGES, 'packages')
   if (packages.length === 0) {
     throw new Error("Input 'packages' is required.")
   }
-  const dryRun = (env.INPUT_DRY_RUN || '').trim()
+  const dryRun = (env.INPUT_DRY_RUN || '').trim().toLowerCase()
   if (dryRun !== 'true' && dryRun !== 'false') {
     throw new Error(
       `Input 'dry_run' must be 'true' or 'false', got '${dryRun}'.`
     )
   }
-  const keepDigests = splitList(env.INPUT_KEEP_DIGESTS)
+  const keepDigests = parseList(env.INPUT_KEEP_DIGESTS, 'keep_digests')
   for (const digest of keepDigests) {
     if (!DIGEST.test(digest)) {
       throw new Error(
@@ -35,7 +33,7 @@ function parseInputs(env) {
       )
     }
   }
-  const token = (env.INPUT_TOKEN || '').trim()
+  const token = getToken(env)
   if (!token) {
     throw new Error("Input 'token' is empty.")
   }
@@ -388,7 +386,7 @@ async function main(env = process.env) {
 
 if (require.main === module) {
   main().catch(err => {
-    console.log(`::error::${err.message}`)
+    console.log(err instanceof InputError ? err.message : `::error::${err.message}`)
     process.exit(1)
   })
 }

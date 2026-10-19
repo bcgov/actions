@@ -4,7 +4,9 @@
  * Fails loudly if the catastrophic silent-miss bug returns.
  */
 const assert = require('assert');
-const { legacyTriggersMessage, parseFilters, parseTriggers, stripQuotes } = require('./index.js');
+const { parseFilters, parseTriggers, stripQuotes } = require('./index.js');
+const { legacyListMessage } = require('../shared/inputs.js');
+const legacyTriggersMessage = raw => legacyListMessage('triggers', raw);
 
 assert.strictEqual(stripQuotes("'diff-triggers/**'"), 'diff-triggers/**');
 assert.strictEqual(stripQuotes('"builder-ghcr/**"'), 'builder-ghcr/**');
@@ -75,7 +77,7 @@ function expectLegacyFail(raw) {
   }
 }
 expectLegacyFail("('frontend/' 'backend/')");
-expectLegacyFail('frontend/,backend/');
+assert.deepStrictEqual(parseTriggers('frontend/, backend/'), ['frontend/', 'backend/']);
 expectLegacyFail('frontend/;backend/');
 expectLegacyFail('frontend/ backend/');
 
@@ -89,8 +91,8 @@ const after = msg.indexOf('  triggers: |');
 assert.ok(after > 0, 'must show after');
 assert.deepStrictEqual(msg.slice(after + 1, after + 3), ['    backend/', '    frontend/']);
 assert.ok(msg.includes(`Or: triggers: '["backend/","frontend/"]'`), 'must show JSON form');
-const comma = legacyTriggersMessage('backend/,frontend/').split('%0A');
-assert.ok(comma[1].startsWith('Comma, semicolon or space separated'));
-assert.deepStrictEqual(comma.slice(comma.indexOf('  triggers: |') + 1, -1), ['    backend/', '    frontend/']);
+const spaced = legacyTriggersMessage('backend/ frontend/').split('%0A');
+assert.ok(spaced[1].startsWith('Semicolon or space separated'));
+assert.deepStrictEqual(spaced.slice(spaced.indexOf('  triggers: |') + 1, -1), ['    backend/', '    frontend/']);
 
 console.log('diff-triggers self-check: ok');

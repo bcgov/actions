@@ -1,115 +1,25 @@
 const { execFileSync } = require('child_process');
 const fs = require('fs');
 
-/**
- * Strip one layer of matching single or double quotes.
- * YAML-like filter lists often use dorny-style `- 'path/**'`; those quotes
- * must not reach git pathspecs or matching silently fails.
- * @param {string} s
- * @returns {string}
- */
-function stripQuotes(s) {
-  if (
-    (s.startsWith("'") && s.endsWith("'") && s.length >= 2) ||
-    (s.startsWith('"') && s.endsWith('"') && s.length >= 2)
-  ) {
-    return s.slice(1, -1);
-  }
-  return s;
-}
+const { InputError, getInput, getToken, isDebug, parseBool, parseList, stripQuotes } = require('../shared/inputs.js');
 
 /**
- * Build the error shown when a caller passes a legacy list format.
- * Names the bad value and shows the same paths in the accepted format.
- * Newlines are encoded as %0A so the annotation keeps its layout.
+ * Parse trigger paths with the shared list parser (multiline preferred,
+ * comma separated or a JSON array). Unsupported formats print the shared
+ * before/after error and exit 1.
  * @param {string} raw
- * @returns {string}
- */
-function legacyTriggersMessage(raw) {
-  const trimmed = raw.trim();
-  const inner = trimmed.startsWith('(') && trimmed.endsWith(')') ? trimmed.slice(1, -1) : trimmed;
-  const paths = (inner.match(/'[^']*'|"[^"]*"|[^\s,;]+/g) || [])
-    .map(t => stripQuotes(t.trim()))
-    .filter(Boolean);
-  const kind =
-    trimmed.startsWith('(') && trimmed.endsWith(')')
-      ? 'Bash-style parenthesized lists'
-      : 'Comma, semicolon or space separated single-line lists';
-  const lines = [
-    `::error title=diff-triggers: unsupported triggers format::Invalid triggers input: ${trimmed}`,
-    `${kind} are no longer supported (bcgov/actions v0.10.0+).`,
-    'Use a multiline block, one path per line (or a JSON array).',
-    'Before:',
-    `  triggers: ${trimmed}`,
-    'After:',
-    '  triggers: |',
-    ...(paths.length ? paths : ['backend/', 'frontend/']).map(p => `    ${p}`),
-    `Or: triggers: '${JSON.stringify(paths.length ? paths : ['backend/', 'frontend/'])}'`,
-  ];
-  return lines.join('%0A');
-}
-
-/**
- * Parse trigger paths.
- *
- * Supported formats:
- *   - Multiline string: one path per line (preferred)
- *   - JSON array:       ["frontend/", "backend/"]
- *   - Single path:      one path on a single line
- *
- * Legacy bash-style parenthesized lists and delimiter-separated single-line
- * lists (comma / semicolon / space) are no longer accepted.
- *
- * @param {string} raw - Raw trigger input string
- * @returns {string[]} Parsed trigger paths
+ * @returns {string[]}
  */
 function parseTriggers(raw) {
-  const trimmed = raw.trim();
-
-  // 1. JSON array: ["frontend/", "backend/"]
-  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-    try {
-      const parsed = JSON.parse(trimmed);
-      if (Array.isArray(parsed)) {
-        const arr = parsed.map(t => String(t).trim()).filter(Boolean);
-        if (arr.length > 0) return arr;
-        console.error(`::error::Could not parse any triggers from input: ${raw}`);
-        process.exit(1);
-      }
-    } catch {
-      // Not valid JSON — fall through
-    }
-  }
-
-  // 2. Multiline string (preferred)
-  if (trimmed.includes('\n')) {
-    return trimmed
-      .split(/\r?\n/)
-      .map(line => stripQuotes(line.trim()))
-      .filter(Boolean);
-  }
-
-  // 3. Reject legacy list formats
-  const fullyQuoted =
-    (trimmed.startsWith("'") && trimmed.endsWith("'") && trimmed.length >= 2) ||
-    (trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2);
-  if (
-    (trimmed.startsWith('(') && trimmed.endsWith(')')) ||
-    /[,;]/.test(trimmed) ||
-    (trimmed.match(/['"]/g) || []).length >= 4 ||
-    (/\s/.test(trimmed) && !fullyQuoted)
-  ) {
-    console.error(legacyTriggersMessage(raw));
-    process.exit(1);
-  }
-
-  // 4. Single path on one line
-  const single = stripQuotes(trimmed);
-  if (!single) {
+  try {
+    const list = parseList(raw, 'triggers');
+    if (list.length > 0) return list;
     console.error(`::error::Could not parse any triggers from input: ${raw}`);
-    process.exit(1);
+  } catch (e) {
+    if (!(e instanceof InputError)) throw e;
+    console.error(e.message);
   }
-  return [single];
+  process.exit(1);
 }
 
 const RESERVED_OUTPUT_KEYS = new Set(['triggered', 'changes']);
@@ -182,8 +92,16 @@ async function main() {
   const triggersStr = process.env.INPUT_TRIGGERS || '';
   const filtersStr = process.env.INPUT_FILTERS || '';
   const inputRef = process.env.INPUT_REF || '';
-  const annotationsEnabled = (process.env.INPUT_ANNOTATIONS || 'true').toLowerCase() === 'true';
-  const token = process.env.INPUT_TOKEN || '';
+  let annotationsEnabled;
+  let debug;
+  try {
+    annotationsEnabled = parseBool(getInput('annotations'), 'annotations', true);
+    debug = isDebug();
+  } catch (e) {
+    console.error(e.message);
+    process.exit(1);
+  }
+  const token = getToken();
   const workflow = process.env.GITHUB_WORKFLOW || '';
   const job = process.env.GITHUB_JOB || '';
   const repo = process.env.GITHUB_REPOSITORY || '';
@@ -221,6 +139,7 @@ async function main() {
       return;
     }
     triggers = parseTriggers(triggersStr);
+    if (debug) console.log(`::debug::Parsed triggers: ${JSON.stringify(triggers)}`);
   }
 
   // Escape for GitHub Actions workflow command encoding
@@ -444,4 +363,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { legacyTriggersMessage, parseFilters, parseTriggers, stripQuotes };
+module.exports = { parseFilters, parseTriggers, stripQuotes };

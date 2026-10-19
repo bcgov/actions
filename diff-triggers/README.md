@@ -28,10 +28,11 @@ The action supports these formats for the `triggers` input:
 | Format | Example | Description |
 |---|---|---|
 | **Multiline string (recommended)** | `triggers: \|` then one path per line | Preferred. Supports spaces in paths without quotes. |
+| **Comma separated** | `triggers: backend/, frontend/` | One line. Commas inside `{...}` globs are kept. |
 | **JSON array** | `triggers: '["backend/", "frontend/"]'` | Inline list. Requires quotes to escape YAML parsing. |
 | **Single path** | `triggers: backend/` | One path on a single line. |
 
-Bash-style parenthesized lists and comma/semicolon/space-delimited single-line lists are no longer accepted. Migrate those callers to a multiline `triggers: |` block or a JSON array.
+These are the list formats every bcgov/actions list input accepts (see [shared/inputs.js](../shared/inputs.js)). Bash-style parenthesized lists and semicolon or space separated single-line lists are not accepted. Migrate those callers to a multiline `triggers: |` block.
 
 Since v0.10.0 the action fails on those formats. The error names the value it got and shows the same paths in the accepted format:
 
