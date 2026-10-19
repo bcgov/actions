@@ -8,8 +8,8 @@ inputs:
   debug:
     description: Enable debug logging
     default: "false"
-  github_token:
-    description: Specify token (GH or PAT), instead of inheriting one from the calling workflow
+  token:
+    description: 'Authentication token (defaults to github.token; override with PAT if needed).'
     default: ${{ github.token }}
 
 outputs:

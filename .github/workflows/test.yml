@@ -43,12 +43,14 @@ jobs:
               - 'get-pr/action.yml'
               - 'get-pr/index.js'
               - 'get-pr/tests/**'
+              - 'shared/**'
             ghcr-cleanup:
               - 'ghcr-cleanup/**'
               - 'shared/**'
               - '!*.md'
             image-tracker:
               - 'image-tracker/**'
+              - 'shared/**'
               - '!*.md'
             pr-description-add:
               - 'pr-description-add/**'
@@ -285,7 +287,7 @@ jobs:
         id: track
         uses: $/image-tracker
         with:
-          package: builder-arm-selftest
+          packages: builder-arm-selftest
 
       - name: Tracker digest is the amd64 image
         if: github.event.pull_request.head.repo.full_name == github.repository
@@ -797,7 +799,7 @@ jobs:
         name: Resolve via image-tracker action
         uses: $/image-tracker
         with:
-          package: ${{ matrix.package }}
+          packages: ${{ matrix.package }}
           revision: ${{ steps.discover.outputs.revision }}
           repository: ${{ matrix.repo }}
           dir: target
@@ -848,7 +850,7 @@ jobs:
         name: Walk history for latest digest
         uses: $/image-tracker
         with:
-          package: ${{ matrix.package }}
+          packages: ${{ matrix.package }}
           revision: HEAD
           repository: ${{ matrix.repo }}
           dir: target
