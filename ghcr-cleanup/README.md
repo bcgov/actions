@@ -93,7 +93,7 @@ jobs:
       - uses: bcgov/actions/ghcr-cleanup@<sha> # vX.Y.Z
         with:
           packages: backend, frontend, migrations
-          keep_digests: ${{ join(fromJSON(steps.deployed.outputs.digests).*, ' ') }}
+          keep_digests: ${{ join(fromJSON(steps.deployed.outputs.digests).*, ',') }}
           # dry_run defaults to true: read a few run logs before setting false
 ```
 
