@@ -112,10 +112,9 @@ External repository:
     dir: target
 ```
 
-### Migrating from `get-pr`
+### Deploying by digest
 
-Downstream workflows previously using `get-pr` to pick a mutable `:<pr>` tag
-must deploy the **digest** instead. `outputs.pr` is metadata only.
+Deploy the **digest**, not a mutable `:<pr>` tag. `outputs.pr` is metadata only.
 
 ```yaml
 - name: Track Images & PR
