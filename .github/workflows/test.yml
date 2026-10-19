@@ -54,6 +54,7 @@ jobs:
             pr-validate:
               - 'pr-validate/**'
               - '.github/workflows/pr-validate.yml'
+              - '.github/scripts/stage-dist.sh'
               - '!*.md'
             workflow-notifier:
               - 'workflow-notifier/**'
@@ -63,12 +64,12 @@ jobs:
               - '!*.md'
             test-and-analyse:
               - 'test-and-analyse/**'
+              - '.github/scripts/stage-dist.sh'
               - '!*.md'
             # Shared runner infrastructure and test harness changes trigger the full suite
             # rather than triggering blanket integration runs across unrelated actions.
             workflows:
               - '.github/workflows/test.yml'
-              - '.github/scripts/**'
               - '.tool-versions'
               - 'package.json'
               - 'tsconfig.base.json'
