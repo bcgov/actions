@@ -4,7 +4,7 @@ const { execSync, execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const process = require('node:process');
-const { InputError, checkRenamed, getInput, isDebug, parseBool, parseList } = require('../shared/inputs.js');
+const { InputError, getInput, isDebug, parseBool, parseList } = require('../shared/inputs.js');
 
 // ---- Logging Helpers -------------------------------------------------------
 function logError(msg) {
@@ -1492,9 +1492,6 @@ async function runMain() {
     headRepository,
     fallbackRepository
   });
-
-  // Old input names fail with a link to the migration guide
-  checkRenamed({ package: { to: 'packages', anchor: 'packages' } }, env);
 
   // 2. Package Input
   let packageInput = '';
