@@ -31,6 +31,7 @@ test('parseList: legacy formats throw the before/after error', () => {
     assert.match(lines[1], /parenthesized lists are no longer supported/);
     assert.ok(lines.includes('  triggers: |'));
     assert.ok(lines.includes('    frontend/'));
+    assert.ok(lines.at(-1).includes('https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idstepswith'));
   }
 });
 

@@ -93,6 +93,6 @@ assert.deepStrictEqual(msg.slice(after + 1, after + 3), ['    backend/', '    fr
 assert.ok(msg.includes(`Or: triggers: '["backend/","frontend/"]'`), 'must show JSON form');
 const spaced = legacyTriggersMessage('backend/ frontend/').split('%0A');
 assert.ok(spaced[1].startsWith('Semicolon or space separated'));
-assert.deepStrictEqual(spaced.slice(spaced.indexOf('  triggers: |') + 1, -1), ['    backend/', '    frontend/']);
+assert.deepStrictEqual(spaced.slice(spaced.indexOf('  triggers: |') + 1, -2), ['    backend/', '    frontend/']);
 
 console.log('diff-triggers self-check: ok');
