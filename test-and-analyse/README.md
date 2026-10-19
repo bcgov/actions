@@ -87,7 +87,7 @@ Every other input keeps its name.
 | `diff_branch` | `diff_base` |
 | `sonar_enforce_compliance` | Removed. The old action ran the Sonar scanner itself; now Sonar runs inside `commands`, so a failing Sonar step fails the job like any other command. An empty `sonar_token` skips Sonar with a warning. |
 
-`commands`, `dir`, `sonar_args`, `sonar_token`, `triggers` and `repository` keep their names; `branch` is now `ref` (the actions/checkout name). In this action, Sonar runs from `commands` (see the [Java example](#example-java-maven-with-native-sonarcloud-reporting)).
+`commands`, `dir`, `sonar_args`, `sonar_token`, `triggers` and `repository` keep their names; the ref to check out is `ref` (the actions/checkout name). In this action, Sonar runs from `commands` (see the [Java example](#example-java-maven-with-native-sonarcloud-reporting)).
 
 
 ## Defaults
@@ -360,7 +360,7 @@ The [`test-test-and-analyse` workflow](../.github/workflows/test-test-and-analys
 
 Set repository Actions secret **`SONAR_TOKEN`**: a SonarCloud token for the **`bcgov-sonarcloud`** organization that can analyze project **`bcgov_bcgov/actions`**. Without it, CI still validates triggers, tests, and Knip.
 
-An empty `sonar_token` skips Sonar with a warning annotation. `require_sonar` was removed before v1.0.0: it failed fork PRs, which never get secrets.
+An empty `sonar_token` skips Sonar with a warning annotation, so fork PRs (which never get secrets) still pass.
 
 For BC Government projects, please create an [issue for our platform team](https://github.com/BCDevOps/devops-requests/issues/new/choose).
 
