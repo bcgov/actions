@@ -401,8 +401,7 @@ const TAG_PATTERN = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/;
 function parseTags(input) {
   if (typeof input !== 'string') return [];
   const tags = [];
-  for (const line of input.split(/\r?\n/)) {
-    const tag = line.trim();
+  for (const tag of parseList(input, 'tags')) {
     if (!tag) continue;
     if (!TAG_PATTERN.test(tag)) {
       throw new Error(`Invalid tag '${tag}'. Tags must match ${TAG_PATTERN}.`);

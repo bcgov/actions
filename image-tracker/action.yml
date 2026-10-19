@@ -44,7 +44,7 @@ inputs:
     default: '1'
   tags:
     description: |
-      Optional tags (one per line) to apply to every resolved digest, e.g. the
+      Optional tags (one per line, comma separated or JSON array) to apply to every resolved digest, e.g. the
       commit SHA and `latest`. Omit to stay read-only. Setting it requires
       `packages: write`. Tags are only written after every package resolves.
       `latest` only moves when the resolved revision is the default-branch tip;

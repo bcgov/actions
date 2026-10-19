@@ -157,7 +157,7 @@ be resolved, or no image exists for that revision, the action fails (`exit 1`).
 | `token`        |          | `github.token`       | GitHub token used to mint a GHCR bearer token.                                 |
 | `max_tags`   |          | `500`                | Upper bound on tags inspected per package before failing.                      |
 | `max_depth`  |          | `1`                  | Max commits of git ancestry to search. Default is this SHA only. Merge/promote must raise this (e.g. `100`) so a squash can resolve the last built image. |
-| `tags`       |          | —                    | Tags (one per line) applied to every resolved digest. Omit to stay read-only. Needs `packages: write`. See [Tagging](#tagging). |
+| `tags`       |          | —                    | Tags (one per line, comma separated, or JSON array) applied to every resolved digest. Omit to stay read-only. Needs `packages: write`. See [Tagging](#tagging). |
 
 Package-to-image-path convention:
 - If package name == repository name → `ghcr.io/<owner>/<repo>`

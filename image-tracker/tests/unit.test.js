@@ -2918,7 +2918,9 @@ test('parseTags splits lines, drops blanks and duplicates, rejects invalid tags'
   assert.deepStrictEqual(parseTags(undefined), []);
   assert.deepStrictEqual(parseTags(''), []);
   assert.deepStrictEqual(parseTags('abc123\n\n  latest \r\nlatest\n'), ['abc123', 'latest']);
-  assert.throws(() => parseTags('bad tag'), /Invalid tag 'bad tag'/);
+  assert.throws(() => parseTags('bad tag'), /Invalid tags input/);
+  assert.deepStrictEqual(parseTags('abc123, latest'), ['abc123', 'latest']);
+  assert.throws(() => parseTags('bad\ttag\nok'), /Invalid tag/);
   assert.throws(() => parseTags('-leading'), /Invalid tag/);
   assert.throws(() => parseTags('a'.repeat(129)), /Invalid tag/);
 });
