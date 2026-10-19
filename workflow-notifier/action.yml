@@ -19,7 +19,7 @@ inputs:
     description: "Issue body (pre-filled with run URL if omitted)"
     required: false
   labels:
-    description: "Comma-separated labels"
+    description: "Labels to add: one per line, comma separated, or a JSON array"
     default: "bug,failure"
   assign:
     description: "Whether to assign owners to the issue"
@@ -28,7 +28,7 @@ inputs:
     description: "Whether to notify the triggering author/merger on failure"
     default: "true"
   notify_codeowners:
-    description: "Whether to notify repository CODEOWNERS on failure ('fallback' only alerts when no actors found, 'true' always includes, 'false' never includes)"
+    description: "When to notify repository CODEOWNERS on failure: always, fallback (only when no author or merger was found) or never"
     default: "fallback"
   dry_run:
     description: "If true, logs the issue create or comment without calling it"

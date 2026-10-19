@@ -60,6 +60,7 @@ jobs:
               - '!*.md'
             workflow-notifier:
               - 'workflow-notifier/**'
+              - 'shared/**'
               - '!*.md'
             workflow-results:
               - 'workflow-results/**'
@@ -1171,7 +1172,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           title: '[DRY RUN] Simulating a failure without codeowners'
           body: 'This is a dry run test without codeowners.'
-          notify_codeowners: false
+          notify_codeowners: never
           dry_run: true
 
       - name: Dry Run - Simulate Failure with CODEOWNERS Always Included
@@ -1181,7 +1182,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           title: '[DRY RUN] Simulating a failure with codeowners always'
           body: 'This is a dry run test with codeowners always.'
-          notify_codeowners: 'true'
+          notify_codeowners: always
           dry_run: true
 
       - name: Verify Outputs
