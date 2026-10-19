@@ -34,8 +34,6 @@ PR workflows must not fire unnecessarily.
 
 - Usage examples in action READMEs show how `bcgov/quickstart-openshift` would call the action: its workflows (`pr-open.yml`, `pr-close.yml`, `merge.yml`, `scheduled.yml`), its packages (`backend`, `frontend`, `migrations`) and its job order. Add a separate example only when the quickstart shape does not fit. Never say quickstart uses an action it does not use; read its workflows first.
 
-## Release order with actions-openshift
+## diff-triggers consumers
 
-`bcgov/actions-openshift` `deployer`, `crunchy` and `oc-runner` call `diff-triggers`. Check any breaking change to its inputs or outputs against them, especially for v1.0.0.
-
-When both repos release together: (1) release this repo; (2) merge the bcgov/actions bump in actions-openshift (Renovate or manual), pinned to that release SHA; (3) only then release actions-openshift.
+`bcgov/actions-openshift` `deployer`, `crunchy` and `oc-runner` call `diff-triggers`, pinned to a release SHA. v1 rollout (one-off): release this repo first, merge the bump in actions-openshift, then release actions-openshift. After that the repos release independently, with Renovate carrying the bumps.
