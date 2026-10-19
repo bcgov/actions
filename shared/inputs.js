@@ -43,24 +43,19 @@ function stripQuotes(s) {
  * @param {string} raw
  * @returns {string}
  */
-function legacyListMessage(name, raw) {
+function listFormatMessage(name, raw) {
   const trimmed = raw.trim();
-  const paren = trimmed.startsWith('(') && trimmed.endsWith(')');
-  const inner = paren ? trimmed.slice(1, -1) : trimmed;
+  const inner = trimmed.startsWith('(') && trimmed.endsWith(')') ? trimmed.slice(1, -1) : trimmed;
   const found = (inner.match(/'[^']*'|"[^"]*"|[^\s,;]+/g) || [])
     .map(t => stripQuotes(t.trim()))
     .filter(Boolean);
   const items = found.length ? found : ['backend/', 'frontend/'];
-  const kind = paren
-    ? 'Bash-style parenthesized lists'
-    : 'Semicolon or space separated single-line lists';
   return [
-    `::error title=${name}: unsupported list format::Invalid ${name} input: ${trimmed}`,
-    `${kind} are no longer supported (bcgov/actions v0.10.0+).`,
-    'Use a multiline block, one item per line (or a comma-separated line, or a JSON array).',
-    'Before:',
+    `::error title=${name}: list format::Invalid ${name} input: ${trimmed}`,
+    `${name} must be a multiline block (one item per line), a comma-separated line, or a JSON array.`,
+    'Got:',
     `  ${name}: ${trimmed}`,
-    'After:',
+    'Use:',
     `  ${name}: |`,
     ...items.map(i => `    ${i}`),
     `Or: ${name}: '${JSON.stringify(items)}'`,
@@ -107,7 +102,7 @@ function splitCommas(s) {
  * A multiline value is never split on commas. One layer of quotes around
  * each item is removed.
  * Bash-style parenthesized lists and semicolon or space separated lines throw
- * an InputError whose message is legacyListMessage().
+ * an InputError whose message is listFormatMessage().
  *
  * @param {string} raw
  * @param {string} [name]
@@ -140,12 +135,12 @@ function parseList(raw, name = 'input') {
     (trimmed.match(/['"]/g) || []).length >= 4 ||
     (!trimmed.includes(',') && /\s/.test(trimmed) && !fullyQuoted)
   ) {
-    throw new InputError(legacyListMessage(name, trimmed));
+    throw new InputError(listFormatMessage(name, trimmed));
   }
 
   if (trimmed.includes(',') && !fullyQuoted) {
     const items = splitCommas(trimmed).map(t => stripQuotes(t.trim()));
-    if (items.some(i => /\s/.test(i))) throw new InputError(legacyListMessage(name, trimmed));
+    if (items.some(i => /\s/.test(i))) throw new InputError(listFormatMessage(name, trimmed));
     return items.filter(Boolean);
   }
 
@@ -211,7 +206,7 @@ module.exports = {
   getInput,
   getToken,
   isDebug,
-  legacyListMessage,
+  listFormatMessage,
   parseBool,
   parseEnum,
   parseList,

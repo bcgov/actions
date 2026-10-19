@@ -5,8 +5,8 @@
  */
 const assert = require('assert');
 const { parseFilters, parseTriggers, stripQuotes } = require('./index.js');
-const { legacyListMessage } = require('../shared/inputs.js');
-const legacyTriggersMessage = raw => legacyListMessage('triggers', raw);
+const { listFormatMessage } = require('../shared/inputs.js');
+const triggersFormatMessage = raw => listFormatMessage('triggers', raw);
 
 assert.strictEqual(stripQuotes("'diff-triggers/**'"), 'diff-triggers/**');
 assert.strictEqual(stripQuotes('"builder-ghcr/**"'), 'builder-ghcr/**');
@@ -55,8 +55,8 @@ assert.deepStrictEqual(parseTriggers('["frontend/", "backend/"]'), ['frontend/',
 assert.deepStrictEqual(parseTriggers('frontend/'), ['frontend/']);
 assert.deepStrictEqual(parseTriggers('"my path/"'), ['my path/']);
 
-// parseTriggers: legacy formats must fail
-function expectLegacyFail(raw) {
+// parseTriggers: other formats must fail
+function expectFormatFail(raw) {
   let exitCode = 0;
   const origExit = process.exit;
   const origErr = console.error;
@@ -67,7 +67,7 @@ function expectLegacyFail(raw) {
   };
   try {
     parseTriggers(raw);
-    assert.fail(`expected legacy reject for: ${raw}`);
+    assert.fail(`expected format error for: ${raw}`);
   } catch (e) {
     if (e.message !== 'exit') throw e;
     assert.strictEqual(exitCode, 1, `expected exit 1 for: ${raw}`);
@@ -76,23 +76,23 @@ function expectLegacyFail(raw) {
     console.error = origErr;
   }
 }
-expectLegacyFail("('frontend/' 'backend/')");
+expectFormatFail("('frontend/' 'backend/')");
 assert.deepStrictEqual(parseTriggers('frontend/, backend/'), ['frontend/', 'backend/']);
-expectLegacyFail('frontend/;backend/');
-expectLegacyFail('frontend/ backend/');
+expectFormatFail('frontend/;backend/');
+expectFormatFail('frontend/ backend/');
 
-// Legacy error must name the bad value and show the converted multiline form.
-const msg = legacyTriggersMessage("('backend/' 'frontend/')").split('%0A');
+// The error must name the value and show it as a multiline block.
+const msg = triggersFormatMessage("('backend/' 'frontend/')").split('%0A');
 assert.ok(msg[0].startsWith('::error '), 'must be an error annotation');
 assert.ok(msg[0].includes("Invalid triggers input: ('backend/' 'frontend/')"), 'must name the bad value');
-assert.ok(msg[1].includes('parenthesized lists are no longer supported'), 'must say parens are unsupported');
-assert.ok(msg.includes("  triggers: ('backend/' 'frontend/')"), 'must show before');
+assert.ok(msg[1].includes('triggers must be a multiline block'), 'must describe the accepted format');
+assert.ok(msg.includes("  triggers: ('backend/' 'frontend/')"), 'must show the value');
 const after = msg.indexOf('  triggers: |');
-assert.ok(after > 0, 'must show after');
+assert.ok(after > 0, 'must show the multiline form');
 assert.deepStrictEqual(msg.slice(after + 1, after + 3), ['    backend/', '    frontend/']);
 assert.ok(msg.includes(`Or: triggers: '["backend/","frontend/"]'`), 'must show JSON form');
-const spaced = legacyTriggersMessage('backend/ frontend/').split('%0A');
-assert.ok(spaced[1].startsWith('Semicolon or space separated'));
+const spaced = triggersFormatMessage('backend/ frontend/').split('%0A');
+assert.ok(spaced[0].includes('Invalid triggers input: backend/ frontend/'));
 assert.deepStrictEqual(spaced.slice(spaced.indexOf('  triggers: |') + 1, -2), ['    backend/', '    frontend/']);
 
 console.log('diff-triggers self-check: ok');
