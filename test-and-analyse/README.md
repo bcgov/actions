@@ -85,7 +85,7 @@ Every other input keeps its name.
 | `java-distribution` | `java_distribution` |
 | `java-cache` | `cache` (`maven` or `gradle`; auto-detected if omitted) |
 | `diff_branch` | `diff_base` |
-| `sonar_enforce_compliance` | Removed. The old action ran the Sonar scanner itself; now Sonar runs inside `commands`, so a failing Sonar step fails the job like any other command. `require_sonar` is not a replacement: it only fails when `sonar_token` is empty. |
+| `sonar_enforce_compliance` | Removed. The old action ran the Sonar scanner itself; now Sonar runs inside `commands`, so a failing Sonar step fails the job like any other command. An empty `sonar_token` skips Sonar with a warning. |
 
 `commands`, `dir`, `sonar_args`, `sonar_token`, `triggers` and `repository` keep their names; `branch` is now `ref` (the actions/checkout name). In this action, Sonar runs from `commands` (see the [Java example](#example-java-maven-with-native-sonarcloud-reporting)).
 
@@ -107,7 +107,7 @@ Every other input keeps its name.
 | `semgrep_config` | `p/default` | |
 | `semgrep_fail` | `false` | Findings warn unless `true` |
 | `annotations` / debug | `debug: false` | |
-| `require_sonar` | `false` | Skip Sonar quietly when token empty |
+| `sonar_token` | _(empty)_ | Empty skips Sonar with a warning (fork PRs get no secrets) |
 | `triggers` | _(omitted)_ | When omitted, tests always run |
 | `diff_base` | repository default branch | Base to diff triggers against |
 | `token` | `${{ github.token }}` | |
@@ -356,11 +356,11 @@ SonarCloud project tokens are free, available from [SonarCloud] or your organiza
 
 ## In-repo CI (`bcgov/actions` maintainers)
 
-The [`test-test-and-analyse` workflow](../.github/workflows/test-test-and-analyse.yml) exercises this action against external sample repos. **`sonar_token` is optional** in every matrix cell (`require_sonar: false`). Only **`backend-triggered`** receives a token when configured, to optionally exercise the Sonar scan path.
+The [`test-test-and-analyse` workflow](../.github/workflows/test-test-and-analyse.yml) exercises this action against external sample repos. **`sonar_token` is optional** in every matrix cell. Only **`backend-triggered`** receives a token when configured, to optionally exercise the Sonar scan path.
 
 Set repository Actions secret **`SONAR_TOKEN`**: a SonarCloud token for the **`bcgov-sonarcloud`** organization that can analyze project **`bcgov_bcgov/actions`**. Without it, CI still validates triggers, tests, and Knip.
 
-Consumers who need Sonar to be mandatory should set `require_sonar: true` in their own workflows; the action fails loudly when the token is absent.
+An empty `sonar_token` skips Sonar with a warning annotation. `require_sonar` was removed before v1.0.0: it failed fork PRs, which never get secrets.
 
 For BC Government projects, please create an [issue for our platform team](https://github.com/BCDevOps/devops-requests/issues/new/choose).
 
