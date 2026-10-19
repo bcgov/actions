@@ -15,7 +15,7 @@
  
  This action runs tests and analysis across the BC Gov ecosystem, optionally sending results and coverage to [SonarCloud](https://sonarcloud.io). It supports **Node.js, Java, and Python** projects with unified reporting, supply chain scanning, and dependency analysis.
 
-The reporter script is committed `dist/index.js` from ncc. That bundle is rebuilt and committed **only on suite release**. Pin a release tag (`@vX.Y.Z` in examples — replace with a real tag). `@main` does not run current source.
+The reporter script is `dist/index.js` from ncc. `dist/` is not on `main`; it is built and committed **only on suite release** commits. Pin a release tag (`@vX.Y.Z` in examples — replace with a real tag). `@main` does not run current source.
 
 The action stays composite because it installs the caller's toolchain and runs their tests, SonarCloud and Knip. The report step is [`reporter`](reporter/action.yml) (`runs.using: node24`). That step uses the Actions Node 24 runtime, so it does not follow the project's `node_version`. Node is installed once, for the caller's code.
 

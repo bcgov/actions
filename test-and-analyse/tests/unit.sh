@@ -473,6 +473,23 @@ else
     passed=$((passed + 1))
 fi
 
+# ── ncc compile ──────────────────────────────────────────────────────────────
+# ncc must produce dist/index.js. dist/ is git-ignored on main and only committed on release commits.
+# Build before the reporter test below, which imports ../dist/index.js.
+echo ""
+echo "── ncc build ──"
+REPO_ROOT="$(cd "${ACTION_ROOT}/.." && pwd)"
+(
+  set -euo pipefail
+  if [ ! -d "${REPO_ROOT}/node_modules" ]; then
+    (cd "$REPO_ROOT" && npm ci)
+  fi
+  cd "$ACTION_ROOT"
+  npm run build
+  test -f dist/index.js || { echo "dist/index.js missing after build" >&2; exit 1; }
+)
+echo "✅ ncc build succeeded"
+
 REPORTER_WS="$(mktemp -d)"
 REPORTER_OUT="$(mktemp)"
 REPORTER_SUMMARY="$(mktemp)"
@@ -505,19 +522,3 @@ echo "Unit tests finished: ${passed} passed, ${failed} failed."
 if [[ "$failed" -gt 0 ]]; then
     exit 1
 fi
-
-# ── ncc compile ──────────────────────────────────────────────────────────────
-# Committed dist/ is refreshed at release. PRs only require a successful build.
-echo ""
-echo "── ncc build ──"
-ACTION_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-REPO_ROOT="$(cd "${ACTION_ROOT}/.." && pwd)"
-(
-  set -euo pipefail
-  if [ ! -d "${REPO_ROOT}/node_modules" ]; then
-    (cd "$REPO_ROOT" && npm ci)
-  fi
-  cd "$ACTION_ROOT"
-  npm run build
-)
-echo "✅ ncc build succeeded"

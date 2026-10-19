@@ -24,7 +24,7 @@ assert.notEqual(emptyCompare, '')
 
 console.log('Passed: 5, Failed: 0')
 
-// ncc must succeed; committed dist/ is refreshed at release, not on every PR.
+// ncc must produce dist/index.js. dist/ is git-ignored on main and only committed on release commits.
 const actionRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 const repoRoot = join(actionRoot, '..')
 if (!existsSync(join(repoRoot, 'node_modules'))) {
@@ -34,4 +34,8 @@ execSync('npm run build && npm run package', {
   cwd: actionRoot,
   stdio: 'inherit'
 })
+assert.ok(
+  existsSync(join(actionRoot, 'dist', 'index.js')),
+  'dist/index.js missing after build'
+)
 console.log('Passed: ncc package build')

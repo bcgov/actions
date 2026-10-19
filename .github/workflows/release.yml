@@ -72,13 +72,19 @@ jobs:
           fi
           npm ci
           npm run build
-          untracked="$(git ls-files --others --exclude-standard -- pr-description-add/dist test-and-analyse/dist)"
-          if git diff --ignore-space-at-eol --quiet -- pr-description-add/dist test-and-analyse/dist && [ -z "$untracked" ]; then
+          for entry in pr-description-add/dist/index.js test-and-analyse/dist/index.js; do
+            if [ ! -f "$entry" ]; then
+              echo "${entry} is missing after the build" >&2
+              exit 1
+            fi
+          done
+          # dist/ is git-ignored on main, so it is force-added to the release commit
+          git add -f -A -- pr-description-add/dist test-and-analyse/dist
+          if git diff --cached --ignore-space-at-eol --quiet -- pr-description-add/dist test-and-analyse/dist; then
             git tag "$TAG" "$base"
           else
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git config user.name "github-actions[bot]"
-            git add -A -- pr-description-add/dist test-and-analyse/dist
             git commit -m "chore(dist): rebuild ncc bundles for release"
             git tag "$TAG"
           fi
