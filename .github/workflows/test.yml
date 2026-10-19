@@ -68,6 +68,7 @@ jobs:
             # rather than triggering blanket integration runs across unrelated actions.
             workflows:
               - '.github/workflows/test.yml'
+              - '.github/scripts/**'
               - '.tool-versions'
               - 'package.json'
               - 'tsconfig.base.json'
@@ -885,7 +886,11 @@ jobs:
         run: node --experimental-strip-types --no-warnings tests/self-check.ts
         working-directory: pr-description-add
 
-      - uses: $/pr-description-add
+      - name: Build bundles
+        run: npm run build
+
+      # Workspace path: runs the bundle built from this PR's source
+      - uses: ./pr-description-add
         if: github.event_name == 'pull_request'
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -905,6 +910,21 @@ jobs:
 
       - name: Context self-check
         run: bash pr-validate/tests/self-check.sh
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .tool-versions
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build bundles
+        run: npm run build
+
+      # add_markdown reaches $/pr-description-add inside pr-validate
+      - name: Stage built dist for $/ steps
+        run: bash .github/scripts/stage-dist.sh pr-description-add
 
       - name: Test pr-validate action
         if: github.event_name == 'pull_request'
@@ -1250,6 +1270,22 @@ jobs:
             test_command: echo "Testing autodiscover on nr-fom"
             expected_config: '.github/knip.json'
     steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .tool-versions
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build bundles
+        run: npm run build
+
+      - name: Stage built dist for $/ steps
+        run: bash .github/scripts/stage-dist.sh test-and-analyse
+
       - id: action
         uses: $/test-and-analyse
         with:
@@ -1311,6 +1347,12 @@ jobs:
       - name: Run Unit Tests
         run: bash test-and-analyse/tests/unit.sh
 
+      - name: Build bundles
+        run: npm run build
+
+      - name: Stage built dist for $/ steps
+        run: bash .github/scripts/stage-dist.sh test-and-analyse
+
       - run: echo sentinel >> README.md
 
       - uses: $/test-and-analyse
@@ -1341,6 +1383,20 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .tool-versions
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build bundles
+        run: npm run build
+
+      - name: Stage built dist for $/ steps
+        run: bash .github/scripts/stage-dist.sh test-and-analyse
 
       - name: Clean project
         id: clean
