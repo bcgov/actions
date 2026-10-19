@@ -41,3 +41,7 @@ PR workflows must not fire unnecessarily.
 ## Inputs
 
 Read list, boolean, enum, debug and token inputs through [shared/inputs.js](shared/inputs.js), never with ad hoc splitting or string compares. Details: [shared/README.md](shared/README.md).
+
+## Outputs
+
+Outputs are snake_case. Booleans are `true`/`false`. Lists are JSON arrays and maps are JSON objects, so callers read them with `fromJSON()`. Single-value convenience outputs (e.g. image-tracker `digest`) stay plain strings.

@@ -517,7 +517,7 @@ EOF
     "caps summary assignees output at 10"
   local out_env
   out_env=$(cat "${TMP_DIR}/output.env")
-  assert_contains "$out_env" "assignees=leadauthor,u01,u02,u03,u04,u05,u06,u07,u08,u09" \
+  assert_contains "$out_env" 'assignees=["leadauthor","u01","u02","u03","u04","u05","u06","u07","u08","u09"]' \
     "clamps step output assignees to 10"
   assert_not_contains "$out_env" "u10" "excludes 11th owner from step output"
 }
