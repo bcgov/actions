@@ -248,4 +248,8 @@ grep -rnE \
   .github/
 ```
 
-`ref:` matches also hit actions/checkout, which keeps `ref`. Only change it on diff-triggers, builder, test-and-analyse and deployer, where it was the diff base.
+Some matches are not changes:
+
+- `ref:` also hits actions/checkout, which keeps `ref`. Change it only on diff-triggers, builder, test-and-analyse and deployer, where it was the diff base.
+- `package:` also hits builder and matrix keys; builder keeps `package`. Change it only on image-tracker.
+- `branch:` also hits unrelated keys; change it only on test-and-analyse.
