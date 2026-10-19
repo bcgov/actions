@@ -1,7 +1,8 @@
 const fs = require('fs');
-const { getToken, isDebug } = require('../shared/inputs.js');
+const { InputError, checkRenamed, getToken, isDebug } = require('../shared/inputs.js');
 
 async function main() {
+  checkRenamed({ github_token: { to: 'token', anchor: 'token' } });
   const debug = isDebug();
   const token = getToken();
   const eventName = process.env.TEST_EVENT_NAME || process.env.GITHUB_EVENT_NAME;
@@ -257,6 +258,10 @@ async function main() {
 }
 
 main().catch(err => {
+  if (err instanceof InputError) {
+    console.log(err.message);
+    process.exit(1);
+  }
   const errMsg = err?.message ?? String(err);
   console.error(`Fatal error: ${errMsg}`);
   process.exit(1);

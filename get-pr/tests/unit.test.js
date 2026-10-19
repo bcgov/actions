@@ -120,3 +120,12 @@ test('unknown event fails', () => {
   assert.strictEqual(r.status, 1)
   assert.strictEqual(r.output, '')
 })
+
+test('old github_token input fails with a migration link', () => {
+  const res = spawnSync('node', [ACTION], {
+    encoding: 'utf8',
+    env: {PATH: process.env.PATH, INPUT_GITHUB_TOKEN: 'x'}
+  })
+  assert.strictEqual(res.status, 1)
+  assert.match(res.stdout, /Input github_token was renamed to token.*MIGRATION\.md#token/)
+})
