@@ -1,5 +1,7 @@
 # workflow-notifier
 
+> Upgrading to v1.0.0? See the [migration guide](../MIGRATION.md#notify_codeowners).
+
 Find CODEOWNERS and triggering workflow/PR merge authors, notifying them via GitHub Issues on workflow/job failure.
 
 ## Permissions
