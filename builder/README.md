@@ -72,29 +72,6 @@ Pull with: `docker pull ghcr.io/<organization>/<repository>/<package>:<tag>`
 
 Only GitHub Container Registry (`ghcr.io`) is supported.
 
-# Moving from action-builder-ghcr
-
-If you're moving from `bcgov/action-builder-ghcr`, these inputs changed. A minimal step looks like this:
-
-```yaml
-- uses: bcgov/actions/builder@vX.Y.Z
-  with:
-    package: backend
-    tag_fallback: latest
-    triggers: |
-      backend/
-```
-
-| `action-builder-ghcr` input | `bcgov/actions/builder` |
-| --- | --- |
-| `github_token` | `token` |
-| `diff_branch` | `ref` |
-| `metadata_tags` | Removed. OCI labels from `docker/metadata-action` are always applied. |
-| `metadata_flavor` | Removed. |
-| `metadata_tag_rules` | Removed. Custom tag rules are gone: images get the tags in `tags` (default: the PR number) plus the source commit SHA. |
-
-Every other input keeps its name. `triggers` still accepts the legacy parenthesized list, but prefer the multiline form above.
-
 # Usage
 
 ```yaml
@@ -149,7 +126,7 @@ Every other input keeps its name. `triggers` still accepts the legacy parenthesi
 
     # Overrides the default reference/branch to diff against
     # Defaults to the default branch, usually `main`
-    ref: ${{ github.event.repository.default_branch }}
+    diff_base: ${{ github.event.repository.default_branch }}
 
     # Repository to clone and process
     # Useful for consuming other repos, like in testing
@@ -168,7 +145,7 @@ Every other input keeps its name. `triggers` still accepts the legacy parenthesi
     username: ${{ github.actor }}
 
     # Multiline input for secrets to mount.
-    # Note: GITHUB_TOKEN is no longer injected by default. If your build needs it
+    # Note: GITHUB_TOKEN is not injected by default. If your build needs it
     # (e.g. to pull private packages), you must explicitly pass it here.
     # https://docs.docker.com/build/ci/github-actions/secrets/#secret-mounts
     secrets: |

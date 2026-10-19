@@ -1,9 +1,4 @@
 
-**BREAKING CHANGES in v1.0:**
-* **`node_version` is auto-detected; when nothing is found the fallback is `24` (previously a hard default of `16`)**
-* **`sonar_comment_token` has been removed (ignored by SonarCloud)**
-* **`sonar_project_token` has been renamed `sonar_token`**
-
 
 
 <!-- Reference-Style link -->
@@ -36,60 +31,6 @@ permissions:
  - **Java**: Native support for Maven/Gradle with integrated JUnit reporting and SonarCloud plugin support.
  - **Python**: Support for Pytest/Unittest with JUnit XML results and SonarCloud analysis.
 
-# Moving from the standalone actions
-
-If you're moving from `bcgov/action-test-and-analyse` or `bcgov/action-test-and-analyse-java`, these inputs changed.
-
-## From `bcgov/action-test-and-analyse` (Node and others)
-
-```yaml
-- uses: bcgov/actions/test-and-analyse@vX.Y.Z
-  with:
-    commands: |
-      npm ci
-      npm run test:cov
-    dir: frontend
-    sonar_token: ${{ secrets.SONAR_TOKEN }}
-    triggers: |
-      frontend/
-```
-
-| Old input | New input |
-| --- | --- |
-| `diff_branch` | `ref` |
-| `skip_checkout` | Removed. Checkout is skipped automatically when `checkout_path` already holds a checkout. |
-
-Every other input keeps its name.
-
-## From `bcgov/action-test-and-analyse-java`
-
-```yaml
-- uses: bcgov/actions/test-and-analyse@vX.Y.Z
-  with:
-    language: java
-    java_version: "21"
-    commands: |
-      mvn -B verify sonar:sonar \
-        -Dsonar.organization=bcgov-sonarcloud \
-        -Dsonar.projectKey=bcgov_your-project-key
-    dir: backend
-    sonar_token: ${{ secrets.SONAR_TOKEN }}
-    triggers: |
-      backend/
-```
-
-| Old input | New input |
-| --- | --- |
-| _(none)_ | `language: java` (required) |
-| `java-version` | `java_version` |
-| `java-distribution` | `java_distribution` |
-| `java-cache` | `cache` (`maven` or `gradle`; auto-detected if omitted) |
-| `diff_branch` | `ref` |
-| `sonar_enforce_compliance` | Removed. The old action ran the Sonar scanner itself; now Sonar runs inside `commands`, so a failing Sonar step fails the job like any other command. `require_sonar` is not a replacement: it only fails when `sonar_token` is empty. |
-
-`commands`, `dir`, `sonar_args`, `sonar_token`, `triggers`, `repository` and `branch` keep their names. In this action, Sonar runs from `commands` (see the [Java example](#example-java-maven-with-native-sonarcloud-reporting)).
-
-
 ## Defaults
 
 | Input | Default | Notes |
@@ -109,7 +50,7 @@ Every other input keeps its name.
 | `annotations` / debug | `debug: false` | |
 | `require_sonar` | `false` | Skip Sonar quietly when token empty |
 | `triggers` | _(omitted)_ | When omitted, tests always run |
-| `ref` | repository default branch | Comparison ref for triggers |
+| `diff_base` | repository default branch | Base to diff triggers against |
 | `token` | `${{ github.token }}` | |
 | `checkout_path` | `.` | |
 
@@ -187,17 +128,16 @@ Every other input keeps its name.
 
     # Overrides the default reference/branch to diff against
     # Defaults to the default branch, usually `main`
-    ref: ${{ github.event.repository.default_branch }}
+    diff_base: ${{ github.event.repository.default_branch }}
 
     # Repository to clone and process
     # Useful for consuming other repos, like in testing
     # Defaults to the current one
     repository: ${{ github.repository }}
 
-    # Branch to clone and process
-    # Useful for consuming non-default branches, like in testing
-    # Defaults to empty, cloning the default branch
-    branch: ""
+    # Branch, tag or SHA of repository to check out (actions/checkout `ref`)
+    # Defaults to empty, the repository default branch
+    ref: ""
 ```
 
 # Example, Single Directory with SonarCloud Analysis, Supply Chain Scanning, and Dependency/Export Analysis
@@ -283,7 +223,7 @@ jobs:
 
 # Example, Matrix / Multiple Directories with Sonar Cloud and Triggers
 
-Test and analyze projects in multiple directories in parallel.  This time `repository` and `branch` are provided.  Please note how secrets must be passed in to composite Actions using the secrets[matrix.variable] syntax.
+Test and analyze projects in multiple directories in parallel.  This time `repository` and `ref` are provided.  Please note how secrets must be passed in to composite Actions using the secrets[matrix.variable] syntax.
 
 ```yaml
 jobs:
@@ -320,7 +260,7 @@ jobs:
           sonar_token: ${{ secrets[matrix.sonar_token] }}
           triggers: ${{ matrix.triggers }}
           repository: bcgov/quickstart-openshift
-          branch: main
+          ref: main
 ```
 
 # Outputs

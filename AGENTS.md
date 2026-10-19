@@ -41,3 +41,9 @@ PR workflows must not fire unnecessarily.
 ## Inputs
 
 Read list, boolean, enum, debug and token inputs through [shared/inputs.js](shared/inputs.js), never with ad hoc splitting or string compares. Details: [shared/README.md](shared/README.md).
+
+## Input names
+
+- `ref` keeps the actions/checkout meaning: the branch, tag or SHA to check out. Use it only on actions that check out.
+- `diff_base` is the base that `triggers` are diffed against (dorny/paths-filter calls it `base`; the prefix keeps it from reading as a base image or PR base). Never call it `ref`, `diff_branch` or `branch`.
+- `token` is the GitHub token, defaulting to `github.token`. `debug` is the boolean debug switch. Names are snake_case.
