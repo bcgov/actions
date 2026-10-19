@@ -1,7 +1,7 @@
 const { execFileSync } = require('child_process');
 const fs = require('fs');
 
-const { InputError, checkRenamed, getInput, getToken, isDebug, parseBool, parseList, stripQuotes } = require('../shared/inputs.js');
+const { InputError, getInput, getToken, isDebug, parseBool, parseList, stripQuotes } = require('../shared/inputs.js');
 
 /**
  * Parse trigger paths with the shared list parser (multiline preferred,
@@ -95,7 +95,6 @@ async function main() {
   let annotationsEnabled;
   let debug;
   try {
-    checkRenamed({ ref: { to: 'diff_base', anchor: 'diff_base' } });
     annotationsEnabled = parseBool(getInput('annotations'), 'annotations', true);
     debug = isDebug();
   } catch (e) {
