@@ -12,8 +12,6 @@
 [Pull Requests]: https://docs.github.com/en/desktop/contributing-and-collaborating-using-github-desktop/working-with-your-remote-repository-on-github-or-github-enterprise/creating-an-issue-or-pull-request
 
 # Universal Test and Analyze with Triggers, SonarCloud, and Multi-Language Support
-
-> Upgrading to v1.0.0? See the [migration guide](../MIGRATION.md#require_sonar).
  
  This action runs tests and analysis across the BC Gov ecosystem, optionally sending results and coverage to [SonarCloud](https://sonarcloud.io). It supports **Node.js, Java, and Python** projects with unified reporting, supply chain scanning, and dependency analysis.
 

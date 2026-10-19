@@ -1,7 +1,5 @@
 # Get PR Number - Merges and Queues
 
-> Upgrading to v1.0.0? See the [migration guide](../MIGRATION.md#token).
-
 PR numbers are easy to come by in PRs, but passing those same numbers to releases, merge queues and PR-backed merges can get tricky. This action makes that convenient in the following cases:
 * PR merge queues
 * Merged PR workflows
