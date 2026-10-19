@@ -507,7 +507,7 @@ if [[ "$failed" -gt 0 ]]; then
 fi
 
 # ── ncc compile ──────────────────────────────────────────────────────────────
-# Committed dist/ is refreshed at release. PRs only require a successful build.
+# ncc must produce dist/index.js. dist/ is git-ignored on main and only committed on release commits.
 echo ""
 echo "── ncc build ──"
 ACTION_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -519,5 +519,6 @@ REPO_ROOT="$(cd "${ACTION_ROOT}/.." && pwd)"
   fi
   cd "$ACTION_ROOT"
   npm run build
+  test -f dist/index.js || { echo "dist/index.js missing after build" >&2; exit 1; }
 )
 echo "✅ ncc build succeeded"
