@@ -32,31 +32,14 @@ The action supports these formats for the `triggers` input:
 | **JSON array** | `triggers: '["backend/", "frontend/"]'` | Inline list. Requires quotes to escape YAML parsing. |
 | **Single path** | `triggers: backend/` | One path on a single line. |
 
-These are the list formats every bcgov/actions list input accepts (see [shared/inputs.js](../shared/inputs.js)). Bash-style parenthesized lists and semicolon or space separated single-line lists are not accepted. Migrate those callers to a multiline `triggers: |` block.
-
-Since v0.10.0 the action fails on those formats. The error names the value it got and shows the same paths in the accepted format:
+These are the list formats every bcgov/actions list input accepts (see [shared/inputs.js](../shared/inputs.js)). Any other value, such as a space separated line or `('backend/' 'frontend/')`, fails with an error that names the value and shows it as a multiline block:
 
 ```yaml
-# Before (fails)
-triggers: ('backend/' 'frontend/')
-
-# After
 triggers: |
   backend/
   frontend/
 ```
 
-Since v0.10.0 the action fails on those formats. The error names the value it got and shows the same paths in the accepted format:
-
-```yaml
-# Before (fails)
-triggers: ('backend/' 'frontend/')
-
-# After
-triggers: |
-  backend/
-  frontend/
-```
 
 # Usage
 
