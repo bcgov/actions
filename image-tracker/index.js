@@ -4,6 +4,7 @@ const { execSync, execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const process = require('node:process');
+const { InputError, getInput, isDebug, parseBool, parseList } = require('../shared/inputs.js');
 
 // ---- Logging Helpers -------------------------------------------------------
 function logError(msg) {
@@ -282,8 +283,8 @@ function mapPackages(packageInput, repository) {
   const repoName = repositoryParts.length > 1 ? repositoryParts[1] : repository;
   const lcRepo = repository ? repository.toLowerCase() : '';
 
-  // Split by commas, whitespace, and newlines
-  const rawTokens = packageInput.split(/[\s,]+/);
+  // Shared list rules: newline, comma or JSON array
+  const rawTokens = parseList(packageInput, 'packages');
   for (let token of rawTokens) {
     token = token.trim();
     if (!token) continue;
@@ -400,8 +401,7 @@ const TAG_PATTERN = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/;
 function parseTags(input) {
   if (typeof input !== 'string') return [];
   const tags = [];
-  for (const line of input.split(/\r?\n/)) {
-    const tag = line.trim();
+  for (const tag of parseList(input, 'tags')) {
     if (!tag) continue;
     if (!TAG_PATTERN.test(tag)) {
       throw new Error(`Invalid tag '${tag}'. Tags must match ${TAG_PATTERN}.`);
@@ -1498,7 +1498,7 @@ async function runMain() {
   if (args.length > 0) {
     packageInput = args.join(',');
   } else {
-    packageInput = env.PACKAGE || env.INPUT_PACKAGE || '';
+    packageInput = env.PACKAGES || env.INPUT_PACKAGES || '';
   }
 
   // 3. Settings
@@ -1507,10 +1507,17 @@ async function runMain() {
 
   const revision = env.REVISION || env.INPUT_REVISION || 'HEAD';
   const dir = env.DIR || env.INPUT_DIR || '.';
-  const token = env.INPUT_TOKEN || '';
+  // INPUT_TOKEN only (the action defaults it to github.token); ambient tokens are ignored on purpose.
+  const token = getInput('token', env);
   const maxTagsStr = env.MAX_TAGS || env.INPUT_MAX_TAGS || '500';
   const maxDepthStr = env.MAX_DEPTH || env.INPUT_MAX_DEPTH || '1';
-  const debug = env.DEBUG || env.INPUT_DEBUG || 'false';
+  let debug;
+  try {
+    debug = isDebug(env) || parseBool(env.DEBUG, 'debug');
+  } catch (err) {
+    console.error(err.message);
+    process.exit(1);
+  }
 
   if (!/^\d+$/.test(maxTagsStr) || parseInt(maxTagsStr, 10) <= 0) {
     logError('MAX_TAGS must be a positive integer.');
@@ -1956,6 +1963,10 @@ async function runMain() {
 
 if (require.main === module) {
   runMain().catch((err) => {
+    if (err instanceof InputError) {
+      console.log(err.message);
+      process.exit(1);
+    }
     logError(err.message || String(err));
     process.exit(1);
   });

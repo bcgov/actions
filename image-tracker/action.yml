@@ -5,9 +5,10 @@ branding:
   color: blue
 
 inputs:
-  package:
+  packages:
     description: |
-      One or more package names (comma, space, or newline separated).
+      One or more package names: one per line (preferred), comma separated,
+      or a JSON array.
       Each resolves to `<registry>/<owner>/<repo>/<package>`, except when the
       package name matches the repo name, in which case it resolves to
       `<registry>/<owner>/<repo>`.
@@ -43,7 +44,7 @@ inputs:
     default: '1'
   tags:
     description: |
-      Optional tags (one per line) to apply to every resolved digest, e.g. the
+      Optional tags (one per line, comma separated or JSON array) to apply to every resolved digest, e.g. the
       commit SHA and `latest`. Omit to stay read-only. Setting it requires
       `packages: write`. Tags are only written after every package resolves.
       `latest` only moves when the resolved revision is the default-branch tip;

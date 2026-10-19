@@ -112,14 +112,20 @@ function parseList(raw, name = 'input') {
   const trimmed = String(raw ?? '').trim();
   if (!trimmed) return [];
 
+  const bad = () => new InputError(listFormatMessage(name, trimmed));
+
   if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    let parsed;
     try {
-      const parsed = JSON.parse(trimmed);
-      if (Array.isArray(parsed)) return parsed.map(t => String(t).trim()).filter(Boolean);
+      parsed = JSON.parse(trimmed);
     } catch {
-      // not JSON; fall through
+      throw bad();
     }
+    if (!Array.isArray(parsed)) throw bad();
+    return parsed.map(t => String(t).trim()).filter(Boolean);
   }
+
+  if (trimmed.startsWith('(') && trimmed.endsWith(')')) throw bad();
 
   if (trimmed.includes('\n')) {
     return trimmed
@@ -128,21 +134,17 @@ function parseList(raw, name = 'input') {
       .filter(Boolean);
   }
 
-  const fullyQuoted = stripQuotes(trimmed) !== trimmed;
-  if (
-    (trimmed.startsWith('(') && trimmed.endsWith(')')) ||
-    trimmed.includes(';') ||
-    (trimmed.match(/['"]/g) || []).length >= 4 ||
-    (!trimmed.includes(',') && /\s/.test(trimmed) && !fullyQuoted)
-  ) {
-    throw new InputError(listFormatMessage(name, trimmed));
-  }
+  const quoted = t => /^'[^']*'$|^"[^"]*"$/.test(t);
+  if (trimmed.includes(';')) throw bad();
 
-  if (trimmed.includes(',') && !fullyQuoted) {
-    const items = splitCommas(trimmed).map(t => stripQuotes(t.trim()));
-    if (items.some(i => /\s/.test(i))) throw new InputError(listFormatMessage(name, trimmed));
+  if (trimmed.includes(',') && !quoted(trimmed)) {
+    const raw = splitCommas(trimmed).map(t => t.trim());
+    const items = raw.map(stripQuotes);
+    if (raw.some((t, i) => /\s/.test(items[i]) || (/['"]/.test(t) && !quoted(t)))) throw bad();
     return items.filter(Boolean);
   }
+
+  if (/\s/.test(trimmed) && !quoted(trimmed)) throw bad();
 
   const single = stripQuotes(trimmed);
   return single ? [single] : [];
