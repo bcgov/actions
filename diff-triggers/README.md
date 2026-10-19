@@ -46,6 +46,18 @@ triggers: |
   frontend/
 ```
 
+Since v0.10.0 the action fails on those formats. The error names the value it got and shows the same paths in the accepted format:
+
+```yaml
+# Before (fails)
+triggers: ('backend/' 'frontend/')
+
+# After
+triggers: |
+  backend/
+  frontend/
+```
+
 # Usage
 
 ```yaml
