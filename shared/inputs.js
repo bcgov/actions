@@ -64,8 +64,13 @@ function legacyListMessage(name, raw) {
     `  ${name}: |`,
     ...items.map(i => `    ${i}`),
     `Or: ${name}: '${JSON.stringify(items)}'`,
+    `Multiline input syntax: ${WITH_DOCS}`,
   ].join('%0A');
 }
+
+/** GitHub's docs on step inputs (`with:`), including multiline values. */
+const WITH_DOCS =
+  'https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idstepswith';
 
 class InputError extends Error {}
 
