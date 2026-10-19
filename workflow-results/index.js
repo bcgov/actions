@@ -1,3 +1,4 @@
+const {parseBool} = require('../shared/inputs.js')
 const fs = require('fs')
 const process = require('process')
 
@@ -191,18 +192,19 @@ function run(opts = {}) {
   const title =
     (opts.title ?? process.env.INPUT_TITLE ?? 'Workflow Results').trim() ||
     'Workflow Results'
-  const enableSummary =
-    String(opts.summary ?? process.env.INPUT_SUMMARY ?? 'true')
-      .trim()
-      .toLowerCase() !== 'false'
-  const enableAnnotations =
-    String(opts.annotations ?? process.env.INPUT_ANNOTATIONS ?? 'true')
-      .trim()
-      .toLowerCase() !== 'false'
+  const enableSummary = parseBool(
+    opts.summary ?? process.env.INPUT_SUMMARY,
+    'summary',
+    true
+  )
+  const enableAnnotations = parseBool(
+    opts.annotations ?? process.env.INPUT_ANNOTATIONS,
+    'annotations',
+    true
+  )
   const debug =
-    String(opts.debug ?? process.env.INPUT_DEBUG ?? 'false')
-      .trim()
-      .toLowerCase() === 'true' || process.env.RUNNER_DEBUG === '1'
+    parseBool(opts.debug ?? process.env.INPUT_DEBUG, 'debug') ||
+    process.env.RUNNER_DEBUG === '1'
   const outputPath = opts.outputPath ?? process.env.GITHUB_OUTPUT
   const summaryPath = opts.summaryPath ?? process.env.GITHUB_STEP_SUMMARY
   const logger = opts.logger ?? console

@@ -12,19 +12,17 @@ const MANIFEST_ACCEPT = [
   'application/vnd.docker.distribution.manifest.v2+json'
 ].join(', ')
 
-const {InputError, getToken, parseList} = require('../shared/inputs.js')
+const {InputError, getToken, parseBool, parseList} = require('../shared/inputs.js')
 
 function parseInputs(env) {
   const packages = parseList(env.INPUT_PACKAGES, 'packages')
   if (packages.length === 0) {
     throw new Error("Input 'packages' is required.")
   }
-  const dryRun = (env.INPUT_DRY_RUN || '').trim().toLowerCase()
-  if (dryRun !== 'true' && dryRun !== 'false') {
-    throw new Error(
-      `Input 'dry_run' must be 'true' or 'false', got '${dryRun}'.`
-    )
+  if (!(env.INPUT_DRY_RUN || '').trim()) {
+    throw new Error("Input 'dry_run' must be 'true' or 'false', got ''.")
   }
+  const dryRun = parseBool(env.INPUT_DRY_RUN, 'dry_run')
   const keepDigests = parseList(env.INPUT_KEEP_DIGESTS, 'keep_digests')
   for (const digest of keepDigests) {
     if (!DIGEST.test(digest)) {
@@ -46,7 +44,7 @@ function parseInputs(env) {
   }
   return {
     packages,
-    dryRun: dryRun === 'true',
+    dryRun,
     keepDigests: new Set(keepDigests),
     token,
     repository,
