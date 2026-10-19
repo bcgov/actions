@@ -45,6 +45,7 @@ function legacyTriggersMessage(raw) {
     '  triggers: |',
     ...(paths.length ? paths : ['backend/', 'frontend/']).map(p => `    ${p}`),
     `Or: triggers: '${JSON.stringify(paths.length ? paths : ['backend/', 'frontend/'])}'`,
+    'Migration guide: https://github.com/bcgov/actions/blob/main/MIGRATION.md#triggers',
   ];
   return lines.join('%0A');
 }

@@ -23,6 +23,8 @@ permissions:
 
 ## Trigger Formats
 
+Upgrading from bash-style lists? See [MIGRATION.md#triggers](../MIGRATION.md#triggers).
+
 The action supports these formats for the `triggers` input:
 
 | Format | Example | Description |

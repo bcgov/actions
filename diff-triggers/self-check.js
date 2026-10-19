@@ -91,6 +91,8 @@ assert.deepStrictEqual(msg.slice(after + 1, after + 3), ['    backend/', '    fr
 assert.ok(msg.includes(`Or: triggers: '["backend/","frontend/"]'`), 'must show JSON form');
 const comma = legacyTriggersMessage('backend/,frontend/').split('%0A');
 assert.ok(comma[1].startsWith('Comma, semicolon or space separated'));
-assert.deepStrictEqual(comma.slice(comma.indexOf('  triggers: |') + 1, -1), ['    backend/', '    frontend/']);
+assert.deepStrictEqual(comma.slice(comma.indexOf('  triggers: |') + 1, -2), ['    backend/', '    frontend/']);
+
+assert.ok(msg.includes('Migration guide: https://github.com/bcgov/actions/blob/main/MIGRATION.md#triggers'), 'must link the guide');
 
 console.log('diff-triggers self-check: ok');
