@@ -19,8 +19,8 @@ jobs:
       contents: read
       pull-requests: read
     steps:
-      - uses: $/pr-validate
-
+      # Build first: pr-validate lints these workflows, and actionlint needs
+      # ./pr-description-add/dist/index.js (git-ignored, built here) to exist.
       - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v7
@@ -33,6 +33,8 @@ jobs:
 
       - name: Verify ncc build
         run: npm run build
+
+      - uses: $/pr-validate
 
   results:
     name: Validate Results

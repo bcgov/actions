@@ -20,7 +20,7 @@ Pipeline: build, then `image-tracker`, then deploy by digest (`outputs.digest` /
 - Checkout `github.event.release.tag_name`. Exit 0 when `github.actor` is `github-actions[bot]`, or when `HEAD` subject is `chore(dist): rebuild ncc bundles for release`.
 - Otherwise `gh release delete <tag> --yes --cleanup-tag` before `npm ci`. A failed job leaves that tag deleted. Do not delete any other tag.
 - Then `npm ci` and `npm run build`. Fail when either `dist/index.js` is missing. Force-add both `dist/` folders (`git add -f`). When they differ, commit that subject and create the tag on the new commit. When they match, create the tag on the original commit. `gh release create` keeps the saved title, notes, and prerelease flag. Do not push `main`. Do not commit `dist/` on pull requests.
-- Consumers pin the tag, or that tag's SHA after this workflow succeeds. `@main` does not contain the rebuild. `uses: $/…` in this repo loads the workflow commit, which has no `dist/`. Suite tests build in the job, use `./pr-description-add` directly, and run `.github/scripts/stage-dist.sh` before `$/pr-validate` (with `add_markdown`) or `$/test-and-analyse`.
+- Consumers pin the tag, or that tag's SHA after this workflow succeeds. `@main` does not contain the rebuild. `uses: $/…` in this repo loads the workflow commit, which has no `dist/`. Suite tests build in the job, use `./pr-description-add` directly, and run `.github/scripts/stage-dist.sh` before `$/pr-validate` (with `add_markdown`) or `$/test-and-analyse`. Jobs that lint this repo's workflows (`Validate PR`, `Test PR Validate`) build first, because actionlint requires `./pr-description-add/dist/index.js`.
 
 ## PR triggers
 
