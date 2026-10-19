@@ -1,9 +1,4 @@
 
-**BREAKING CHANGES in v1.0:**
-* **`node_version` is auto-detected; when nothing is found the fallback is `24` (previously a hard default of `16`)**
-* **`sonar_comment_token` has been removed (ignored by SonarCloud)**
-* **`sonar_project_token` has been renamed `sonar_token`**
-
 
 
 <!-- Reference-Style link -->
@@ -35,60 +30,6 @@ permissions:
  - **Node.js**: Full support for Vitest/Jest/Mocha, Knip analysis, and Safe-Chain scanning.
  - **Java**: Native support for Maven/Gradle with integrated JUnit reporting and SonarCloud plugin support.
  - **Python**: Support for Pytest/Unittest with JUnit XML results and SonarCloud analysis.
-
-# Moving from the standalone actions
-
-If you're moving from `bcgov/action-test-and-analyse` or `bcgov/action-test-and-analyse-java`, these inputs changed.
-
-## From `bcgov/action-test-and-analyse` (Node and others)
-
-```yaml
-- uses: bcgov/actions/test-and-analyse@vX.Y.Z
-  with:
-    commands: |
-      npm ci
-      npm run test:cov
-    dir: frontend
-    sonar_token: ${{ secrets.SONAR_TOKEN }}
-    triggers: |
-      frontend/
-```
-
-| Old input | New input |
-| --- | --- |
-| `diff_branch` | `diff_base` |
-| `skip_checkout` | Removed. Checkout is skipped automatically when `checkout_path` already holds a checkout. |
-
-Every other input keeps its name.
-
-## From `bcgov/action-test-and-analyse-java`
-
-```yaml
-- uses: bcgov/actions/test-and-analyse@vX.Y.Z
-  with:
-    language: java
-    java_version: "21"
-    commands: |
-      mvn -B verify sonar:sonar \
-        -Dsonar.organization=bcgov-sonarcloud \
-        -Dsonar.projectKey=bcgov_your-project-key
-    dir: backend
-    sonar_token: ${{ secrets.SONAR_TOKEN }}
-    triggers: |
-      backend/
-```
-
-| Old input | New input |
-| --- | --- |
-| _(none)_ | `language: java` (required) |
-| `java-version` | `java_version` |
-| `java-distribution` | `java_distribution` |
-| `java-cache` | `cache` (`maven` or `gradle`; auto-detected if omitted) |
-| `diff_branch` | `diff_base` |
-| `sonar_enforce_compliance` | Removed. The old action ran the Sonar scanner itself; now Sonar runs inside `commands`, so a failing Sonar step fails the job like any other command. `require_sonar` is not a replacement: it only fails when `sonar_token` is empty. |
-
-`commands`, `dir`, `sonar_args`, `sonar_token`, `triggers` and `repository` keep their names; `branch` is now `ref` (the actions/checkout name). In this action, Sonar runs from `commands` (see the [Java example](#example-java-maven-with-native-sonarcloud-reporting)).
-
 
 ## Defaults
 
