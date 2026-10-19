@@ -88,7 +88,7 @@ If you're moving from `bcgov/action-builder-ghcr`, these inputs changed. A minim
 | `action-builder-ghcr` input | `bcgov/actions/builder` |
 | --- | --- |
 | `github_token` | `token` |
-| `diff_branch` | `ref` |
+| `diff_branch` | `diff_base` |
 | `metadata_tags` | Removed. OCI labels from `docker/metadata-action` are always applied. |
 | `metadata_flavor` | Removed. |
 | `metadata_tag_rules` | Removed. Custom tag rules are gone: images get the tags in `tags` (default: the PR number) plus the source commit SHA. |
@@ -149,7 +149,7 @@ Every other input keeps its name. `triggers` still accepts the legacy parenthesi
 
     # Overrides the default reference/branch to diff against
     # Defaults to the default branch, usually `main`
-    ref: ${{ github.event.repository.default_branch }}
+    diff_base: ${{ github.event.repository.default_branch }}
 
     # Repository to clone and process
     # Useful for consuming other repos, like in testing

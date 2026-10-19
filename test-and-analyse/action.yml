@@ -103,8 +103,8 @@ inputs:
     default: "false"
 
   ### Usually a bad idea / not recommended
-  ref:
-    description: Reference to compare against (e.g. branch name, tag, or commit SHA)
+  diff_base:
+    description: Base to diff triggers against (e.g. branch name, tag, or commit SHA)
     default: ${{ github.event.repository.default_branch }}
 
 
@@ -119,8 +119,10 @@ inputs:
     default: ${{ github.token }}
     required: false
 
-  branch:
-    description: Non-default branch to clone (used for testing this action)
+  ref:
+    description: >-
+      Branch, tag or SHA of repository to check out (actions/checkout `ref`).
+      Empty checks out the repository default.
     default: ""
 
   checkout_path:
@@ -173,7 +175,7 @@ runs:
       id: diff
       with:
         triggers: ${{ inputs.triggers }}
-        ref: ${{ inputs.ref }}
+        diff_base: ${{ inputs.diff_base }}
         token: ${{ inputs.token }}
 
     # Final triggered state
@@ -209,7 +211,7 @@ runs:
       with:
         clean: false
         repository: ${{ inputs.repository }}
-        ref: ${{ inputs.branch }}
+        ref: ${{ inputs.ref }}
         token: ${{ inputs.token }}
         path: ${{ inputs.checkout_path }}
         fetch-depth: 0

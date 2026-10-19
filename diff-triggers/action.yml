@@ -15,9 +15,9 @@ inputs:
   debug:
     description: Enable debug logging
     default: "false"
-  ref:
+  diff_base:
     description: >-
-      Reference to compare against (e.g., 'main', 'HEAD^', commit SHA).
+      Base to diff against (same meaning as dorny/paths-filter `base`) (e.g., 'main', 'HEAD^', commit SHA).
       Defaults to base repo default branch for PRs, or HEAD^ for non-PR events.
       Local refs (HEAD^, HEAD~2) work for non-PR events;
       remote refs (branches, tags, SHAs) work for all events.

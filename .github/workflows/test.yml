@@ -506,7 +506,7 @@ jobs:
           triggers: |
             diff-triggers/
             path/to/nowhere
-          ref: HEAD~1
+          diff_base: HEAD~1
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Test Omitted Triggers
@@ -521,7 +521,7 @@ jobs:
         with:
           triggers: |
             .diff-triggers-fixture/
-          ref: ${{ github.event.pull_request.base.sha }}
+          diff_base: ${{ github.event.pull_request.base.sha }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Test Formats (Bash / Comma / Semi / JSON)
