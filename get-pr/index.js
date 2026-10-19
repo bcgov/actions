@@ -1,8 +1,9 @@
 const fs = require('fs');
+const { getToken, isDebug } = require('../shared/inputs.js');
 
 async function main() {
-  const debug = process.env.INPUT_DEBUG === 'true';
-  const token = process.env.INPUT_GITHUB_TOKEN || process.env.GITHUB_TOKEN;
+  const debug = isDebug();
+  const token = getToken();
   const eventName = process.env.TEST_EVENT_NAME || process.env.GITHUB_EVENT_NAME;
   const repository = process.env.TEST_REPOSITORY || process.env.GITHUB_REPOSITORY;
   const sha = process.env.TEST_SHA || process.env.GITHUB_SHA;
