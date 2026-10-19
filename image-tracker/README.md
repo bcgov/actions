@@ -1,7 +1,5 @@
 # Image Tracker
 
-> Upgrading to v1.0.0? See the [migration guide](../MIGRATION.md#packages).
-
 Resolve immutable GHCR image **digests** for a given git commit by reading the
 `org.opencontainers.image.revision` OCI label embedded in each image's config.
 
