@@ -139,7 +139,7 @@ async function main() {
       return;
     }
     triggers = parseTriggers(triggersStr);
-    if (debug) console.log(`::debug::Parsed triggers: ${JSON.stringify(triggers)}`);
+    if (debug) console.log(`Parsed triggers: ${JSON.stringify(triggers)}`);
   }
 
   // Escape for GitHub Actions workflow command encoding
