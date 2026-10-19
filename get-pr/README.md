@@ -23,13 +23,11 @@ The build will return a PR number as output.
 
 # Private Repositories
 
-Private repositories may need to provide a GitHub token.
+`token` defaults to `github.token`; set it only to use a PAT.
 
 ```yaml
 - id: vars
   uses: bcgov/actions/get-pr@vX.Y.Z # Replace with latest release tag
-  with:
-    github_token: ${{ secrets.GITHUB_TOKEN }}
 
 - name: Echo PR number
   run: |

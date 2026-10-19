@@ -16,7 +16,7 @@ function run(eventName, payload, {cwd, env = {}} = {}) {
   fs.writeFileSync(outputPath, '')
   const childEnv = {...process.env, ...env}
   delete childEnv.GITHUB_TOKEN
-  delete childEnv.INPUT_GITHUB_TOKEN
+  delete childEnv.INPUT_TOKEN
   const res = spawnSync('node', [ACTION], {
     cwd: cwd || dir,
     encoding: 'utf8',

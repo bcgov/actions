@@ -43,6 +43,7 @@ jobs:
               - 'get-pr/action.yml'
               - 'get-pr/index.js'
               - 'get-pr/tests/**'
+              - 'shared/**'
             ghcr-cleanup:
               - 'ghcr-cleanup/**'
               - 'shared/**'
