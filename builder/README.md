@@ -1,6 +1,8 @@
 
 # Conditional Container Builder with Fallback, Attestations and SBOMs (Software Bill of Materials)
 
+> Upgrading to v1.0.0? See the [migration guide](../MIGRATION.md#diff_base).
+
 This action builds Docker/Podman containers conditionally using a set of directories.  If any files were changed matching that, then build a container.  If those files were not changed, retag an existing build.
 
 ## Permissions
