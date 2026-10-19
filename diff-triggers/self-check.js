@@ -4,7 +4,7 @@
  * Fails loudly if the catastrophic silent-miss bug returns.
  */
 const assert = require('assert');
-const { parseFilters, parseTriggers, stripQuotes } = require('./index.js');
+const { legacyTriggersMessage, parseFilters, parseTriggers, stripQuotes } = require('./index.js');
 
 assert.strictEqual(stripQuotes("'diff-triggers/**'"), 'diff-triggers/**');
 assert.strictEqual(stripQuotes('"builder-ghcr/**"'), 'builder-ghcr/**');
@@ -78,5 +78,19 @@ expectLegacyFail("('frontend/' 'backend/')");
 expectLegacyFail('frontend/,backend/');
 expectLegacyFail('frontend/;backend/');
 expectLegacyFail('frontend/ backend/');
+
+// Legacy error must name the bad value and show the converted multiline form.
+const msg = legacyTriggersMessage("('backend/' 'frontend/')").split('%0A');
+assert.ok(msg[0].startsWith('::error '), 'must be an error annotation');
+assert.ok(msg[0].includes("Invalid triggers input: ('backend/' 'frontend/')"), 'must name the bad value');
+assert.ok(msg[1].includes('parenthesized lists are no longer supported'), 'must say parens are unsupported');
+assert.ok(msg.includes("  triggers: ('backend/' 'frontend/')"), 'must show before');
+const after = msg.indexOf('  triggers: |');
+assert.ok(after > 0, 'must show after');
+assert.deepStrictEqual(msg.slice(after + 1, after + 3), ['    backend/', '    frontend/']);
+assert.ok(msg.includes(`Or: triggers: '["backend/","frontend/"]'`), 'must show JSON form');
+const comma = legacyTriggersMessage('backend/,frontend/').split('%0A');
+assert.ok(comma[1].startsWith('Comma, semicolon or space separated'));
+assert.deepStrictEqual(comma.slice(comma.indexOf('  triggers: |') + 1, -1), ['    backend/', '    frontend/']);
 
 console.log('diff-triggers self-check: ok');

@@ -19,6 +19,37 @@ function stripQuotes(s) {
 }
 
 /**
+ * Build the error shown when a caller passes a legacy list format.
+ * Names the bad value and shows the same paths in the accepted format.
+ * Newlines are encoded as %0A so the annotation keeps its layout.
+ * @param {string} raw
+ * @returns {string}
+ */
+function legacyTriggersMessage(raw) {
+  const trimmed = raw.trim();
+  const inner = trimmed.startsWith('(') && trimmed.endsWith(')') ? trimmed.slice(1, -1) : trimmed;
+  const paths = (inner.match(/'[^']*'|"[^"]*"|[^\s,;]+/g) || [])
+    .map(t => stripQuotes(t.trim()))
+    .filter(Boolean);
+  const kind =
+    trimmed.startsWith('(') && trimmed.endsWith(')')
+      ? 'Bash-style parenthesized lists'
+      : 'Comma, semicolon or space separated single-line lists';
+  const lines = [
+    `::error title=diff-triggers: unsupported triggers format::Invalid triggers input: ${trimmed}`,
+    `${kind} are no longer supported (bcgov/actions v0.10.0+).`,
+    'Use a multiline block, one path per line (or a JSON array).',
+    'Before:',
+    `  triggers: ${trimmed}`,
+    'After:',
+    '  triggers: |',
+    ...(paths.length ? paths : ['backend/', 'frontend/']).map(p => `    ${p}`),
+    `Or: triggers: '${JSON.stringify(paths.length ? paths : ['backend/', 'frontend/'])}'`,
+  ];
+  return lines.join('%0A');
+}
+
+/**
  * Parse trigger paths.
  *
  * Supported formats:
@@ -68,11 +99,7 @@ function parseTriggers(raw) {
     (trimmed.match(/['"]/g) || []).length >= 4 ||
     (/\s/.test(trimmed) && !fullyQuoted)
   ) {
-    console.error(
-      '::error::Legacy trigger formats (bash-style parenthesized lists and ' +
-        'comma/semicolon/space-delimited single-line lists) are no longer ' +
-        'supported. Use a multiline `triggers: |` block or a JSON array.'
-    );
+    console.error(legacyTriggersMessage(raw));
     process.exit(1);
   }
 
@@ -417,4 +444,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { parseFilters, parseTriggers, stripQuotes };
+module.exports = { legacyTriggersMessage, parseFilters, parseTriggers, stripQuotes };
