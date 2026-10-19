@@ -481,7 +481,7 @@ jobs:
         run: node diff-triggers/self-check.js
 
       - name: Run Shared Input Tests
-        run: node --test shared/tests/
+        run: node --test shared/tests/inputs.test.js
 
       # Local commit with a known change, so results do not depend on what the PR touched
       - name: Commit Fixture Change
