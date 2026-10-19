@@ -1,7 +1,5 @@
 # GHCR Cleanup
 
-> Upgrading to v1.0.0? See the [migration guide](../MIGRATION.md#list-inputs).
-
 Opt-in cleanup of this repository's GHCR package versions: deletes images left
 by closed pull requests and untagged versions nothing references. Nothing runs
 unless a workflow calls the action, and it only deletes with `dry_run: false`.
