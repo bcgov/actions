@@ -3183,3 +3183,12 @@ test('runMain rejects invalid tags before resolving anything', async () => {
   assert.match(String(r.error), /process\.exit called with code 1/);
   assert.ok(!r.calls.some((c) => c.url.includes('/manifests/')), 'no registry calls');
 });
+
+test('runMain fails on the old package input with a migration link', async () => {
+  const { spawnSync } = require('node:child_process');
+  const r = spawnSync('node', [require('node:path').join(__dirname, '..', 'index.js')], {
+    env: { PATH: process.env.PATH, GITHUB_ACTIONS: 'true', INPUT_PACKAGE: 'frontend' }
+  });
+  assert.strictEqual(r.status, 1);
+  assert.match(r.stdout.toString(), /Input package was renamed to packages.*MIGRATION\.md#packages/);
+});
