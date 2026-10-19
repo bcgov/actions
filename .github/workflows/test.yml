@@ -1121,6 +1121,7 @@ jobs:
           sparse-checkout: |
             .github/CODEOWNERS
             workflow-notifier
+            shared
           sparse-checkout-cone-mode: false
 
       - name: Run Unit Tests
