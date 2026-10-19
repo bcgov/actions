@@ -64,44 +64,15 @@ function legacyListMessage(name, raw) {
     `  ${name}: |`,
     ...items.map(i => `    ${i}`),
     `Or: ${name}: '${JSON.stringify(items)}'`,
-    `Migration guide: ${guideUrl(name, 'list-inputs')}`,
+    `Multiline input syntax: ${WITH_DOCS}`,
   ].join('%0A');
 }
 
+/** GitHub's docs on step inputs (`with:`), including multiline values. */
+const WITH_DOCS =
+  'https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idstepswith';
+
 class InputError extends Error {}
-
-/** Stable migration guide URL; errors append a section anchor. */
-const GUIDE = 'https://github.com/bcgov/actions/blob/main/MIGRATION.md';
-
-/** Guide anchor for an input's errors: its own section, else the generic one. */
-const ANCHORS = { triggers: 'triggers', notify_codeowners: 'notify_codeowners' };
-
-/**
- * @param {string} name
- * @param {string} fallback
- * @returns {string}
- */
-function guideUrl(name, fallback) {
-  return `${GUIDE}#${ANCHORS[name] || fallback}`;
-}
-
-/**
- * Fail when a caller still sets an input that was renamed or removed.
- * Node actions see every `with:` key as INPUT_<NAME>, declared or not, so the
- * old name is visible here (GitHub itself only warns "Unexpected input").
- * @param {Object.<string, {to: string, anchor: string}>} renamed - old name -> new name ('' if removed) and guide anchor
- * @param {NodeJS.ProcessEnv} [env]
- */
-function checkRenamed(renamed, env = process.env) {
-  for (const [from, { to, anchor }] of Object.entries(renamed)) {
-    if (getInput(from, env) === '') continue;
-    const what = to ? `was renamed to ${to}` : 'was removed';
-    throw new InputError(
-      `::error title=${from}: ${to ? 'renamed' : 'removed'} input::Input ${from} ${what} before v1.0.0.` +
-        `${to ? ` Use ${to}: instead.` : ''} Migration guide: ${GUIDE}#${anchor}`
-    );
-  }
-}
 
 /**
  * Split on commas that are not inside {...}, so globs like src/{a,b}/** stay whole.
@@ -195,9 +166,7 @@ function parseBool(raw, name, fallback = false) {
   if (v === '') return fallback;
   if (v === 'true') return true;
   if (v === 'false') return false;
-  throw new InputError(
-    `::error title=${name}: not a boolean::Invalid ${name} input: ${raw}. Use true or false. Migration guide: ${guideUrl(name, 'boolean-and-enum-inputs')}`
-  );
+  throw new InputError(`::error title=${name}: not a boolean::Invalid ${name} input: ${raw}. Use true or false.`);
 }
 
 /**
@@ -213,7 +182,7 @@ function parseEnum(raw, name, allowed, fallback) {
   if (v === '') return fallback;
   if (allowed.includes(v)) return v;
   throw new InputError(
-    `::error title=${name}: unsupported value::Invalid ${name} input: ${raw}. Use one of: ${allowed.join(', ')}. Migration guide: ${guideUrl(name, 'boolean-and-enum-inputs')}`
+    `::error title=${name}: unsupported value::Invalid ${name} input: ${raw}. Use one of: ${allowed.join(', ')}.`
   );
 }
 
@@ -238,9 +207,7 @@ function getToken(env = process.env) {
 }
 
 module.exports = {
-  GUIDE,
   InputError,
-  checkRenamed,
   getInput,
   getToken,
   isDebug,

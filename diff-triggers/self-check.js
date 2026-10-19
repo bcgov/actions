@@ -95,6 +95,4 @@ const spaced = legacyTriggersMessage('backend/ frontend/').split('%0A');
 assert.ok(spaced[1].startsWith('Semicolon or space separated'));
 assert.deepStrictEqual(spaced.slice(spaced.indexOf('  triggers: |') + 1, -2), ['    backend/', '    frontend/']);
 
-assert.ok(msg.includes('Migration guide: https://github.com/bcgov/actions/blob/main/MIGRATION.md#triggers'), 'must link the guide');
-
 console.log('diff-triggers self-check: ok');

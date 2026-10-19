@@ -3,7 +3,7 @@ const assert = require('node:assert');
 const { execFileSync, spawnSync } = require('node:child_process');
 const path = require('node:path');
 const {
-  InputError, checkRenamed, getInput, getToken, isDebug, parseBool, parseEnum, parseList,
+  InputError, getInput, getToken, isDebug, parseBool, parseEnum, parseList,
 } = require('../inputs.js');
 
 const cli = path.join(__dirname, '..', 'inputs.js');
@@ -31,6 +31,7 @@ test('parseList: legacy formats throw the before/after error', () => {
     assert.match(lines[1], /parenthesized lists are no longer supported/);
     assert.ok(lines.includes('  triggers: |'));
     assert.ok(lines.includes('    frontend/'));
+    assert.ok(lines.at(-1).includes('https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idstepswith'));
   }
 });
 
@@ -61,25 +62,4 @@ test('CLI for composite actions', () => {
   const bad = spawnSync('node', [cli, 'list', 'packages'], { env: { ...env, INPUT_PACKAGES: '(a b)' } });
   assert.strictEqual(bad.status, 1);
   assert.match(bad.stderr.toString(), /Invalid packages input/);
-});
-
-test('errors link the migration guide', () => {
-  const guide = 'https://github.com/bcgov/actions/blob/main/MIGRATION.md';
-  assert.throws(() => parseList('(a b)', 'triggers'), e => e.message.includes(`${guide}#triggers`));
-  assert.throws(() => parseList('a b', 'packages'), e => e.message.includes(`${guide}#list-inputs`));
-  assert.throws(() => parseBool('yes', 'dry_run'), e => e.message.includes(`${guide}#boolean-and-enum-inputs`));
-  assert.throws(
-    () => parseEnum('true', 'notify_codeowners', ['always', 'fallback', 'never'], 'fallback'),
-    e => e.message.includes(`${guide}#notify_codeowners`)
-  );
-});
-
-test('checkRenamed fails on an old input name', () => {
-  const renamed = { package: { to: 'packages', anchor: 'packages' }, login_attempts: { to: '', anchor: 'login_attempts' } };
-  assert.doesNotThrow(() => checkRenamed(renamed, { INPUT_PACKAGES: 'a' }));
-  assert.throws(
-    () => checkRenamed(renamed, { INPUT_PACKAGE: 'a' }),
-    e => /Input package was renamed to packages/.test(e.message) && e.message.includes('MIGRATION.md#packages')
-  );
-  assert.throws(() => checkRenamed(renamed, { INPUT_LOGIN_ATTEMPTS: '2' }), /was removed/);
 });
