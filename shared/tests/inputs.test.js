@@ -19,7 +19,7 @@ test('parseList: multiline, comma, JSON, single', () => {
   assert.deepStrictEqual(parseList(''), []);
 });
 
-test('parseList: legacy formats throw the before/after error', () => {
+test('parseList: other formats throw the format error', () => {
   for (const raw of ["('a/' 'b/')", 'a b', 'a;b', "'a' 'b'", 'a b, c']) {
     assert.throws(() => parseList(raw, 'triggers'), InputError, raw);
   }
@@ -28,7 +28,7 @@ test('parseList: legacy formats throw the before/after error', () => {
   } catch (e) {
     const lines = e.message.split('%0A');
     assert.match(lines[0], /Invalid triggers input: \('backend\/' 'frontend\/'\)/);
-    assert.match(lines[1], /parenthesized lists are no longer supported/);
+    assert.match(lines[1], /triggers must be a multiline block/);
     assert.ok(lines.includes('  triggers: |'));
     assert.ok(lines.includes('    frontend/'));
     assert.ok(lines.at(-1).includes('https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idstepswith'));

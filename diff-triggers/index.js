@@ -6,7 +6,7 @@ const { InputError, getInput, getToken, isDebug, parseBool, parseList, stripQuot
 /**
  * Parse trigger paths with the shared list parser (multiline preferred,
  * comma separated or a JSON array). Unsupported formats print the shared
- * before/after error and exit 1.
+ * format error (value plus a multiline example) and exit 1.
  * @param {string} raw
  * @returns {string[]}
  */
