@@ -63,3 +63,12 @@ test('CLI for composite actions', () => {
   assert.strictEqual(bad.status, 1);
   assert.match(bad.stderr.toString(), /Invalid packages input/);
 });
+
+test('parseList: malformed JSON arrays and multiline parens fail', () => {
+  assert.throws(() => parseList('["backend/",]', 'triggers'), InputError);
+  assert.throws(() => parseList("(\n'backend/'\n'frontend/'\n)", 'triggers'), InputError);
+});
+
+test('parseList: quoted comma-separated items', () => {
+  assert.deepStrictEqual(parseList('"backend/", "frontend/"', 'triggers'), ['backend/', 'frontend/']);
+});
