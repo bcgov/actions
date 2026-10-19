@@ -71,12 +71,13 @@ test('Package mapping - whitespace-only entries ignored', () => {
   assert.strictEqual(imagePaths['backend'], 'bcgov/myapp/backend', 'backend retained');
 });
 
-test('Package mapping - space separated packages', () => {
-  const { imagePaths } = mapPackages('frontend backend migrations', 'bcgov/myapp');
-  assert.strictEqual(Object.keys(imagePaths).length, 3, 'space-separated: correct package count');
-  assert.strictEqual(imagePaths['frontend'], 'bcgov/myapp/frontend', 'space-separated: frontend path');
-  assert.strictEqual(imagePaths['backend'], 'bcgov/myapp/backend', 'space-separated: backend path');
-  assert.strictEqual(imagePaths['migrations'], 'bcgov/myapp/migrations', 'space-separated: migrations path');
+test('Package mapping - space separated packages are rejected', () => {
+  assert.throws(() => mapPackages('frontend backend migrations', 'bcgov/myapp'), /Invalid packages input/);
+});
+
+test('Package mapping - JSON array', () => {
+  const { imagePaths } = mapPackages('["frontend", "backend"]', 'bcgov/myapp');
+  assert.deepStrictEqual(Object.keys(imagePaths), ['frontend', 'backend']);
 });
 
 test('Git plumbing sanity - HEAD resolution', () => {
@@ -431,8 +432,8 @@ test('runMain fork unresolvable revision exits 1', async () => {
       process.env.GITHUB_EVENT_PATH = eventPath;
       process.env.GITHUB_REPOSITORY = 'bcgov/foo';
       process.env.GITHUB_EVENT_NAME = 'pull_request';
-      process.env.INPUT_PACKAGE = 'frontend';
-      process.env.PACKAGE = 'frontend';
+      process.env.INPUT_PACKAGES = 'frontend';
+      process.env.PACKAGES = 'frontend';
       process.env.INPUT_REPOSITORY = 'fork/foo';
       process.env.REPOSITORY = 'fork/foo';
       process.env.INPUT_REVISION = SHA;
@@ -600,8 +601,8 @@ const ENV_KEYS = [
   'GITHUB_EVENT_NAME',
   'GITHUB_REF',
   'GITHUB_SHA',
-  'INPUT_PACKAGE',
-  'PACKAGE',
+  'INPUT_PACKAGES',
+  'PACKAGES',
   'INPUT_REPOSITORY',
   'REPOSITORY',
   'INPUT_REVISION',
@@ -671,8 +672,8 @@ test('runMain same-repo unresolvable revision still exits 1', async () => {
       process.env.GITHUB_EVENT_PATH = eventPath;
       process.env.GITHUB_REPOSITORY = 'bcgov/foo';
       process.env.GITHUB_EVENT_NAME = 'pull_request';
-      process.env.INPUT_PACKAGE = 'frontend';
-      process.env.PACKAGE = 'frontend';
+      process.env.INPUT_PACKAGES = 'frontend';
+      process.env.PACKAGES = 'frontend';
       process.env.INPUT_REVISION = SHA;
       process.env.REVISION = SHA;
       process.env.DIR = dir;
@@ -1072,8 +1073,8 @@ test('runMain resolves PR image when git HEAD is a synthetic merge commit', asyn
     process.env.GITHUB_EVENT_PATH = eventPath;
     process.env.GITHUB_EVENT_NAME = 'pull_request';
     process.env.GITHUB_REF = 'refs/pull/383/merge';
-    process.env.INPUT_PACKAGE = 'frontend';
-    process.env.PACKAGE = 'frontend';
+    process.env.INPUT_PACKAGES = 'frontend';
+    process.env.PACKAGES = 'frontend';
     process.env.INPUT_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
     process.env.REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
     process.env.INPUT_REVISION = headSha;
@@ -1202,8 +1203,8 @@ test('runMain resolves PR image using GITHUB_EVENT_PATH merge_commit_sha without
     process.env.GITHUB_OUTPUT = out;
     process.env.GITHUB_EVENT_PATH = eventPath;
     process.env.GITHUB_EVENT_NAME = 'pull_request';
-    process.env.INPUT_PACKAGE = 'frontend';
-    process.env.PACKAGE = 'frontend';
+    process.env.INPUT_PACKAGES = 'frontend';
+    process.env.PACKAGES = 'frontend';
     process.env.INPUT_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
     process.env.REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
     process.env.INPUT_REVISION = headSha;
@@ -1329,8 +1330,8 @@ test('runMain rejects two-parent merge commit on push event to prevent non-PR an
     process.env.GITHUB_OUTPUT = out;
     process.env.GITHUB_EVENT_NAME = 'push';
     process.env.GITHUB_REF = 'refs/heads/main';
-    process.env.INPUT_PACKAGE = 'frontend';
-    process.env.PACKAGE = 'frontend';
+    process.env.INPUT_PACKAGES = 'frontend';
+    process.env.PACKAGES = 'frontend';
     process.env.INPUT_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
     process.env.REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
     process.env.INPUT_REVISION = headSha;
@@ -1448,8 +1449,8 @@ test('runMain ignores GITHUB_SHA fallback when GITHUB_REF is not synthetic merge
     process.env.GITHUB_EVENT_NAME = 'pull_request_target';
     process.env.GITHUB_REF = 'refs/heads/main'; // base branch ref
     process.env.GITHUB_SHA = baseSha; // base branch commit
-    process.env.INPUT_PACKAGE = 'frontend';
-    process.env.PACKAGE = 'frontend';
+    process.env.INPUT_PACKAGES = 'frontend';
+    process.env.PACKAGES = 'frontend';
     process.env.INPUT_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
     process.env.REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
     process.env.INPUT_REVISION = headSha;
@@ -1616,8 +1617,8 @@ test('runMain resolves PR image for squash-merged commit on main when image revi
     process.env.GITHUB_EVENT_NAME = 'push';
     process.env.GITHUB_REF = 'refs/heads/main';
     process.env.GITHUB_SHA = squashSha;
-    process.env.INPUT_PACKAGE = 'agnav';
-    process.env.PACKAGE = 'agnav';
+    process.env.INPUT_PACKAGES = 'agnav';
+    process.env.PACKAGES = 'agnav';
     process.env.INPUT_REPOSITORY = 'miniontech/vexilon';
     process.env.REPOSITORY = 'miniontech/vexilon';
     process.env.INPUT_REVISION = squashSha;
@@ -1917,8 +1918,8 @@ test('runMain resolves multiple packages (frontend, rctool) on squash-merged mai
     process.env.GITHUB_EVENT_NAME = 'push';
     process.env.GITHUB_REF = 'refs/heads/main';
     process.env.GITHUB_SHA = squashSha;
-    process.env.INPUT_PACKAGE = 'frontend, rctool';
-    process.env.PACKAGE = 'frontend, rctool';
+    process.env.INPUT_PACKAGES = 'frontend, rctool';
+    process.env.PACKAGES = 'frontend, rctool';
     process.env.INPUT_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
     process.env.REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
     process.env.INPUT_REVISION = squashSha;
@@ -2051,8 +2052,8 @@ test('runMain resolves PR image when running on PR head commit checkout', async 
     process.env.GITHUB_EVENT_NAME = 'pull_request';
     process.env.GITHUB_REF = 'refs/pull/400/head';
     process.env.GITHUB_SHA = headSha;
-    process.env.INPUT_PACKAGE = 'frontend';
-    process.env.PACKAGE = 'frontend';
+    process.env.INPUT_PACKAGES = 'frontend';
+    process.env.PACKAGES = 'frontend';
     process.env.INPUT_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
     process.env.REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
     process.env.INPUT_REVISION = headSha;
@@ -2197,8 +2198,8 @@ test('runMain resolves PR image when squash commit is walked back via max_depth'
     process.env.GITHUB_EVENT_NAME = 'push';
     process.env.GITHUB_REF = 'refs/heads/main';
     process.env.GITHUB_SHA = headCommit;
-    process.env.INPUT_PACKAGE = 'frontend';
-    process.env.PACKAGE = 'frontend';
+    process.env.INPUT_PACKAGES = 'frontend';
+    process.env.PACKAGES = 'frontend';
     process.env.INPUT_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
     process.env.REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
     process.env.INPUT_REVISION = headCommit;
@@ -2476,8 +2477,8 @@ test('strict token input: consumes only INPUT_TOKEN and ignores legacy fallbacks
       process.env.GITHUB_OUTPUT = out;
       process.env.GITHUB_EVENT_NAME = 'push';
       process.env.GITHUB_REPOSITORY = 'bcgov/foo';
-      process.env.INPUT_PACKAGE = 'frontend';
-      process.env.PACKAGE = 'frontend';
+      process.env.INPUT_PACKAGES = 'frontend';
+      process.env.PACKAGES = 'frontend';
       process.env.INPUT_REPOSITORY = 'bcgov/foo';
       process.env.REPOSITORY = 'bcgov/foo';
       process.env.INPUT_REVISION = 'HEAD';
@@ -2717,8 +2718,8 @@ test('runMain writes diagnostic summary to GITHUB_STEP_SUMMARY on resolution fai
     process.env.GITHUB_EVENT_NAME = 'push';
     process.env.GITHUB_REF = 'refs/heads/main';
     process.env.GITHUB_REPOSITORY = 'bcgov/foo';
-    process.env.INPUT_PACKAGE = 'frontend';
-    process.env.PACKAGE = 'frontend';
+    process.env.INPUT_PACKAGES = 'frontend';
+    process.env.PACKAGES = 'frontend';
     process.env.INPUT_REPOSITORY = 'bcgov/foo';
     process.env.REPOSITORY = 'bcgov/foo';
     process.env.INPUT_REVISION = headSha;
@@ -2874,8 +2875,8 @@ test('runMain defaults max_depth to 1 when unset and does not walk to an ancesto
     process.env.GITHUB_EVENT_NAME = 'push';
     process.env.GITHUB_REF = 'refs/heads/main';
     process.env.GITHUB_SHA = headCommit;
-    process.env.INPUT_PACKAGE = 'frontend';
-    process.env.PACKAGE = 'frontend';
+    process.env.INPUT_PACKAGES = 'frontend';
+    process.env.PACKAGES = 'frontend';
     process.env.INPUT_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
     process.env.REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
     process.env.INPUT_REVISION = headCommit;
@@ -3084,8 +3085,8 @@ async function runTagScenario({ packages, built, tags, tipSha, eventName = 'push
     delete process.env.GITHUB_EVENT_PATH;
     process.env.GITHUB_EVENT_NAME = eventName;
     process.env.GITHUB_REPOSITORY = 'bcgov/demo';
-    process.env.INPUT_PACKAGE = packages;
-    delete process.env.PACKAGE;
+    process.env.INPUT_PACKAGES = packages;
+    delete process.env.PACKAGES;
     process.env.INPUT_REPOSITORY = 'bcgov/demo';
     delete process.env.REPOSITORY;
     process.env.INPUT_REVISION = headSha;
@@ -3121,7 +3122,7 @@ test('runMain without tags performs no registry writes', async () => {
 
 test('runMain tags every resolved digest, including latest at the default-branch tip', async () => {
   const r = await runTagScenario({
-    packages: 'frontend backend',
+    packages: 'frontend, backend',
     built: ['frontend', 'backend'],
     tags: 'prod-candidate\nlatest',
     tipSha: (h) => h
@@ -3166,7 +3167,7 @@ test('runMain never moves latest from a pull_request event, even at the default-
 
 test('runMain does not tag anything when a package is missing', async () => {
   const r = await runTagScenario({
-    packages: 'frontend backend',
+    packages: 'frontend, backend',
     built: ['frontend'],
     tags: 'latest',
     tipSha: (h) => h

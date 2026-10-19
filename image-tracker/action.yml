@@ -5,9 +5,10 @@ branding:
   color: blue
 
 inputs:
-  package:
+  packages:
     description: |
-      One or more package names (comma, space, or newline separated).
+      One or more package names: one per line (preferred), comma separated,
+      or a JSON array.
       Each resolves to `<registry>/<owner>/<repo>/<package>`, except when the
       package name matches the repo name, in which case it resolves to
       `<registry>/<owner>/<repo>`.

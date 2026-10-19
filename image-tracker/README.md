@@ -68,7 +68,7 @@ When package resolution fails, `image-tracker` automatically outputs a diagnosti
   id: tracker
   uses: bcgov/actions/image-tracker@vX.Y.Z
   with:
-    package: frontend, backend
+    packages: frontend, backend
     max_depth: 100
 
 - name: Deploy
@@ -81,7 +81,7 @@ Multiple packages:
 - id: tracker
   uses: bcgov/actions/image-tracker@vX.Y.Z
   with:
-    package: frontend, backend, migrations
+    packages: frontend, backend, migrations
 
 - run: |
     echo "frontend: $(echo '${{ steps.tracker.outputs.images }}' | jq -r '.frontend')"
@@ -92,7 +92,7 @@ Resolve a non-HEAD revision (tag, branch, or SHA):
 ```yaml
 - uses: bcgov/actions/image-tracker@vX.Y.Z
   with:
-    package: frontend
+    packages: frontend
     revision: v1.2.3
 ```
 
@@ -107,7 +107,7 @@ External repository:
 
 - uses: bcgov/actions/image-tracker@vX.Y.Z
   with:
-    package: frontend
+    packages: frontend
     repository: bcgov/some-other-repo
     dir: target
 ```
@@ -122,7 +122,7 @@ must deploy the **digest** instead. `outputs.pr` is metadata only.
   id: tracker
   uses: bcgov/actions/image-tracker@vX.Y.Z
   with:
-    package: frontend
+    packages: frontend
     max_depth: 100
 
 - name: Deploy
@@ -150,7 +150,7 @@ be resolved, or no image exists for that revision, the action fails (`exit 1`).
 
 | Input        | Required | Default              | Description                                                                    |
 | ------------ | -------- | -------------------- | ------------------------------------------------------------------------------ |
-| `package`    | ✔        | —                    | One or more package names (comma/space/newline separated).                     |
+| `packages`   | ✔        | —                    | One or more package names (one per line, comma separated, or JSON array).      |
 | `revision`   |          | `HEAD`               | Git revision (SHA, branch, or tag) to resolve against.                         |
 | `repository` |          | current repo         | Repository owning the images.                                                  |
 | `dir`        |          | `.`                  | Working directory containing the git repository.                               |
@@ -192,7 +192,7 @@ steps:
   - uses: actions/checkout@v6
   - uses: bcgov/actions/image-tracker@vX.Y.Z
     with:
-      package: backend frontend
+      packages: backend, frontend
       max_depth: 100
       tags: |
         ${{ github.sha }}
