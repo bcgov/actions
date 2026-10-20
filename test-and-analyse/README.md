@@ -50,7 +50,7 @@ permissions:
 | `annotations` / debug | `debug: false` | |
 | `sonar_token` | _(empty)_ | Empty skips Sonar with a warning (fork PRs get no secrets) |
 | `triggers` | _(omitted)_ | When omitted, tests always run |
-| `diff_base` | repository default branch | Base to diff triggers against |
+| `base` | repository default branch | Base to diff triggers against |
 | `token` | `${{ github.token }}` | |
 | `checkout_path` | `.` | |
 
@@ -128,7 +128,7 @@ permissions:
 
     # Overrides the default reference/branch to diff against
     # Defaults to the default branch, usually `main`
-    diff_base: ${{ github.event.repository.default_branch }}
+    base: ${{ github.event.repository.default_branch }}
 
     # Repository to clone and process
     # Useful for consuming other repos, like in testing
