@@ -23,4 +23,4 @@ GitHub downloads the whole repository for `uses: bcgov/actions/<action>@<sha>`, 
   run: node "$GITHUB_ACTION_PATH/../shared/inputs.js" list packages
 ```
 
-CLI commands: `list <name>`, `bool <name> [default]`, `enum <name> <a,b,c> <default>`, `debug`.
+CLI commands: `list <name>`, `bool <name> [default]`, `enum <name> <a,b,c> <default>`, `debug`, `token`.
