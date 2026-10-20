@@ -8,7 +8,8 @@ inputs:
   triggers:
     description: >-
       Paths used to trigger an event. Prefer a multiline string (one path per
-      line). JSON arrays and a single path on one line are also supported.
+      line). A comma-separated line, a JSON array and a single path are also
+      supported.
       Always triggers if omitted.
     required: false
   debug:

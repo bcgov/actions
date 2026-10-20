@@ -37,6 +37,7 @@ jobs:
               - '!*.md'
             diff-triggers:
               - 'diff-triggers/**'
+              - 'shared/**'
               - '!*.md'
             get-pr:
               - 'get-pr/action.yml'
@@ -44,6 +45,7 @@ jobs:
               - 'get-pr/tests/**'
             ghcr-cleanup:
               - 'ghcr-cleanup/**'
+              - 'shared/**'
               - '!*.md'
             image-tracker:
               - 'image-tracker/**'
@@ -476,6 +478,9 @@ jobs:
 
       - name: Run Parser Self-Check
         run: node diff-triggers/self-check.js
+
+      - name: Run Shared Input Tests
+        run: node --test shared/tests/inputs.test.js
 
       # Local commit with a known change, so results do not depend on what the PR touched
       - name: Commit Fixture Change

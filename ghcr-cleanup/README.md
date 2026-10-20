@@ -93,7 +93,7 @@ jobs:
       - uses: bcgov/actions/ghcr-cleanup@<sha> # vX.Y.Z
         with:
           packages: backend, frontend, migrations
-          keep_digests: ${{ join(fromJSON(steps.deployed.outputs.digests).*, ' ') }}
+          keep_digests: ${{ join(fromJSON(steps.deployed.outputs.digests).*, ',') }}
           # dry_run defaults to true: read a few run logs before setting false
 ```
 
@@ -124,7 +124,7 @@ admin rights are needed, and only this repository's packages are touched.
 
 | Input          | Required | Default        | Description                                                                      |
 | -------------- | -------- | -------------- | -------------------------------------------------------------------------------- |
-| `packages`     | ✔        | —              | Package names in this repository (comma/space/newline separated).                |
+| `packages`     | ✔        | —              | Package names in this repository (one per line, comma separated, or JSON array).|
 | `dry_run`      |          | `true`         | `true` logs only. `false` deletes. Any other value fails.                        |
 | `keep_digests` |          | —              | Deployed manifest digests (`sha256:...`) to keep, with their index children.     |
 | `token`        |          | `github.token` | Token that can list and delete versions of this repository's packages.           |

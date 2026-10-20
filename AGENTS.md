@@ -37,3 +37,7 @@ PR workflows must not fire unnecessarily.
 ## diff-triggers consumers
 
 `bcgov/actions-openshift` `deployer`, `crunchy` and `oc-runner` call `diff-triggers`, pinned to a release SHA. v1 rollout (one-off): release this repo first, merge the bump in actions-openshift, then release actions-openshift. After that the repos release independently, with Renovate carrying the bumps.
+
+## Inputs
+
+Read list, boolean, enum, debug and token inputs through [shared/inputs.js](shared/inputs.js), never with ad hoc splitting or string compares. Details: [shared/README.md](shared/README.md).
