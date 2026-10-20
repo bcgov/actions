@@ -31,9 +31,11 @@ jobs:
           filters: |
             builder:
               - 'builder/**'
+              - 'shared/**'
               - '!*.md'
             scan-url:
               - 'scan-url/**'
+              - 'shared/**'
               - '!*.md'
             diff-triggers:
               - 'diff-triggers/**'
@@ -57,6 +59,7 @@ jobs:
               - '!*.md'
             pr-validate:
               - 'pr-validate/**'
+              - 'shared/**'
               - '.github/workflows/pr-validate.yml'
               - '.github/scripts/stage-dist.sh'
               - '!*.md'
@@ -66,9 +69,11 @@ jobs:
               - '!*.md'
             workflow-results:
               - 'workflow-results/**'
+              - 'shared/**'
               - '!*.md'
             test-and-analyse:
               - 'test-and-analyse/**'
+              - 'shared/**'
               - '.github/scripts/stage-dist.sh'
               - '!*.md'
             # Shared runner infrastructure and test harness changes trigger the full suite

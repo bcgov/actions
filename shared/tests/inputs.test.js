@@ -63,6 +63,7 @@ test('CLI for composite actions', () => {
   assert.strictEqual(execFileSync('node', [cli, 'list', 'packages'], { env }).toString(), 'a\nb\n');
   assert.strictEqual(execFileSync('node', [cli, 'bool', 'dry_run'], { env }).toString(), 'true\n');
   assert.strictEqual(execFileSync('node', [cli, 'enum', 'mode', 'a,b', 'b'], { env }).toString(), 'b\n');
+  assert.strictEqual(execFileSync('node', [cli, 'token'], { env: { ...env, INPUT_TOKEN: ' ', GITHUB_TOKEN: 'gh' } }).toString(), 'gh\n');
   const bad = spawnSync('node', [cli, 'list', 'packages'], { env: { ...env, INPUT_PACKAGES: 'a, b' } });
   assert.strictEqual(bad.status, 1);
   assert.match(bad.stderr.toString(), /Invalid packages input/);
