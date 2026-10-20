@@ -291,7 +291,7 @@ test_author_dedup() {
   out=$(run_action "$FIXTURE_DIR" \
     INPUT_TITLE="Test Author Deduplication" \
     INPUT_NOTIFY_AUTHOR="true" \
-    INPUT_NOTIFY_CODEOWNERS="true" \
+    INPUT_NOTIFY_CODEOWNERS="always" \
     INPUT_DRY_RUN="true" \
     GITHUB_TRIGGERING_ACTOR="alice")
 
@@ -312,7 +312,7 @@ EOF
   out=$(run_action "${TMP_DIR}/case_fixture" \
     INPUT_TITLE="Test Case Insensitive Dedup" \
     INPUT_NOTIFY_AUTHOR="true" \
-    INPUT_NOTIFY_CODEOWNERS="true" \
+    INPUT_NOTIFY_CODEOWNERS="always" \
     INPUT_DRY_RUN="true" \
     GITHUB_TRIGGERING_ACTOR="alice")
 
@@ -406,7 +406,7 @@ test_notify_codeowners_always() {
   out=$(run_action "$FIXTURE_DIR" \
     INPUT_TITLE="Test Codeowners Always" \
     INPUT_NOTIFY_AUTHOR="true" \
-    INPUT_NOTIFY_CODEOWNERS="true" \
+    INPUT_NOTIFY_CODEOWNERS="always" \
     INPUT_DRY_RUN="true" \
     INPUT_TOKEN="dummy-token" \
     GITHUB_TRIGGERING_ACTOR="merger1" \
@@ -440,7 +440,7 @@ test_notify_codeowners_disabled() {
   out=$(run_action "$FIXTURE_DIR" \
     INPUT_TITLE="Test CODEOWNERS Disabled" \
     INPUT_EVENT_NAME="schedule" \
-    INPUT_NOTIFY_CODEOWNERS="false" \
+    INPUT_NOTIFY_CODEOWNERS="never" \
     INPUT_NOTIFY_AUTHOR="true" \
     INPUT_DRY_RUN="true")
 
@@ -454,7 +454,7 @@ test_notify_all_disabled() {
   local out
   out=$(run_action "$FIXTURE_DIR" \
     INPUT_TITLE="Test All Notifications Disabled" \
-    INPUT_NOTIFY_CODEOWNERS="false" \
+    INPUT_NOTIFY_CODEOWNERS="never" \
     INPUT_NOTIFY_AUTHOR="false" \
     INPUT_DRY_RUN="true" \
     GITHUB_TRIGGERING_ACTOR="charlie")
@@ -506,7 +506,7 @@ EOF
   out=$(run_action "${TMP_DIR}/many_fixture" \
     INPUT_TITLE="Test 10 Limit" \
     INPUT_NOTIFY_AUTHOR="true" \
-    INPUT_NOTIFY_CODEOWNERS="true" \
+    INPUT_NOTIFY_CODEOWNERS="always" \
     INPUT_DRY_RUN="true" \
     INPUT_ASSIGN="true" \
     GITHUB_TRIGGERING_ACTOR="leadauthor")
@@ -517,7 +517,7 @@ EOF
     "caps summary assignees output at 10"
   local out_env
   out_env=$(cat "${TMP_DIR}/output.env")
-  assert_contains "$out_env" "assignees=leadauthor,u01,u02,u03,u04,u05,u06,u07,u08,u09" \
+  assert_contains "$out_env" 'assignees=["leadauthor","u01","u02","u03","u04","u05","u06","u07","u08","u09"]' \
     "clamps step output assignees to 10"
   assert_not_contains "$out_env" "u10" "excludes 11th owner from step output"
 }
@@ -689,8 +689,30 @@ test_comment_on_exact_title() {
   assert_file_absent "${TMP_DIR}/gh_create_body" "comment does not create another issue"
 }
 
+test_rejects_old_codeowners_value() {
+  local out rc=0
+  out=$(run_action "$FIXTURE_DIR" \
+    INPUT_TITLE="t" \
+    INPUT_NOTIFY_CODEOWNERS="true" \
+    INPUT_DRY_RUN="true" 2>&1) || rc=$?
+  assert_eq "$rc" "1" "notify_codeowners true fails"
+  assert_contains "$out" "Use one of: always, fallback, never" "error lists the accepted values"
+}
+
+test_rejects_space_separated_labels() {
+  local out rc=0
+  out=$(run_action "$FIXTURE_DIR" \
+    INPUT_TITLE="t" \
+    INPUT_LABELS="bug failure" \
+    INPUT_DRY_RUN="true" 2>&1) || rc=$?
+  assert_eq "$rc" "1" "space separated labels fail"
+  assert_contains "$out" "Invalid labels input: bug failure" "error names the labels value"
+}
+
 test_create_when_no_open_match
 test_comment_on_exact_title
+test_rejects_old_codeowners_value
+test_rejects_space_separated_labels
 
 echo ""
 echo "Unit tests finished: ${passed} passed, ${failed} failed."

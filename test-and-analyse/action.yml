@@ -66,7 +66,8 @@ inputs:
       -Dsonar.projectKey=bcgov_${{ github.repository }}
 
   sonar_token:
-    description: Sonar token, provide unpopulated token for pre-setup (will skip)
+    description: >-
+      Sonar token. Empty skips Sonar with a warning (e.g. fork PRs, which get no secrets).
 
   triggers:
     description: |
@@ -103,8 +104,8 @@ inputs:
     default: "false"
 
   ### Usually a bad idea / not recommended
-  ref:
-    description: Reference to compare against (e.g. branch name, tag, or commit SHA)
+  base:
+    description: Base to diff triggers against (e.g. branch name, tag, or commit SHA)
     default: ${{ github.event.repository.default_branch }}
 
 
@@ -119,8 +120,10 @@ inputs:
     default: ${{ github.token }}
     required: false
 
-  branch:
-    description: Non-default branch to clone (used for testing this action)
+  ref:
+    description: >-
+      Branch, tag or SHA of repository to check out (actions/checkout `ref`).
+      Empty checks out the repository default.
     default: ""
 
   checkout_path:
@@ -128,10 +131,6 @@ inputs:
       Path where the repository should be checked out, and the path probed to
       decide whether a clone is needed at all. Default is current directory.
     default: "."
-
-  require_sonar:
-    description: "Fail the workflow if sonar_token is not provided, instead of silently skipping."
-    default: "false"
 
 outputs:
   triggered:
@@ -159,12 +158,39 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: Validate Sonar Configuration
+    # Shared input rules (shared/README.md): bad values fail here with an annotation
+    - name: Parse Inputs
+      id: inputs
       shell: bash
+      env:
+        INPUT_DEBUG: ${{ inputs.debug }}
+        INPUT_SUPPLY_SCAN: ${{ inputs.supply_scan }}
+        INPUT_SEMGREP: ${{ inputs.semgrep }}
+        INPUT_SEMGREP_FAIL: ${{ inputs.semgrep_fail }}
+        INPUT_DEP_SCAN: ${{ inputs.dep_scan }}
+        INPUT_LANGUAGE: ${{ inputs.language }}
+        SHARED_INPUTS: ${{ github.action_path }}/../shared/inputs.js
+        HAS_SONAR_TOKEN: ${{ inputs.sonar_token != '' }}
       run: |
-        if [ "${{ inputs.require_sonar }}" == "true" ] && [ -z "${{ inputs.sonar_token }}" ]; then
-          echo "::error::sonar_token is required but was not provided. Aborting."
-          exit 1
+        # Assign first so a parse error fails the step (set -e ignores failures inside echo arguments)
+        debug=$(node "$SHARED_INPUTS" debug)
+        supply_scan=$(node "$SHARED_INPUTS" bool supply_scan true)
+        semgrep=$(node "$SHARED_INPUTS" bool semgrep false)
+        semgrep_fail=$(node "$SHARED_INPUTS" bool semgrep_fail false)
+        dep_scan=$(node "$SHARED_INPUTS" enum dep_scan off,warn,error warn)
+        language=$(node "$SHARED_INPUTS" enum language node,java,python node)
+        parsed="debug=$debug
+        supply_scan=$supply_scan
+        semgrep=$semgrep
+        semgrep_fail=$semgrep_fail
+        dep_scan=$dep_scan
+        language=$language"
+        echo "$parsed" | sed 's/^ *//' >> "$GITHUB_OUTPUT"
+        if [ "$debug" = "true" ]; then
+          echo "Parsed inputs:"; echo "$parsed" | sed 's/^ */  /'
+        fi
+        if [ "$HAS_SONAR_TOKEN" != "true" ]; then
+          echo "::warning::sonar_token is empty, so Sonar is skipped."
         fi
 
     - name: Check Triggers
@@ -173,7 +199,7 @@ runs:
       id: diff
       with:
         triggers: ${{ inputs.triggers }}
-        ref: ${{ inputs.ref }}
+        base: ${{ inputs.base }}
         token: ${{ inputs.token }}
 
     # Final triggered state
@@ -189,7 +215,7 @@ runs:
 
 
     - name: Setup Supply Chain Scan
-      if: steps.final_triggered.outputs.triggered == 'true' && inputs.supply_scan == 'true' && inputs.language == 'node'
+      if: steps.final_triggered.outputs.triggered == 'true' && steps.inputs.outputs.supply_scan == 'true' && steps.inputs.outputs.language == 'node'
       shell: bash
       continue-on-error: true # Don't let a setup-ci issue kill the whole run
       run: |
@@ -209,7 +235,7 @@ runs:
       with:
         clean: false
         repository: ${{ inputs.repository }}
-        ref: ${{ inputs.branch }}
+        ref: ${{ inputs.ref }}
         token: ${{ inputs.token }}
         path: ${{ inputs.checkout_path }}
         fetch-depth: 0
@@ -236,7 +262,7 @@ runs:
       shell: bash
       env:
         INPUT_CACHE: ${{ inputs.cache }}
-        INPUT_LANGUAGE: ${{ inputs.language }}
+        INPUT_LANGUAGE: ${{ steps.inputs.outputs.language }}
         INPUT_DIR: ${{ inputs.dir }}
         INPUT_CHECKOUT_PATH: ${{ inputs.checkout_path }}
       run: |
@@ -244,7 +270,7 @@ runs:
 
     - name: Determine Node.js Version
       id: node_version_logic
-      if: steps.final_triggered.outputs.triggered == 'true' && inputs.language == 'node'
+      if: steps.final_triggered.outputs.triggered == 'true' && steps.inputs.outputs.language == 'node'
       shell: bash
       env:
         INPUT_NODE_VERSION: ${{ inputs.node_version }}
@@ -256,7 +282,7 @@ runs:
 
     - name: Setup Node.js
       uses: actions/setup-node@v7
-      if: steps.final_triggered.outputs.triggered == 'true' && inputs.language == 'node'
+      if: steps.final_triggered.outputs.triggered == 'true' && steps.inputs.outputs.language == 'node'
       with:
         node-version: ${{ steps.node_version_logic.outputs.node_version }}
         node-version-file: ${{ steps.node_version_logic.outputs.node_version_file }}
@@ -267,7 +293,7 @@ runs:
 
     - name: Determine Java Version
       id: java_version_logic
-      if: steps.final_triggered.outputs.triggered == 'true' && inputs.language == 'java'
+      if: steps.final_triggered.outputs.triggered == 'true' && steps.inputs.outputs.language == 'java'
       shell: bash
       env:
         INPUT_JAVA_VERSION: ${{ inputs.java_version }}
@@ -280,7 +306,7 @@ runs:
     # Condition 2: Java Project Setup
     - name: Setup Java
       uses: actions/setup-java@v6
-      if: steps.final_triggered.outputs.triggered == 'true' && inputs.language == 'java'
+      if: steps.final_triggered.outputs.triggered == 'true' && steps.inputs.outputs.language == 'java'
       with:
         java-version: ${{ steps.java_version_logic.outputs.java_version }}
         java-version-file: ${{ steps.java_version_logic.outputs.java_version_file }}
@@ -293,7 +319,7 @@ runs:
 
     - name: Determine Python Version
       id: python_version_logic
-      if: steps.final_triggered.outputs.triggered == 'true' && inputs.language == 'python'
+      if: steps.final_triggered.outputs.triggered == 'true' && steps.inputs.outputs.language == 'python'
       shell: bash
       env:
         INPUT_PYTHON_VERSION: ${{ inputs.python_version }}
@@ -306,7 +332,7 @@ runs:
     # Condition 3: Python Project Setup
     - name: Setup Python
       uses: actions/setup-python@v7
-      if: steps.final_triggered.outputs.triggered == 'true' && inputs.language == 'python'
+      if: steps.final_triggered.outputs.triggered == 'true' && steps.inputs.outputs.language == 'python'
       with:
         python-version: ${{ steps.python_version_logic.outputs.python_version }}
         python-version-file: ${{ steps.python_version_logic.outputs.python_version_file }}
@@ -336,7 +362,7 @@ runs:
         exit 0 # Allow the next step (reporter) to run
 
     ### Optional SonarCloud
-    - if: inputs.sonar_token != '' && steps.final_triggered.outputs.triggered == 'true' && inputs.language != 'java'
+    - if: inputs.sonar_token != '' && steps.final_triggered.outputs.triggered == 'true' && steps.inputs.outputs.language != 'java'
       uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8
       env:
         SONAR_TOKEN: ${{ inputs.sonar_token }}
@@ -348,7 +374,7 @@ runs:
     # Run Analysis Tools (Knip for Node, Test Reports for others)
     - name: Knip Dependency Analysis
       id: knip_analysis
-      if: steps.final_triggered.outputs.triggered == 'true' && inputs.dep_scan != 'off' && inputs.language == 'node'
+      if: steps.final_triggered.outputs.triggered == 'true' && steps.inputs.outputs.dep_scan != 'off' && steps.inputs.outputs.language == 'node'
       working-directory: ${{ inputs.dir }}
       shell: bash
       run: |
@@ -437,13 +463,13 @@ runs:
 
     - name: Semgrep Scan
       id: semgrep
-      if: steps.final_triggered.outputs.triggered == 'true' && inputs.semgrep == 'true' && (success() || failure())
+      if: steps.final_triggered.outputs.triggered == 'true' && steps.inputs.outputs.semgrep == 'true' && (success() || failure())
       shell: bash
       working-directory: ${{ inputs.dir }}
       env:
         SEMGREP_IMAGE: semgrep/semgrep:1.179.0@sha256:93963d9295a366f59e4850127b1550400ee7b388f04fe144e4a1f6325d96e01b
         INPUT_SEMGREP_CONFIG: ${{ inputs.semgrep_config }}
-        INPUT_SEMGREP_FAIL: ${{ inputs.semgrep_fail }}
+        INPUT_SEMGREP_FAIL: ${{ steps.inputs.outputs.semgrep_fail }}
       run: |
         "${{ github.action_path }}/semgrep.sh"
 
@@ -457,9 +483,9 @@ runs:
       uses: $/test-and-analyse/reporter
       with:
         dir: ${{ inputs.dir }}
-        dep_scan: ${{ inputs.dep_scan }}
+        dep_scan: ${{ steps.inputs.outputs.dep_scan }}
         knip_output: knip-output.json
-        language: ${{ inputs.language }}
+        language: ${{ steps.inputs.outputs.language }}
 
     - name: Final cleanup
       if: always() && inputs.repository != github.repository

@@ -48,9 +48,9 @@ permissions:
 | `semgrep_config` | `p/default` | |
 | `semgrep_fail` | `false` | Findings warn unless `true` |
 | `annotations` / debug | `debug: false` | |
-| `require_sonar` | `false` | Skip Sonar quietly when token empty |
+| `sonar_token` | _(empty)_ | Empty skips Sonar with a warning (fork PRs get no secrets) |
 | `triggers` | _(omitted)_ | When omitted, tests always run |
-| `ref` | repository default branch | Comparison ref for triggers |
+| `base` | repository default branch | Base to diff triggers against |
 | `token` | `${{ github.token }}` | |
 | `checkout_path` | `.` | |
 
@@ -128,17 +128,16 @@ permissions:
 
     # Overrides the default reference/branch to diff against
     # Defaults to the default branch, usually `main`
-    ref: ${{ github.event.repository.default_branch }}
+    base: ${{ github.event.repository.default_branch }}
 
     # Repository to clone and process
     # Useful for consuming other repos, like in testing
     # Defaults to the current one
     repository: ${{ github.repository }}
 
-    # Branch to clone and process
-    # Useful for consuming non-default branches, like in testing
-    # Defaults to empty, cloning the default branch
-    branch: ""
+    # Branch, tag or SHA of repository to check out (actions/checkout `ref`)
+    # Defaults to empty, the repository default branch
+    ref: ""
 ```
 
 # Example, Single Directory with SonarCloud Analysis, Supply Chain Scanning, and Dependency/Export Analysis
@@ -224,7 +223,7 @@ jobs:
 
 # Example, Matrix / Multiple Directories with Sonar Cloud and Triggers
 
-Test and analyze projects in multiple directories in parallel.  This time `repository` and `branch` are provided.  Please note how secrets must be passed in to composite Actions using the secrets[matrix.variable] syntax.
+Test and analyze projects in multiple directories in parallel.  This time `repository` and `ref` are provided.  Please note how secrets must be passed in to composite Actions using the secrets[matrix.variable] syntax.
 
 ```yaml
 jobs:
@@ -261,7 +260,7 @@ jobs:
           sonar_token: ${{ secrets[matrix.sonar_token] }}
           triggers: ${{ matrix.triggers }}
           repository: bcgov/quickstart-openshift
-          branch: main
+          ref: main
 ```
 
 # Outputs
@@ -298,11 +297,11 @@ SonarCloud project tokens are free, available from [SonarCloud] or your organiza
 
 ## In-repo CI (`bcgov/actions` maintainers)
 
-The [`test-test-and-analyse` workflow](../.github/workflows/test-test-and-analyse.yml) exercises this action against external sample repos. **`sonar_token` is optional** in every matrix cell (`require_sonar: false`). Only **`backend-triggered`** receives a token when configured, to optionally exercise the Sonar scan path.
+The [`test-test-and-analyse` workflow](../.github/workflows/test-test-and-analyse.yml) exercises this action against external sample repos. **`sonar_token` is optional** in every matrix cell. Only **`backend-triggered`** receives a token when configured, to optionally exercise the Sonar scan path.
 
 Set repository Actions secret **`SONAR_TOKEN`**: a SonarCloud token for the **`bcgov-sonarcloud`** organization that can analyze project **`bcgov_bcgov/actions`**. Without it, CI still validates triggers, tests, and Knip.
 
-Consumers who need Sonar to be mandatory should set `require_sonar: true` in their own workflows; the action fails loudly when the token is absent.
+An empty `sonar_token` skips Sonar with a warning annotation, so fork PRs (which never get secrets) still pass.
 
 For BC Government projects, please create an [issue for our platform team](https://github.com/BCDevOps/devops-requests/issues/new/choose).
 

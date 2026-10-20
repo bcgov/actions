@@ -54,8 +54,8 @@ inputs:
   build_args:
     description: A list of build-time variables, generally not advisable
     default: "BUILDKIT_INLINE_CACHE=1"
-  ref:
-    description: Reference to compare against (e.g. branch name, tag, or commit SHA)
+  base:
+    description: Base to diff triggers against (e.g. branch name, tag, or commit SHA)
     default: ${{ github.event.repository.default_branch }}
 
   repository:
@@ -109,6 +109,20 @@ runs:
   steps:
     # Publish target follows the workflow context: fork push → fork GHCR;
     # fork pull_request → head-repo GHCR (read-only here; push on fork push).
+    # Shared boolean rules (shared/README.md); a bad value fails here
+    - name: Parse Inputs
+      id: inputs
+      shell: bash
+      env:
+        INPUT_DEBUG: ${{ inputs.debug }}
+        INPUT_SBOM: ${{ inputs.sbom }}
+        SHARED_INPUTS: ${{ github.action_path }}/../shared/inputs.js
+      run: |
+        debug=$(node "$SHARED_INPUTS" debug)
+        sbom=$(node "$SHARED_INPUTS" bool sbom true)
+        echo "debug=${debug}" >> "$GITHUB_OUTPUT"
+        echo "sbom=${sbom}" >> "$GITHUB_OUTPUT"
+
     - id: vars
       shell: bash
       env:
@@ -200,7 +214,7 @@ runs:
       id: diff
       with:
         triggers: ${{ inputs.triggers }}
-        ref:  ${{ inputs.ref }}
+        base: ${{ inputs.base }}
         token: ${{ inputs.token }}
 
 
@@ -217,16 +231,18 @@ runs:
     - name: Check for builds
       env:
         URL_FALLBACK: ${{ steps.vars.outputs.registry_host }}/${{ steps.vars.outputs.image_path }}:${{ inputs.tag_fallback }}
+        DEBUG: ${{ steps.inputs.outputs.debug }}
       id: build
       shell: bash
       run: |
-        # Check for builds
-        echo "::debug::Build decision logic:"
-        echo "::debug::  Input repository: ${{ inputs.repository }}"
-        echo "::debug::  GitHub repository: ${{ github.repository }}"
-        echo "::debug::  Diff triggered: ${{ steps.diff.outputs.triggered }}"
-        echo "::debug::  Tag fallback: ${{ inputs.tag_fallback }}"
-        echo "::debug::  Fallback URL: ${URL_FALLBACK}"
+        # Check for builds; debug: true prints these lines without a debug re-run
+        dbg() { if [ "$DEBUG" = "true" ]; then echo "[debug] $*"; else echo "::debug::$*"; fi; }
+        dbg "Build decision logic:"
+        dbg "  Input repository: ${{ inputs.repository }}"
+        dbg "  GitHub repository: ${{ github.repository }}"
+        dbg "  Diff triggered: ${{ steps.diff.outputs.triggered }}"
+        dbg "  Tag fallback: ${{ inputs.tag_fallback }}"
+        dbg "  Fallback URL: ${URL_FALLBACK}"
         
         triggered=true
         fallback_digest=""
@@ -255,11 +271,11 @@ runs:
               echo "::error::Failed to resolve immutable digest for fallback image ${URL_FALLBACK}. Recycled images MUST have a valid digest."
               exit 1
             fi
-            echo "::debug::Resolved fallback digest: ${fallback_digest}"
+            dbg "Resolved fallback digest: ${fallback_digest}"
           fi
         fi
         
-        echo "::debug::Final build decision: triggered=${triggered}"
+        dbg "Final build decision: triggered=${triggered}"
         echo "triggered=${triggered}" >> $GITHUB_OUTPUT
         echo "fallback_digest=${fallback_digest}" >> $GITHUB_OUTPUT
 
@@ -411,7 +427,7 @@ runs:
 
     - name: Generate SBOM
       id: sbom
-      if: steps.build.outputs.triggered == 'true' && steps.vars.outputs.can_push == 'true' && inputs.sbom == 'true'
+      if: steps.build.outputs.triggered == 'true' && steps.vars.outputs.can_push == 'true' && steps.inputs.outputs.sbom == 'true'
       continue-on-error: true
       shell: bash
       run: |
@@ -463,7 +479,7 @@ runs:
 
     - name: Upload SBOMs
       uses: actions/upload-artifact@v7
-      if: steps.build.outputs.triggered == 'true' && inputs.sbom == 'true' && steps.sbom.outputs.sbom_files_exist == 'true'
+      if: steps.build.outputs.triggered == 'true' && steps.inputs.outputs.sbom == 'true' && steps.sbom.outputs.sbom_files_exist == 'true'
       continue-on-error: true
       with:
         name: sboms-${{ steps.sbom.outputs.package_sanitized }}-${{ steps.vars.outputs.first_tag }}
