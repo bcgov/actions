@@ -44,9 +44,23 @@ Read list, boolean, enum, debug and token inputs through [shared/inputs.js](shar
 
 ## Input names
 
-- `ref` keeps the actions/checkout meaning: the branch, tag or SHA to check out. Use it only on actions that check out.
-- `base` is the base that `triggers` are diffed against, the same name dorny/paths-filter uses. Never call it `ref`, `diff_base`, `diff_branch` or `branch`.
-- `token` is the GitHub token, defaulting to `github.token`. `debug` is the boolean debug switch. Names are snake_case.
+Input and output names follow GitHub's conventions first (actions/checkout and other official `actions/*`), then widely used actions (docker/*, dorny/paths-filter). Invent a name only when no convention exists. Names are snake_case, so a convention's `fetch-depth` is `fetch_depth` here.
+
+| Name | Meaning | Convention |
+|---|---|---|
+| `ref` | Branch, tag or SHA to check out. Only on actions that check out. | actions/checkout `ref` |
+| `repository` | Repository to check out or read from | actions/checkout `repository` |
+| `path` | Where the repository is checked out | actions/checkout `path` |
+| `token` | GitHub token, default `github.token` | actions/checkout `token` |
+| `working_directory` | Directory the action works in, relative to the workspace | step `working-directory` |
+| `base` | Base that `triggers` are diffed against. Never `ref`, `diff_base`, `diff_branch` or `branch`. | dorny/paths-filter `base` |
+| `registry` | Registry host, e.g. `ghcr.io` (input and output) | docker/login-action `registry` |
+| `username` | Registry login user | docker/login-action `username` |
+| `context`, `file`, `build_args`, `tags`, `sbom` | Image build settings | docker/build-push-action |
+| `node_version`, `java_version`, `python_version`, `cache` | Toolchain setup | actions/setup-node, setup-java, setup-python |
+| `labels`, `assignees` | Issue labels and assignees | GitHub issues API |
+| `debug` | Boolean debug switch | (none) |
+| `dry_run` | Log and change nothing | (none) |
 
 ## Outputs
 
