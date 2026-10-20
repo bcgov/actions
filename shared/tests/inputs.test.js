@@ -64,7 +64,6 @@ test('CLI for composite actions', () => {
   assert.match(bad.stderr.toString(), /Invalid packages input/);
 });
 
-
 test('parseList: malformed JSON arrays and multiline parens fail', () => {
   assert.throws(() => parseList('["backend/",]', 'triggers'), InputError);
   assert.throws(() => parseList("(\n'backend/'\n'frontend/'\n)", 'triggers'), InputError);

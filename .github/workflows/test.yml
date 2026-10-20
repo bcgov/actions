@@ -12,7 +12,7 @@ permissions: {}
 jobs:
   filter:
     name: Detect Changes
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
     outputs:
@@ -90,7 +90,7 @@ jobs:
     name: Test Builder (Build)
     needs: [filter]
     if: contains(fromJSON(needs.filter.outputs.changes), 'builder') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       packages: write
@@ -131,7 +131,7 @@ jobs:
     name: Test Builder (No Attestation / Advanced / Single Package / Metadata / Self)
     needs: [filter]
     if: contains(fromJSON(needs.filter.outputs.changes), 'builder') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       packages: write
@@ -206,7 +206,7 @@ jobs:
     name: Test Builder (arm64 package)
     needs: [filter]
     if: contains(fromJSON(needs.filter.outputs.changes), 'builder') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     permissions:
       contents: read
       packages: write
@@ -244,7 +244,7 @@ jobs:
     if: |
       always() && needs.test-builder-arm64.result == 'success' &&
       (contains(fromJSON(needs.filter.outputs.changes), 'builder') || contains(fromJSON(needs.filter.outputs.changes), 'workflows'))
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       packages: write
@@ -314,7 +314,7 @@ jobs:
     name: Test Scan URL
     needs: [filter]
     if: contains(fromJSON(needs.filter.outputs.changes), 'scan-url') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
     steps:
@@ -386,7 +386,7 @@ jobs:
     name: Test Scan URL (Live) (${{ matrix.name }})
     needs: [filter]
     if: contains(fromJSON(needs.filter.outputs.changes), 'scan-url') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     permissions:
       actions: read
@@ -439,7 +439,7 @@ jobs:
     name: Test Scan URL (Two URLs)
     needs: [filter, test-scan-url-live]
     if: contains(fromJSON(needs.filter.outputs.changes), 'scan-url') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       actions: read
       security-events: read
@@ -471,7 +471,7 @@ jobs:
     name: Test Diff Triggers
     needs: [filter]
     if: contains(fromJSON(needs.filter.outputs.changes), 'diff-triggers') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
     steps:
@@ -594,7 +594,7 @@ jobs:
     name: Test GHCR Cleanup
     needs: [filter]
     if: contains(fromJSON(needs.filter.outputs.changes), 'ghcr-cleanup') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       packages: read
@@ -666,7 +666,7 @@ jobs:
     name: Test Image Tracker (${{ matrix.repo }} / ${{ matrix.package }})
     needs: [filter]
     if: contains(fromJSON(needs.filter.outputs.changes), 'image-tracker') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       packages: read
@@ -875,7 +875,7 @@ jobs:
     name: Test PR Description Add
     needs: [filter]
     if: contains(fromJSON(needs.filter.outputs.changes), 'pr-description-add') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || contains(fromJSON(needs.filter.outputs.changes), 'lockfile')
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       pull-requests: write
@@ -909,7 +909,7 @@ jobs:
     name: Test PR Validate
     needs: [filter]
     if: contains(fromJSON(needs.filter.outputs.changes), 'pr-validate') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       pull-requests: write
@@ -947,7 +947,7 @@ jobs:
     name: Test PR Validate workflow lint
     needs: [filter]
     if: contains(fromJSON(needs.filter.outputs.changes), 'pr-validate') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       pull-requests: read
@@ -994,7 +994,7 @@ jobs:
     name: Test Workflow Results
     needs: [filter]
     if: contains(fromJSON(needs.filter.outputs.changes), 'workflow-results') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
     steps:
@@ -1111,7 +1111,7 @@ jobs:
     name: Test Workflow Notifier
     needs: [filter]
     if: contains(fromJSON(needs.filter.outputs.changes), 'workflow-notifier') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       issues: write
@@ -1214,7 +1214,7 @@ jobs:
     name: Test Test and Analyse (${{ matrix.name }})
     needs: [filter]
     if: contains(fromJSON(needs.filter.outputs.changes), 'test-and-analyse') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || contains(fromJSON(needs.filter.outputs.changes), 'lockfile')
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       pull-requests: write
@@ -1340,7 +1340,7 @@ jobs:
     name: Test Test and Analyse (Existing Shallow Checkout)
     needs: [filter]
     if: contains(fromJSON(needs.filter.outputs.changes), 'test-and-analyse') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || contains(fromJSON(needs.filter.outputs.changes), 'lockfile')
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
     steps:
@@ -1388,7 +1388,7 @@ jobs:
     name: Test Test and Analyse (Semgrep)
     needs: [filter]
     if: contains(fromJSON(needs.filter.outputs.changes), 'test-and-analyse') || contains(fromJSON(needs.filter.outputs.changes), 'workflows') || contains(fromJSON(needs.filter.outputs.changes), 'lockfile')
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
     steps:
@@ -1487,7 +1487,7 @@ jobs:
     name: Test Get PR
     needs: [filter]
     if: contains(fromJSON(needs.filter.outputs.changes), 'get-pr') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       pull-requests: read
@@ -1540,7 +1540,7 @@ jobs:
       - test-test-and-analyse-shallow
       - test-test-and-analyse-semgrep
     if: always()
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - name: PR Results Check
         uses: $/workflow-results
