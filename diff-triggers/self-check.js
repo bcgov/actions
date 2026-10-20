@@ -51,7 +51,6 @@ assert.throws(() => {
 
 // parseTriggers: supported formats
 assert.deepStrictEqual(parseTriggers('frontend/\nbackend/'), ['frontend/', 'backend/']);
-assert.deepStrictEqual(parseTriggers('["frontend/", "backend/"]'), ['frontend/', 'backend/']);
 assert.deepStrictEqual(parseTriggers('frontend/'), ['frontend/']);
 assert.deepStrictEqual(parseTriggers('"my path/"'), ['my path/']);
 
@@ -77,7 +76,8 @@ function expectFormatFail(raw) {
   }
 }
 expectFormatFail("('frontend/' 'backend/')");
-assert.deepStrictEqual(parseTriggers('frontend/, backend/'), ['frontend/', 'backend/']);
+expectFormatFail('frontend/, backend/');
+expectFormatFail('["frontend/", "backend/"]');
 expectFormatFail('frontend/;backend/');
 expectFormatFail('frontend/ backend/');
 
@@ -85,14 +85,13 @@ expectFormatFail('frontend/ backend/');
 const msg = triggersFormatMessage("('backend/' 'frontend/')").split('%0A');
 assert.ok(msg[0].startsWith('::error '), 'must be an error annotation');
 assert.ok(msg[0].includes("Invalid triggers input: ('backend/' 'frontend/')"), 'must name the bad value');
-assert.ok(msg[1].includes('triggers must be a multiline block'), 'must describe the accepted format');
+assert.ok(msg[1] === 'triggers takes one item per line, or a single value.', 'must describe the accepted format');
 assert.ok(msg.includes("  triggers: ('backend/' 'frontend/')"), 'must show the value');
 const after = msg.indexOf('  triggers: |');
 assert.ok(after > 0, 'must show the multiline form');
 assert.deepStrictEqual(msg.slice(after + 1, after + 3), ['    backend/', '    frontend/']);
-assert.ok(msg.includes(`Or: triggers: '["backend/","frontend/"]'`), 'must show JSON form');
 const spaced = triggersFormatMessage('backend/ frontend/').split('%0A');
 assert.ok(spaced[0].includes('Invalid triggers input: backend/ frontend/'));
-assert.deepStrictEqual(spaced.slice(spaced.indexOf('  triggers: |') + 1, -2), ['    backend/', '    frontend/']);
+assert.deepStrictEqual(spaced.slice(spaced.indexOf('  triggers: |') + 1, -1), ['    backend/', '    frontend/']);
 
 console.log('diff-triggers self-check: ok');

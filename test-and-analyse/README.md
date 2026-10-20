@@ -52,7 +52,7 @@ permissions:
 | `triggers` | _(omitted)_ | When omitted, tests always run |
 | `base` | repository default branch | Base to diff triggers against |
 | `token` | `${{ github.token }}` | |
-| `checkout_path` | `.` | |
+| `path` | `.` | |
 
 # Usage
 
@@ -70,7 +70,7 @@ permissions:
       npm run test:cov
 
     # Project/app directory (relative to workspace root)
-    dir: frontend
+    working_directory: frontend
 
     ### Versioning
     # Node.js version (for Node projects). If omitted, automatically detected.
@@ -112,7 +112,7 @@ permissions:
     # Knip dependency analysis (Node only). Options: off, warn (default), error
     dep_scan: warn
 
-    # Semgrep scan of dir (any language). Off by default; see Semgrep below.
+    # Semgrep scan of working_directory (any language). Off by default; see Semgrep below.
     semgrep: false
     # Rules: registry rulesets or files relative to the workspace root, one per line
     semgrep_config: p/default
@@ -170,7 +170,7 @@ jobs:
             mvn -B verify sonar:sonar \
               -Dsonar.organization=bcgov-sonarcloud \
               -Dsonar.projectKey=bcgov_your-project-key
-          dir: backend
+          working_directory: backend
           sonar_token: ${{ secrets.SONAR_TOKEN }}
           triggers: |
             backend/
@@ -194,7 +194,7 @@ jobs:
           commands: |
             pip install -r requirements.txt
             pytest --junitxml=junit.xml
-          dir: app
+          working_directory: app
           triggers: |
             app/
             requirements.txt
@@ -215,7 +215,7 @@ jobs:
           commands: |
             npm ci
             npm run test:cov
-          dir: frontend
+          working_directory: frontend
           node_version: "20"
           # supply_scan defaults to true (enabled) - strongly discouraged to disable
           dep_scan: off  # Disable dependency analysis
@@ -232,14 +232,14 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        dir: [backend, frontend]
+        working_directory: [backend, frontend]
         include:
-          - dir: backend
+          - working_directory: backend
             sonar_token: SONAR_TOKEN
             triggers: |
               backend/
               charts/backend
-          - dir: frontend
+          - working_directory: frontend
             sonar_token: SONAR_TOKEN
             triggers: |
               frontend/
@@ -251,12 +251,12 @@ jobs:
           commands: |
             npm ci
             npm run test:cov
-          dir: ${{ matrix.dir }}
+          working_directory: ${{ matrix.working_directory }}
           node_version: "20"
           sonar_args: |
             -Dsonar.exclusions=**/coverage/**,**/node_modules/**
             -Dsonar.organization=bcgov-sonarcloud
-            -Dsonar.projectKey=bcgov_${{ github.repository }}_${{ matrix.dir }}
+            -Dsonar.projectKey=bcgov_${{ github.repository }}_${{ matrix.working_directory }}
           sonar_token: ${{ secrets[matrix.sonar_token] }}
           triggers: ${{ matrix.triggers }}
           repository: bcgov/quickstart-openshift
@@ -280,7 +280,7 @@ Has the action been triggered by path changes? \[true|false\]
     commands: |
       npm ci
       npm run test:cov
-    dir: frontend
+    working_directory: frontend
     node_version: "20"
     triggers: |
       frontend/
@@ -327,7 +327,7 @@ Supply chain scanning is enabled by default. No configuration is required - it w
     commands: |
       npm ci
       npm run test:cov
-    dir: frontend
+    working_directory: frontend
     node_version: "20"
     supply_scan: false  # ⚠️ DANGEROUS: Disables security scanning - not recommended
 ```
@@ -361,7 +361,7 @@ The `dep_scan` parameter supports three modes:
     commands: |
       npm ci
       npm run test:cov
-    dir: frontend
+    working_directory: frontend
     node_version: "20"
     dep_scan: warn
 ```
@@ -374,7 +374,7 @@ The `dep_scan` parameter supports three modes:
     commands: |
       npm ci
       npm run test:cov
-    dir: frontend
+    working_directory: frontend
     node_version: "20"
     dep_scan: error
 ```
@@ -411,10 +411,10 @@ When `knip_config` is not provided, the action uses its default configuration. I
 - uses: bcgov/actions/test-and-analyse@vX.Y.Z
   with:
     dep_scan: error
-    knip_config: "configs/custom.knip.json"  # Path is relative to the GitHub workspace root, not to the `dir` input
+    knip_config: "configs/custom.knip.json"  # Path is relative to the GitHub workspace root, not to the `working_directory` input
 ```
 
-**Note:** The `knip_config` path is resolved relative to the GitHub workspace root (`github.workspace`), not relative to the `dir` input parameter. If you do not provide `knip_config`, the action will use its default configuration.
+**Note:** The `knip_config` path is resolved relative to the GitHub workspace root (`github.workspace`), not relative to the `working_directory` input. If you do not provide `knip_config`, the action will use its default configuration.
 
 Even better, tell us when you encounter false positives!  Your contributions are greatly appreciated, so please send suggestions by writing an issue or sending a PR.
 
@@ -464,7 +464,7 @@ Knip supports many JavaScript/TypeScript tools and frameworks out of the box. Fo
 
 # Semgrep - Static Analysis
 
-Optional, language-agnostic static analysis (Node, Java, Python and more) of `dir`. It runs after the tests and before the report step, including when an earlier step has failed, in the pinned `semgrep/semgrep` container with metrics off, so the runner needs Docker (GitHub-hosted Ubuntu runners have it). It is **off by default**; existing callers see no change.
+Optional, language-agnostic static analysis (Node, Java, Python and more) of `working_directory`. It runs after the tests and before the report step, including when an earlier step has failed, in the pinned `semgrep/semgrep` container with metrics off, so the runner needs Docker (GitHub-hosted Ubuntu runners have it). It is **off by default**; existing callers see no change.
 
 | Input | Default | Meaning |
 | ----- | ------- | ------- |
@@ -481,7 +481,7 @@ Semgrep's default ignore list applies (e.g. `node_modules/`, `dist/`, `test/`, `
   uses: bcgov/actions/test-and-analyse@vX.Y.Z
   with:
     commands: npm ci && npm test
-    dir: backend
+    working_directory: backend
     semgrep: true
     # semgrep_fail: true   # enforce once findings are cleaned up
 ```

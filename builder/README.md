@@ -87,11 +87,11 @@ Only GitHub Container Registry (`ghcr.io`) is supported.
 
     # Sets the build context/directory, which contains the build files
     # Optional, defaults to package name
-    build_context: ./frontend
+    context: ./frontend
 
     # Sets the Dockerfile with path
-    # Optional, defaults to {package}/Dockerfile or {build_context}/Dockerfile
-    build_file: ./frontend/Dockerfile
+    # Optional, defaults to {package}/Dockerfile or {context}/Dockerfile
+    file: ./frontend/Dockerfile
 
     # Fallback tag, used if no build was generated
     # Optional. Omit to always build fresh if triggers do not match
@@ -188,7 +188,7 @@ builds:
           frontend/
 ```
 
-# Example, Single Build with build_context, build_file and multiple tags
+# Example, Single Build with context, file and multiple tags
 
 Same as previous, but specifying build folder and Dockerfile.
 
@@ -200,8 +200,8 @@ builds:
       uses: bcgov/actions/builder@vX.Y.Z
       with:
         package: frontend
-        build_context: ./
-        build_file: subdir/Dockerfile
+        context: ./
+        file: subdir/Dockerfile
         tags: |
           ${{ github.event.number }}
           ${{ github.sha }}
@@ -268,7 +268,9 @@ build-arm64:
           ${{ github.event.number }}
           ${{ github.event.pull_request.head.sha }}
         tag_fallback: latest
-        triggers: ('${{ matrix.package }}/', '.github/workflows/pr-open.yml')
+        triggers: |
+          ${{ matrix.package }}/
+          .github/workflows/pr-open.yml
 ```
 
 A Mac pulls `ghcr.io/<organization>/<repository>/backend-arm64:<pull request number>`. The cluster still pulls `backend` at the head SHA on a pull request, and at the pull request number after merge.
@@ -360,7 +362,7 @@ Two SBOM formats are generated and uploaded as workflow artifacts:
 | `triggered`| Whether a build was triggered (`true/false`)|
 | `labels`   | Generated OCI labels                        |
 | `annotations` | Generated OCI annotations                   |
-| `registry_host` | The registry host name, always `ghcr.io` |
+| `registry` | The registry host name, always `ghcr.io` |
 | `image_path` | The full image path including the tag, always with a leading slash, in the format `/owner/repo/image:tag` (or `/owner/repo:tag` when the package matches the repository name) |
 | `source_sha` | Git commit SHA tagged on the image (PR head SHA, or `github.sha` on push) |
 

@@ -29,8 +29,8 @@ test('Package mapping - single package repo root', () => {
   );
 });
 
-test('Package mapping - multiple packages comma', () => {
-  const { imagePaths } = mapPackages('frontend, backend, migrations', 'bcgov/quickstart-openshift');
+test('Package mapping - multiple packages one per line', () => {
+  const { imagePaths } = mapPackages('frontend\nbackend\nmigrations', 'bcgov/quickstart-openshift');
   assert.strictEqual(Object.keys(imagePaths).length, 3, 'three packages');
   assert.strictEqual(imagePaths['frontend'], 'bcgov/quickstart-openshift/frontend', 'frontend path');
   assert.strictEqual(imagePaths['backend'], 'bcgov/quickstart-openshift/backend', 'backend path');
@@ -46,7 +46,7 @@ test('Package mapping - multiple packages newline', () => {
 });
 
 test('Package mapping - case normalization', () => {
-  const { imagePaths } = mapPackages('Frontend, QUICKSTART-Openshift', 'BCGov/Quickstart-Openshift');
+  const { imagePaths } = mapPackages('Frontend\nQUICKSTART-Openshift', 'BCGov/Quickstart-Openshift');
   assert.strictEqual(
     imagePaths['Frontend'],
     'bcgov/quickstart-openshift/frontend',
@@ -64,9 +64,9 @@ test('Package mapping - empty input rejected', () => {
   assert.strictEqual(Object.keys(imagePaths).length, 0, 'empty input yields no packages');
 });
 
-test('Package mapping - whitespace-only entries ignored', () => {
-  const { imagePaths } = mapPackages('  ,frontend,   ,backend  ,', 'bcgov/myapp');
-  assert.strictEqual(Object.keys(imagePaths).length, 2, 'whitespace-only entries are skipped');
+test('Package mapping - blank lines ignored', () => {
+  const { imagePaths } = mapPackages('  \nfrontend\n   \nbackend  \n', 'bcgov/myapp');
+  assert.strictEqual(Object.keys(imagePaths).length, 2, 'blank lines are skipped');
   assert.strictEqual(imagePaths['frontend'], 'bcgov/myapp/frontend', 'frontend retained');
   assert.strictEqual(imagePaths['backend'], 'bcgov/myapp/backend', 'backend retained');
 });
@@ -75,9 +75,9 @@ test('Package mapping - space separated packages are rejected', () => {
   assert.throws(() => mapPackages('frontend backend migrations', 'bcgov/myapp'), /Invalid packages input/);
 });
 
-test('Package mapping - JSON array', () => {
-  const { imagePaths } = mapPackages('["frontend", "backend"]', 'bcgov/myapp');
-  assert.deepStrictEqual(Object.keys(imagePaths), ['frontend', 'backend']);
+test('Package mapping - comma separated and JSON lists are rejected', () => {
+  assert.throws(() => mapPackages('frontend, backend', 'bcgov/myapp'), /Invalid packages input/);
+  assert.throws(() => mapPackages('["frontend", "backend"]', 'bcgov/myapp'), /Invalid packages input/);
 });
 
 test('Git plumbing sanity - HEAD resolution', () => {
@@ -439,7 +439,7 @@ test('runMain fork unresolvable revision exits 1', async () => {
       process.env.INPUT_REVISION = SHA;
       process.env.REVISION = SHA;
       process.env.DIR = dir;
-      process.env.INPUT_DIR = dir;
+      process.env.INPUT_WORKING_DIRECTORY = dir;
       delete process.env.GITHUB_TOKEN;
       delete process.env.GH_TOKEN;
       delete process.env.INPUT_GITHUB_TOKEN;
@@ -608,7 +608,7 @@ const ENV_KEYS = [
   'INPUT_REVISION',
   'REVISION',
   'DIR',
-  'INPUT_DIR',
+  'INPUT_WORKING_DIRECTORY',
   'GITHUB_TOKEN',
   'GH_TOKEN',
   'INPUT_GITHUB_TOKEN',
@@ -677,7 +677,7 @@ test('runMain same-repo unresolvable revision still exits 1', async () => {
       process.env.INPUT_REVISION = SHA;
       process.env.REVISION = SHA;
       process.env.DIR = dir;
-      process.env.INPUT_DIR = dir;
+      process.env.INPUT_WORKING_DIRECTORY = dir;
       delete process.env.INPUT_REPOSITORY;
       delete process.env.REPOSITORY;
       delete process.env.GITHUB_TOKEN;
@@ -1080,7 +1080,7 @@ test('runMain resolves PR image when git HEAD is a synthetic merge commit', asyn
     process.env.INPUT_REVISION = headSha;
     process.env.REVISION = headSha;
     process.env.DIR = repoDir;
-    process.env.INPUT_DIR = repoDir;
+    process.env.INPUT_WORKING_DIRECTORY = repoDir;
     delete process.env.GITHUB_TOKEN;
     delete process.env.INPUT_TOKEN;
     delete process.env.TOKEN;
@@ -1210,7 +1210,7 @@ test('runMain resolves PR image using GITHUB_EVENT_PATH merge_commit_sha without
     process.env.INPUT_REVISION = headSha;
     process.env.REVISION = headSha;
     process.env.DIR = repoDir;
-    process.env.INPUT_DIR = repoDir;
+    process.env.INPUT_WORKING_DIRECTORY = repoDir;
     delete process.env.GITHUB_TOKEN;
     delete process.env.INPUT_TOKEN;
     delete process.env.TOKEN;
@@ -1337,7 +1337,7 @@ test('runMain rejects two-parent merge commit on push event to prevent non-PR an
     process.env.INPUT_REVISION = headSha;
     process.env.REVISION = headSha;
     process.env.DIR = repoDir;
-    process.env.INPUT_DIR = repoDir;
+    process.env.INPUT_WORKING_DIRECTORY = repoDir;
     delete process.env.GITHUB_TOKEN;
     delete process.env.INPUT_TOKEN;
     delete process.env.TOKEN;
@@ -1456,7 +1456,7 @@ test('runMain ignores GITHUB_SHA fallback when GITHUB_REF is not synthetic merge
     process.env.INPUT_REVISION = headSha;
     process.env.REVISION = headSha;
     process.env.DIR = repoDir;
-    process.env.INPUT_DIR = repoDir;
+    process.env.INPUT_WORKING_DIRECTORY = repoDir;
     delete process.env.GITHUB_TOKEN;
     delete process.env.INPUT_TOKEN;
     delete process.env.TOKEN;
@@ -1624,7 +1624,7 @@ test('runMain resolves PR image for squash-merged commit on main when image revi
     process.env.INPUT_REVISION = squashSha;
     process.env.REVISION = squashSha;
     process.env.DIR = repoDir;
-    process.env.INPUT_DIR = repoDir;
+    process.env.INPUT_WORKING_DIRECTORY = repoDir;
     process.env.INPUT_TOKEN = 'mock-token';
 
     await runMain();
@@ -1791,6 +1791,7 @@ test('runMain resolves multiple packages (frontend, rctool) on squash-merged mai
   const { runMain } = require('../index.js');
   const origFetch = global.fetch;
   const origExit = process.exit;
+  const origArgv = process.argv;
   const saved = snapshotEnv();
   const cwd = process.cwd();
 
@@ -1918,14 +1919,16 @@ test('runMain resolves multiple packages (frontend, rctool) on squash-merged mai
     process.env.GITHUB_EVENT_NAME = 'push';
     process.env.GITHUB_REF = 'refs/heads/main';
     process.env.GITHUB_SHA = squashSha;
-    process.env.INPUT_PACKAGES = 'frontend, rctool';
-    process.env.PACKAGES = 'frontend, rctool';
+    // Packages as positional CLI arguments (node index.js frontend rctool)
+    delete process.env.INPUT_PACKAGES;
+    delete process.env.PACKAGES;
+    process.argv = [origArgv[0], origArgv[1], 'frontend', 'rctool'];
     process.env.INPUT_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
     process.env.REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
     process.env.INPUT_REVISION = squashSha;
     process.env.REVISION = squashSha;
     process.env.DIR = repoDir;
-    process.env.INPUT_DIR = repoDir;
+    process.env.INPUT_WORKING_DIRECTORY = repoDir;
     process.env.INPUT_TOKEN = 'mock-token';
 
     await runMain();
@@ -1937,6 +1940,7 @@ test('runMain resolves multiple packages (frontend, rctool) on squash-merged mai
   } finally {
     global.fetch = origFetch;
     process.exit = origExit;
+    process.argv = origArgv;
     process.chdir(cwd);
     restoreEnv(saved);
     fs.rmSync(repoDir, { recursive: true, force: true });
@@ -2059,7 +2063,7 @@ test('runMain resolves PR image when running on PR head commit checkout', async 
     process.env.INPUT_REVISION = headSha;
     process.env.REVISION = headSha;
     process.env.DIR = repoDir;
-    process.env.INPUT_DIR = repoDir;
+    process.env.INPUT_WORKING_DIRECTORY = repoDir;
     process.env.INPUT_TOKEN = 'mock-token';
 
     await runMain();
@@ -2207,7 +2211,7 @@ test('runMain resolves PR image when squash commit is walked back via max_depth'
     process.env.MAX_DEPTH = '5';
     process.env.INPUT_MAX_DEPTH = '5';
     process.env.DIR = repoDir;
-    process.env.INPUT_DIR = repoDir;
+    process.env.INPUT_WORKING_DIRECTORY = repoDir;
     process.env.INPUT_TOKEN = 'mock-token';
 
     await runMain();
@@ -2484,7 +2488,7 @@ test('strict token input: consumes only INPUT_TOKEN and ignores legacy fallbacks
       process.env.INPUT_REVISION = 'HEAD';
       process.env.REVISION = 'HEAD';
       process.env.DIR = dir;
-      process.env.INPUT_DIR = dir;
+      process.env.INPUT_WORKING_DIRECTORY = dir;
       delete process.env.GITHUB_EVENT_PATH;
 
       process.env.TOKEN = 'legacy-token';
@@ -2725,7 +2729,7 @@ test('runMain writes diagnostic summary to GITHUB_STEP_SUMMARY on resolution fai
     process.env.INPUT_REVISION = headSha;
     process.env.REVISION = headSha;
     process.env.DIR = repoDir;
-    process.env.INPUT_DIR = repoDir;
+    process.env.INPUT_WORKING_DIRECTORY = repoDir;
     delete process.env.TOKEN;
     delete process.env.INPUT_TOKEN;
 
@@ -2884,7 +2888,7 @@ test('runMain defaults max_depth to 1 when unset and does not walk to an ancesto
     delete process.env.MAX_DEPTH;
     delete process.env.INPUT_MAX_DEPTH;
     process.env.DIR = repoDir;
-    process.env.INPUT_DIR = repoDir;
+    process.env.INPUT_WORKING_DIRECTORY = repoDir;
     process.env.INPUT_TOKEN = 'mock-token';
 
     await assert.rejects(() => runMain(), /process\.exit called with code 1/);
@@ -2919,7 +2923,7 @@ test('parseTags splits lines, drops blanks and duplicates, rejects invalid tags'
   assert.deepStrictEqual(parseTags(''), []);
   assert.deepStrictEqual(parseTags('abc123\n\n  latest \r\nlatest\n'), ['abc123', 'latest']);
   assert.throws(() => parseTags('bad tag'), /Invalid tags input/);
-  assert.deepStrictEqual(parseTags('abc123, latest'), ['abc123', 'latest']);
+  assert.throws(() => parseTags('abc123, latest'), /Invalid tags input/);
   assert.throws(() => parseTags('bad\ttag\nok'), /Invalid tag/);
   assert.throws(() => parseTags('-leading'), /Invalid tag/);
   assert.throws(() => parseTags('a'.repeat(129)), /Invalid tag/);
@@ -3093,7 +3097,7 @@ async function runTagScenario({ packages, built, tags, tipSha, eventName = 'push
     delete process.env.REPOSITORY;
     process.env.INPUT_REVISION = headSha;
     delete process.env.REVISION;
-    process.env.INPUT_DIR = repoDir;
+    process.env.INPUT_WORKING_DIRECTORY = repoDir;
     delete process.env.DIR;
     process.env.INPUT_TOKEN = 'gh-token';
     if (tags === undefined) delete process.env.INPUT_TAGS;
@@ -3124,7 +3128,7 @@ test('runMain without tags performs no registry writes', async () => {
 
 test('runMain tags every resolved digest, including latest at the default-branch tip', async () => {
   const r = await runTagScenario({
-    packages: 'frontend, backend',
+    packages: 'frontend\nbackend',
     built: ['frontend', 'backend'],
     tags: 'prod-candidate\nlatest',
     tipSha: (h) => h
@@ -3169,7 +3173,7 @@ test('runMain never moves latest from a pull_request event, even at the default-
 
 test('runMain does not tag anything when a package is missing', async () => {
   const r = await runTagScenario({
-    packages: 'frontend, backend',
+    packages: 'frontend\nbackend',
     built: ['frontend'],
     tags: 'latest',
     tipSha: (h) => h

@@ -10,7 +10,7 @@ inputs:
     description: Commands to run tests, start with '|' for multi-line
     required: true
 
-  dir:
+  working_directory:
     description: App/package directory
     required: true
 
@@ -75,7 +75,7 @@ inputs:
         triggers: |
           backend/
           frontend/
-      Also accepts a JSON array or a single path. See diff-triggers.
+      A single path also works. See diff-triggers.
   debug:
     description: Enable debug logging
     default: "false"
@@ -92,7 +92,7 @@ inputs:
     default: ""
 
   semgrep:
-    description: "Run a Semgrep scan of dir (true/false). Off by default. Needs Docker on the runner"
+    description: "Run a Semgrep scan of working_directory (true/false). Off by default. Needs Docker on the runner"
     default: "false"
 
   semgrep_config:
@@ -126,7 +126,7 @@ inputs:
       Empty checks out the repository default.
     default: ""
 
-  checkout_path:
+  path:
     description: >-
       Path where the repository should be checked out, and the path probed to
       decide whether a clone is needed at all. Default is current directory.
@@ -223,7 +223,7 @@ runs:
 
 
     # Clone when the caller asked for a repository other than this one, or when
-    # checkout_path holds none. A bare .git probe cannot decide: Check Triggers
+    # path holds none. A bare .git probe cannot decide: Check Triggers
     # above may already have left a clone of *this* repo in the workspace, and
     # skipping on that would analyse the wrong project.
     - name: Internal Project Checkout
@@ -231,24 +231,24 @@ runs:
       if: >-
         steps.final_triggered.outputs.triggered == 'true' &&
         (inputs.repository != github.repository ||
-        hashFiles(format('{0}/.git/HEAD', inputs.checkout_path), format('{0}/.git', inputs.checkout_path)) == '')
+        hashFiles(format('{0}/.git/HEAD', inputs.path), format('{0}/.git', inputs.path)) == '')
       with:
         clean: false
         repository: ${{ inputs.repository }}
         ref: ${{ inputs.ref }}
         token: ${{ inputs.token }}
-        path: ${{ inputs.checkout_path }}
+        path: ${{ inputs.path }}
         fetch-depth: 0
 
-    # Sonar reads the repo enclosing projectBaseDir (inputs.dir) for blame and
+    # Sonar reads the repo enclosing projectBaseDir (inputs.working_directory) for blame and
     # new-code detection, and a caller's own checkout is usually depth 1.
     # Deepen in place rather than re-cloning over them.
     - name: Deepen shallow history
       if: >-
         steps.final_triggered.outputs.triggered == 'true' &&
-        hashFiles(format('{0}/.git/HEAD', inputs.checkout_path), format('{0}/.git', inputs.checkout_path)) != ''
+        hashFiles(format('{0}/.git/HEAD', inputs.path), format('{0}/.git', inputs.path)) != ''
       shell: bash
-      working-directory: ${{ inputs.checkout_path }}
+      working-directory: ${{ inputs.path }}
       run: |
         # A worktree keeps its shallow marker in the main repo's gitdir, so probe
         # git rather than looking for .git/shallow here.
@@ -263,8 +263,8 @@ runs:
       env:
         INPUT_CACHE: ${{ inputs.cache }}
         INPUT_LANGUAGE: ${{ steps.inputs.outputs.language }}
-        INPUT_DIR: ${{ inputs.dir }}
-        INPUT_CHECKOUT_PATH: ${{ inputs.checkout_path }}
+        INPUT_DIR: ${{ inputs.working_directory }}
+        INPUT_CHECKOUT_PATH: ${{ inputs.path }}
       run: |
         "${{ github.action_path }}/cache.sh"
 
@@ -275,8 +275,8 @@ runs:
       env:
         INPUT_NODE_VERSION: ${{ inputs.node_version }}
         INPUT_NODE_VERSION_FILE: ${{ inputs.node_version_file }}
-        INPUT_DIR: ${{ inputs.dir }}
-        INPUT_CHECKOUT_PATH: ${{ inputs.checkout_path }}
+        INPUT_DIR: ${{ inputs.working_directory }}
+        INPUT_CHECKOUT_PATH: ${{ inputs.path }}
       run: |
         "${{ github.action_path }}/node-version.sh"
 
@@ -288,8 +288,8 @@ runs:
         node-version-file: ${{ steps.node_version_logic.outputs.node_version_file }}
         cache: ${{ steps.cache_logic.outputs.cache }}
         cache-dependency-path: |
-          ${{ inputs.dir }}/${{ steps.cache_logic.outputs.cache == 'yarn' && 'yarn.lock' || (steps.cache_logic.outputs.cache == 'pnpm' && 'pnpm-lock.yaml' || 'package-lock.json') }}
-          ${{ inputs.checkout_path }}/${{ steps.cache_logic.outputs.cache == 'yarn' && 'yarn.lock' || (steps.cache_logic.outputs.cache == 'pnpm' && 'pnpm-lock.yaml' || 'package-lock.json') }}
+          ${{ inputs.working_directory }}/${{ steps.cache_logic.outputs.cache == 'yarn' && 'yarn.lock' || (steps.cache_logic.outputs.cache == 'pnpm' && 'pnpm-lock.yaml' || 'package-lock.json') }}
+          ${{ inputs.path }}/${{ steps.cache_logic.outputs.cache == 'yarn' && 'yarn.lock' || (steps.cache_logic.outputs.cache == 'pnpm' && 'pnpm-lock.yaml' || 'package-lock.json') }}
 
     - name: Determine Java Version
       id: java_version_logic
@@ -298,8 +298,8 @@ runs:
       env:
         INPUT_JAVA_VERSION: ${{ inputs.java_version }}
         INPUT_JAVA_VERSION_FILE: ${{ inputs.java_version_file }}
-        INPUT_DIR: ${{ inputs.dir }}
-        INPUT_CHECKOUT_PATH: ${{ inputs.checkout_path }}
+        INPUT_DIR: ${{ inputs.working_directory }}
+        INPUT_CHECKOUT_PATH: ${{ inputs.path }}
       run: |
         "${{ github.action_path }}/java-version.sh"
 
@@ -313,9 +313,9 @@ runs:
         distribution: ${{ inputs.java_distribution }}
         cache: ${{ steps.cache_logic.outputs.cache }}
         cache-dependency-path: |
-          ${{ inputs.dir }}/**/*.xml
-          ${{ inputs.dir }}/**/*.gradle*
-          ${{ inputs.dir }}/**/sbt
+          ${{ inputs.working_directory }}/**/*.xml
+          ${{ inputs.working_directory }}/**/*.gradle*
+          ${{ inputs.working_directory }}/**/sbt
 
     - name: Determine Python Version
       id: python_version_logic
@@ -324,8 +324,8 @@ runs:
       env:
         INPUT_PYTHON_VERSION: ${{ inputs.python_version }}
         INPUT_PYTHON_VERSION_FILE: ${{ inputs.python_version_file }}
-        INPUT_DIR: ${{ inputs.dir }}
-        INPUT_CHECKOUT_PATH: ${{ inputs.checkout_path }}
+        INPUT_DIR: ${{ inputs.working_directory }}
+        INPUT_CHECKOUT_PATH: ${{ inputs.path }}
       run: |
         "${{ github.action_path }}/python-version.sh"
 
@@ -338,14 +338,14 @@ runs:
         python-version-file: ${{ steps.python_version_logic.outputs.python_version_file }}
         cache: ${{ steps.cache_logic.outputs.cache }}
         cache-dependency-path: |
-          ${{ inputs.dir }}/**/requirements*.txt
-          ${{ inputs.dir }}/**/pyproject.toml
-          ${{ inputs.dir }}/**/Pipfile.lock
+          ${{ inputs.working_directory }}/**/requirements*.txt
+          ${{ inputs.working_directory }}/**/pyproject.toml
+          ${{ inputs.working_directory }}/**/Pipfile.lock
 
     # Run tests
     - if: steps.final_triggered.outputs.triggered == 'true'
       shell: bash
-      working-directory: ${{ inputs.dir }}
+      working-directory: ${{ inputs.working_directory }}
       env:
         SONAR_TOKEN: ${{ inputs.sonar_token }}
         MAVEN_OPTS: "-Xmx2048m -Xss2m -XX:MaxMetaspaceSize=512m -Djava.awt.headless=true -XX:+HeapDumpOnOutOfMemoryError"
@@ -367,7 +367,7 @@ runs:
       env:
         SONAR_TOKEN: ${{ inputs.sonar_token }}
       with:
-        projectBaseDir: ${{ inputs.dir }}
+        projectBaseDir: ${{ inputs.working_directory }}
         args: >
           ${{ inputs.sonar_args }}
 
@@ -375,7 +375,7 @@ runs:
     - name: Knip Dependency Analysis
       id: knip_analysis
       if: steps.final_triggered.outputs.triggered == 'true' && steps.inputs.outputs.dep_scan != 'off' && steps.inputs.outputs.language == 'node'
-      working-directory: ${{ inputs.dir }}
+      working-directory: ${{ inputs.working_directory }}
       shell: bash
       run: |
         # Set config
@@ -386,7 +386,7 @@ runs:
           FOUND_CONFIG=""
           WORKSPACE_PATH=$(git rev-parse --show-toplevel 2>/dev/null || echo "${{ github.workspace }}")
 
-          # 1. Candidate config files in the current app/package directory (inputs.dir)
+          # 1. Candidate config files in the current app/package directory (inputs.working_directory)
           APP_CANDIDATES=(
             "knip.json"
             ".knip.json"
@@ -427,7 +427,7 @@ runs:
             done
           fi
 
-          # 3. Check standard configuration files in the workspace root (only if workspace root is different from inputs.dir)
+          # 3. Check standard configuration files in the workspace root (only if workspace root is different from inputs.working_directory)
           if [ -z "$FOUND_CONFIG" ] && [ "$(pwd)" != "$WORKSPACE_PATH" ]; then
             for file in "${APP_CANDIDATES[@]}"; do
               if [ -f "$WORKSPACE_PATH/$file" ]; then
@@ -465,7 +465,7 @@ runs:
       id: semgrep
       if: steps.final_triggered.outputs.triggered == 'true' && steps.inputs.outputs.semgrep == 'true' && (success() || failure())
       shell: bash
-      working-directory: ${{ inputs.dir }}
+      working-directory: ${{ inputs.working_directory }}
       env:
         SEMGREP_IMAGE: semgrep/semgrep:1.179.0@sha256:93963d9295a366f59e4850127b1550400ee7b388f04fe144e4a1f6325d96e01b
         INPUT_SEMGREP_CONFIG: ${{ inputs.semgrep_config }}
@@ -482,7 +482,7 @@ runs:
       if: steps.final_triggered.outputs.triggered == 'true' && (success() || failure())
       uses: $/test-and-analyse/reporter
       with:
-        dir: ${{ inputs.dir }}
+        dir: ${{ inputs.working_directory }}
         dep_scan: ${{ steps.inputs.outputs.dep_scan }}
         knip_output: knip-output.json
         language: ${{ steps.inputs.outputs.language }}

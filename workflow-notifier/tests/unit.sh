@@ -508,7 +508,6 @@ EOF
     INPUT_NOTIFY_AUTHOR="true" \
     INPUT_NOTIFY_CODEOWNERS="always" \
     INPUT_DRY_RUN="true" \
-    INPUT_ASSIGN="true" \
     GITHUB_TRIGGERING_ACTOR="leadauthor")
 
   assert_contains "$out" "--assignee leadauthor,u01,u02,u03,u04,u05,u06,u07,u08,u09" \
@@ -631,8 +630,7 @@ test_create_when_no_open_match() {
   out=$(run_action "$FIXTURE_DIR" \
     INPUT_TITLE="TEST Deployment Failure: api" \
     INPUT_BODY="Boom" \
-    INPUT_LABELS="bug, failure" \
-    INPUT_ASSIGN="true" \
+    INPUT_LABELS=$'bug\nfailure' \
     INPUT_TOKEN="dummy-token" \
     INPUT_DRY_RUN="false" \
     GITHUB_REPOSITORY="bcgov/actions" \
@@ -669,8 +667,7 @@ test_comment_on_exact_title() {
   out=$(run_action "$FIXTURE_DIR" \
     INPUT_TITLE="TEST Deployment Failure: api" \
     INPUT_BODY="Boom" \
-    INPUT_LABELS="bug,failure" \
-    INPUT_ASSIGN="true" \
+    INPUT_LABELS=$'bug\nfailure' \
     INPUT_TOKEN="dummy-token" \
     INPUT_DRY_RUN="false" \
     GITHUB_REPOSITORY="bcgov/actions" \

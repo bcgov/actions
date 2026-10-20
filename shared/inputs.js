@@ -37,28 +37,28 @@ function stripQuotes(s) {
 
 /**
  * Error text for a list in an unsupported format. Names the bad value and
- * shows the same items in the accepted format. Newlines are encoded as %0A so
- * the annotation keeps its layout.
+ * shows the same items one per line. Newlines are encoded as %0A so the
+ * annotation keeps its layout.
  * @param {string} name - input name, e.g. triggers
  * @param {string} raw
  * @returns {string}
  */
 function listFormatMessage(name, raw) {
   const trimmed = raw.trim();
-  const inner = trimmed.startsWith('(') && trimmed.endsWith(')') ? trimmed.slice(1, -1) : trimmed;
+  const inner = /^[([].*[)\]]$/s.test(trimmed) ? trimmed.slice(1, -1) : trimmed;
   const found = (inner.match(/'[^']*'|"[^"]*"|[^\s,;]+/g) || [])
     .map(t => stripQuotes(t.trim()))
     .filter(Boolean);
   const items = found.length ? found : ['backend/', 'frontend/'];
   return [
     `::error title=${name}: list format::Invalid ${name} input: ${trimmed}`,
-    `${name} must be a multiline block (one item per line), a comma-separated line, or a JSON array.`,
+    `${name} takes one item per line, or a single value.`,
     'Got:',
     `  ${name}: ${trimmed}`,
     'Use:',
     `  ${name}: |`,
-    ...items.map(i => `    ${i}`),
-    `Or: ${name}: '${JSON.stringify(items)}'`,
+    // Items with spaces keep their quotes, so the suggested block parses
+    ...items.map(i => `    ${/\s/.test(i) ? `"${i}"` : i}`),
     `Multiline input syntax: ${WITH_DOCS}`,
   ].join('%0A');
 }
@@ -70,39 +70,27 @@ const WITH_DOCS =
 class InputError extends Error {}
 
 /**
- * Split on commas that are not inside {...}, so globs like src/{a,b}/** stay whole.
+ * True when s has a comma outside {...}, so globs like src/{a,b}/** are one item.
  * @param {string} s
- * @returns {string[]}
+ * @returns {boolean}
  */
-function splitCommas(s) {
-  const out = [];
+function hasListComma(s) {
   let depth = 0;
-  let cur = '';
   for (const ch of s) {
     if (ch === '{') depth++;
     if (ch === '}') depth = Math.max(0, depth - 1);
-    if (ch === ',' && depth === 0) {
-      out.push(cur);
-      cur = '';
-    } else {
-      cur += ch;
-    }
+    if (ch === ',' && depth === 0) return true;
   }
-  out.push(cur);
-  return out;
+  return false;
 }
 
 /**
- * Parse a list input.
+ * Parse a list input: one item per line, or a single value.
  *
- * Accepted, in order of preference:
- *   - multiline: one item per line (blank lines ignored)
- *   - comma separated on one line: a, b (commas inside {...} globs are kept)
- *   - JSON array: ["a", "b"]
- * A multiline value is never split on commas. One layer of quotes around
- * each item is removed.
- * Bash-style parenthesized lists and semicolon or space separated lines throw
- * an InputError whose message is listFormatMessage().
+ * Blank lines are ignored and one layer of quotes around each item is
+ * removed. An item that holds a list of its own (commas outside {...} globs,
+ * semicolons, spaces outside quotes, or [..] / (..) brackets) throws an
+ * InputError whose message is listFormatMessage().
  *
  * @param {string} raw
  * @param {string} [name]
@@ -113,41 +101,18 @@ function parseList(raw, name = 'input') {
   if (!trimmed) return [];
 
   const bad = () => new InputError(listFormatMessage(name, trimmed));
-
-  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-    let parsed;
-    try {
-      parsed = JSON.parse(trimmed);
-    } catch {
-      throw bad();
-    }
-    if (!Array.isArray(parsed)) throw bad();
-    return parsed.map(t => String(t).trim()).filter(Boolean);
-  }
-
-  if (trimmed.startsWith('(') && trimmed.endsWith(')')) throw bad();
-
-  if (trimmed.includes('\n')) {
-    return trimmed
-      .split(/\r?\n/)
-      .map(line => stripQuotes(line.trim()))
-      .filter(Boolean);
-  }
-
   const quoted = t => /^'[^']*'$|^"[^"]*"$/.test(t);
-  if (trimmed.includes(';')) throw bad();
+  if (/^[([].*[)\]]$/s.test(trimmed)) throw bad();
 
-  if (trimmed.includes(',') && !quoted(trimmed)) {
-    const raw = splitCommas(trimmed).map(t => t.trim());
-    const items = raw.map(stripQuotes);
-    if (raw.some((t, i) => /\s/.test(items[i]) || (/['"]/.test(t) && !quoted(t)))) throw bad();
-    return items.filter(Boolean);
+  const items = [];
+  for (const line of trimmed.split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t) continue;
+    if (!quoted(t) && (/[\s;'"]/.test(t) || hasListComma(t) || /^[([]|[)\]]$/.test(t))) throw bad();
+    const item = stripQuotes(t);
+    if (item) items.push(item);
   }
-
-  if (/\s/.test(trimmed) && !quoted(trimmed)) throw bad();
-
-  const single = stripQuotes(trimmed);
-  return single ? [single] : [];
+  return items;
 }
 
 /**
@@ -218,7 +183,7 @@ module.exports = {
 /*
  * CLI for composite actions. Reads the value from INPUT_<NAME> (set it with
  * `env:`), prints the result on stdout, exits 1 with an annotation on error.
- *   list <name>                 one item per line
+ *   list <name>                 one item per line (input: one per line or a single value)
  *   bool <name> [true|false]    true or false (second arg is the default)
  *   enum <name> <a,b,c> <dflt>  the chosen value
  *   debug                       true or false

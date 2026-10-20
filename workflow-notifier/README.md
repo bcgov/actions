@@ -23,10 +23,9 @@ The action reads `CODEOWNERS` from the **job workspace**, not from the action bu
 | `debug` | Enable debug logging | `"false"` | No |
 | `title` | Issue title. An open issue with this exact title gets a comment for each later run. A closed issue is not reused. | | **Yes** |
 | `body` | Issue body (pre-filled with workflow run URL if omitted) | | No |
-| `labels` | Labels to add to the issue: one per line, comma separated, or a JSON array | `"bug,failure"` | No |
-| `assign` | Whether to assign owners to the issue | `"true"` | No |
+| `labels` | Labels to add to the issue: one per line, or a single label | `bug` and `failure`, one per line | No |
 | `notify_author` | Whether to notify the triggering author/merger on failure | `"true"` | No |
-| `notify_codeowners` | When to notify repository CODEOWNERS on failure: `always`, `fallback` or `never`. By default (`fallback`), CODEOWNERS are only alerted if no human author/operator was resolved (e.g. scheduled cron runs). `always` always includes CODEOWNERS; `never` never does. The old `true`/`false` values fail with an error naming the accepted values. | `"fallback"` | No |
+| `notify_codeowners` | When to notify repository CODEOWNERS on failure: `always`, `fallback` or `never`. By default (`fallback`), CODEOWNERS are only alerted if no human author/operator was resolved (e.g. scheduled cron runs). `always` always includes CODEOWNERS; `never` never does. | `"fallback"` | No |
 | `dry_run` | If true, logs the issue create or comment without calling it | `"false"` | No |
 
 ## Outputs
@@ -34,7 +33,7 @@ The action reads `CODEOWNERS` from the **job workspace**, not from the action bu
 | Output | Description |
 |---|---|
 | `issue_number` | The created issue number, or the open issue that received the comment (0 if dry run) |
-| `assignees` | JSON array of assigned owners, e.g. `["alice","bob"]` |
+| `assignees` | JSON array of assigned owners, e.g. `["alice","bob"]`. Everyone `notify_author` and `notify_codeowners` select is assigned on create (up to 10); set `notify_author: false` and `notify_codeowners: never` to assign nobody. |
 
 ## Usage
 
@@ -57,7 +56,6 @@ export INPUT_DEBUG="true"
 export INPUT_TITLE="Local Test Failure"
 export INPUT_BODY="Testing action script locally"
 export INPUT_LABELS="bug,test"
-export INPUT_ASSIGN="false"
 export INPUT_DRY_RUN="true"
 export GITHUB_REPOSITORY="owner/repo"
 export GITHUB_RUN_ID="0"

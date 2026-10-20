@@ -7,9 +7,7 @@ branding:
 inputs:
   triggers:
     description: >-
-      Paths used to trigger an event. Prefer a multiline string (one path per
-      line). A comma-separated line, a JSON array and a single path are also
-      supported.
+      Paths used to trigger an event: one path per line, or a single path.
       Always triggers if omitted.
     required: false
   debug:

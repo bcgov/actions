@@ -14,9 +14,9 @@ inputs:
     default: "false"
 
   ### Typical / recommended
-  build_context:
+  context:
     description: Build context, not required for self-contained package/default directory
-  build_file:
+  file:
     description: Dockerfile with path, not required for self-contained package/default directory
   sbom:
     default: "true"
@@ -44,11 +44,11 @@ inputs:
     default: amd64
   triggers:
     description: |
-      Paths used to trigger a build. Prefer multiline:
+      Paths used to trigger a build: one path per line, or a single path.
         triggers: |
           backend/
           frontend/
-      Legacy parenthesized lists are still accepted; see diff-triggers.
+      See diff-triggers.
 
   ### Usually a bad idea / not recommended
   build_args:
@@ -92,9 +92,9 @@ outputs:
     description: "Generated OCI annotations"
     value: ${{ steps.tags.outputs.annotations }}
 
-  registry_host:
+  registry:
     description: "The registry host name, always `ghcr.io`"
-    value: ${{ steps.vars.outputs.registry_host }}
+    value: ${{ steps.vars.outputs.registry }}
 
   image_path:
     description: "The full image path including the tag, always with a leading slash, in the format `/owner/repo/image:tag` (or `/owner/repo:tag` when the package matches the repository name)"
@@ -187,7 +187,7 @@ runs:
         echo "image_path=${image_path}" >> "$GITHUB_OUTPUT"
         echo "publish_package=${publish_package}" >> "$GITHUB_OUTPUT"
         echo "image_name=${registry}/${image_path}" >> "$GITHUB_OUTPUT"
-        echo "registry_host=${registry}" >> "$GITHUB_OUTPUT"
+        echo "registry=${registry}" >> "$GITHUB_OUTPUT"
         echo "source_sha=${sha}" >> "$GITHUB_OUTPUT"
         echo "can_push=${can_push}" >> "$GITHUB_OUTPUT"
         {
@@ -223,14 +223,14 @@ runs:
     - name: Log in to the Container registry
       uses: docker/login-action@v4
       with:
-        registry: ${{ steps.vars.outputs.registry_host }}
+        registry: ${{ steps.vars.outputs.registry }}
         username: ${{ inputs.username }}
         password: ${{ inputs.token }}
 
     # Check if a build is required (steps.build.outputs.triggered=true|false)
     - name: Check for builds
       env:
-        URL_FALLBACK: ${{ steps.vars.outputs.registry_host }}/${{ steps.vars.outputs.image_path }}:${{ inputs.tag_fallback }}
+        URL_FALLBACK: ${{ steps.vars.outputs.registry }}/${{ steps.vars.outputs.image_path }}:${{ inputs.tag_fallback }}
         DEBUG: ${{ steps.inputs.outputs.debug }}
       id: build
       shell: bash
@@ -284,7 +284,7 @@ runs:
       uses: shrink/actions-docker-registry-tag@e6aaef25c595b6e0edd18bf4c7dbfea3abd43299 # v5
       if: steps.build.outputs.triggered != 'true' && steps.vars.outputs.can_push == 'true'
       with:
-        registry: ${{ steps.vars.outputs.registry_host }}
+        registry: ${{ steps.vars.outputs.registry }}
         repository: ${{ steps.vars.outputs.image_path }}
         target: ${{ inputs.tag_fallback }}
         tags: |
@@ -375,7 +375,7 @@ runs:
         if [ -n "${INPUT_TAGS}" ]; then
           filtered_tags=$(printf '%s\n' "${INPUT_TAGS}" | grep -v '^$' || true)
           if [ -n "${filtered_tags}" ]; then
-            final_tags=$(printf '%s\n' "${filtered_tags}" | sed "s|^|${{ steps.vars.outputs.registry_host }}/${{ steps.vars.outputs.image_path }}:|" | tr '[:upper:]' '[:lower:]' | paste -sd,)
+            final_tags=$(printf '%s\n' "${filtered_tags}" | sed "s|^|${{ steps.vars.outputs.registry }}/${{ steps.vars.outputs.image_path }}:|" | tr '[:upper:]' '[:lower:]' | paste -sd,)
           fi
         fi
 
@@ -401,14 +401,14 @@ runs:
       if: steps.build.outputs.triggered == 'true'
       uses: docker/build-push-action@v7
       with:
-        context: .builder-context/${{ inputs.build_context || inputs.package }}
-        file: .builder-context/${{ inputs.build_file || format('{0}/Dockerfile', inputs.package) }}
+        context: .builder-context/${{ inputs.context || inputs.package }}
+        file: .builder-context/${{ inputs.file || format('{0}/Dockerfile', inputs.package) }}
         push: ${{ steps.vars.outputs.can_push == 'true' }}
         tags: ${{ steps.tags.outputs.final_tags }}
         labels: ${{ steps.tags.outputs.labels }}
         annotations: ${{ steps.tags.outputs.annotations }}
-        cache-from: type=registry,ref=${{ steps.vars.outputs.registry_host }}/${{ steps.vars.outputs.image_path }}:buildcache
-        cache-to: ${{ steps.vars.outputs.can_push == 'true' && format('type=registry,ref={0}/{1}:buildcache,mode=max', steps.vars.outputs.registry_host, steps.vars.outputs.image_path) || '' }}
+        cache-from: type=registry,ref=${{ steps.vars.outputs.registry }}/${{ steps.vars.outputs.image_path }}:buildcache
+        cache-to: ${{ steps.vars.outputs.can_push == 'true' && format('type=registry,ref={0}/{1}:buildcache,mode=max', steps.vars.outputs.registry, steps.vars.outputs.image_path) || '' }}
         build-args: ${{ inputs.build_args }}
         secrets: |
           ${{ inputs.secrets }}
@@ -436,7 +436,7 @@ runs:
         # Install Syft
         curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
 
-        IMAGE="${{ steps.vars.outputs.registry_host }}/${{ steps.vars.outputs.image_path }}@${{ steps.build_and_push.outputs.digest }}"
+        IMAGE="${{ steps.vars.outputs.registry }}/${{ steps.vars.outputs.image_path }}@${{ steps.build_and_push.outputs.digest }}"
         PACKAGE_SANITIZED=$(echo "${{ steps.vars.outputs.publish_package }}" | tr '/:' '-' | tr -d ' ')
         echo "package_sanitized=${PACKAGE_SANITIZED}" >> $GITHUB_OUTPUT
 
@@ -504,7 +504,7 @@ runs:
       if: steps.build.outputs.triggered == 'true' && steps.vars.outputs.can_push == 'true' && steps.attest_check.outputs.can_attest == 'true'
       uses: actions/attest-build-provenance@v4
       with:
-        subject-name: ${{ steps.vars.outputs.registry_host }}/${{ steps.vars.outputs.image_path }}
+        subject-name: ${{ steps.vars.outputs.registry }}/${{ steps.vars.outputs.image_path }}
         subject-digest: ${{ steps.build_and_push.outputs.digest }}
 
 
@@ -518,7 +518,7 @@ runs:
           # Derive image_path from the actual tags generated/pushed
           # steps.tags.outputs.final_tags is a comma-separated list of full URLs
           full_primary_image=$(echo "${{ steps.tags.outputs.final_tags }}" | cut -d, -f1)
-          image_path=$(echo "${full_primary_image}" | sed 's|^${{ steps.vars.outputs.registry_host }}||')
+          image_path=$(echo "${full_primary_image}" | sed 's|^${{ steps.vars.outputs.registry }}||')
         else
           echo "digest=${{ steps.build.outputs.fallback_digest }}" >> $GITHUB_OUTPUT
           # For retagged images, use the first tag from inputs.tags or fallback
@@ -539,7 +539,7 @@ runs:
         echo "---- Build Summary ----"
         echo "triggered: ${{ steps.build.outputs.triggered }}"
         echo "digest: ${{ steps.final_outputs.outputs.digest }}"
-        echo "registry_host: ${{ steps.vars.outputs.registry_host }}"
+        echo "registry: ${{ steps.vars.outputs.registry }}"
         echo "image_path: ${{ steps.final_outputs.outputs.image_path }}"
         echo "source_sha: ${{ steps.resolved_sha.outputs.source_sha || steps.vars.outputs.source_sha }}"
 
@@ -549,7 +549,7 @@ runs:
         echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
         echo "| **triggered** | \`${{ steps.build.outputs.triggered }}\` |" >> $GITHUB_STEP_SUMMARY
         echo "| **digest** | \`${{ steps.final_outputs.outputs.digest }}\` |" >> $GITHUB_STEP_SUMMARY
-        echo "| **registry_host** | \`${{ steps.vars.outputs.registry_host }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| **registry** | \`${{ steps.vars.outputs.registry }}\` |" >> $GITHUB_STEP_SUMMARY
         echo "| **image_path** | \`${{ steps.final_outputs.outputs.image_path }}\` |" >> $GITHUB_STEP_SUMMARY
         echo "| **source_sha** | \`${{ steps.resolved_sha.outputs.source_sha || steps.vars.outputs.source_sha }}\` |" >> $GITHUB_STEP_SUMMARY
 
@@ -586,5 +586,5 @@ runs:
           echo ""
           echo "WARNING: ${msg}"
           echo ""
-          echo "Image: \`${{ steps.vars.outputs.registry_host }}/${IMAGE_PATH}:${SOURCE_SHA}\`"
+          echo "Image: \`${{ steps.vars.outputs.registry }}/${IMAGE_PATH}:${SOURCE_SHA}\`"
         } >> "$GITHUB_STEP_SUMMARY"

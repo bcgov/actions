@@ -7,8 +7,8 @@ branding:
 inputs:
   packages:
     description: |
-      One or more package names in this repository: one per line (preferred),
-      comma separated, or a JSON array. Same mapping as image-tracker: `<owner>/<repo>/<package>`, or
+      One or more package names in this repository: one per line, or a
+      single name. Same mapping as image-tracker: `<owner>/<repo>/<package>`, or
       `<owner>/<repo>` when the package name matches the repository name.
     required: true
   dry_run:
@@ -16,8 +16,8 @@ inputs:
     default: 'true'
   keep_digests:
     description: |
-      Deployed manifest digests to keep (sha256:...): one per line, comma
-      separated, or a JSON array, e.g. image-tracker `digests` values. Their index children
+      Deployed manifest digests to keep (sha256:...): one per line, or a
+      single digest, e.g. image-tracker `digests` values. Their index children
       are kept too.
     required: false
   token:

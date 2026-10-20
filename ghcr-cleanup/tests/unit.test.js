@@ -271,11 +271,7 @@ test('Inputs parse lists and dry_run', () => {
   assert.strictEqual(inputs.dryRun, true)
   assert.strictEqual(inputs.keepDigests.size, 2)
   assert.deepStrictEqual(
-    parseInputs({...env, INPUT_PACKAGES: 'backend, frontend'}).packages,
-    ['backend', 'frontend']
-  )
-  assert.deepStrictEqual(
-    parseInputs({...env, INPUT_PACKAGES: '["backend"]'}).packages,
+    parseInputs({...env, INPUT_PACKAGES: 'backend'}).packages,
     ['backend']
   )
   assert.strictEqual(

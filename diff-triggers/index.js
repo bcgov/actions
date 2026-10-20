@@ -4,8 +4,8 @@ const fs = require('fs');
 const { InputError, getInput, getToken, isDebug, parseBool, parseList, stripQuotes } = require('../shared/inputs.js');
 
 /**
- * Parse trigger paths with the shared list parser (multiline preferred,
- * comma separated or a JSON array). Unsupported formats print the shared
+ * Parse trigger paths with the shared list parser (one path per line, or a
+ * single path). Unsupported formats print the shared
  * format error (value plus a multiline example) and exit 1.
  * @param {string} raw
  * @returns {string[]}
