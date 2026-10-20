@@ -4,7 +4,7 @@
 
 | Kind | Accepted | Rejected |
 |---|---|---|
-| List | one item per line (preferred), `a, b` on one line, or a JSON array `["a", "b"]` | bash `('a' 'b')`, `a b`, `a;b`. The error names the value and shows the fix. |
+| List | one item per line, or a single value | `a, b`, JSON arrays, bash `('a' 'b')`, `a b`, `a;b`. The error names the value and shows it one item per line. |
 | Boolean | `true` / `false` (any case) | anything else |
 | Enum | one of the listed values (any case) | anything else |
 | Debug | the `debug` input, or a run re-run with debug logging (`RUNNER_DEBUG=1`) | |

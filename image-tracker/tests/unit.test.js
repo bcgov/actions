@@ -29,8 +29,8 @@ test('Package mapping - single package repo root', () => {
   );
 });
 
-test('Package mapping - multiple packages comma', () => {
-  const { imagePaths } = mapPackages('frontend, backend, migrations', 'bcgov/quickstart-openshift');
+test('Package mapping - multiple packages one per line', () => {
+  const { imagePaths } = mapPackages('frontend\nbackend\nmigrations', 'bcgov/quickstart-openshift');
   assert.strictEqual(Object.keys(imagePaths).length, 3, 'three packages');
   assert.strictEqual(imagePaths['frontend'], 'bcgov/quickstart-openshift/frontend', 'frontend path');
   assert.strictEqual(imagePaths['backend'], 'bcgov/quickstart-openshift/backend', 'backend path');
@@ -46,7 +46,7 @@ test('Package mapping - multiple packages newline', () => {
 });
 
 test('Package mapping - case normalization', () => {
-  const { imagePaths } = mapPackages('Frontend, QUICKSTART-Openshift', 'BCGov/Quickstart-Openshift');
+  const { imagePaths } = mapPackages('Frontend\nQUICKSTART-Openshift', 'BCGov/Quickstart-Openshift');
   assert.strictEqual(
     imagePaths['Frontend'],
     'bcgov/quickstart-openshift/frontend',
@@ -64,9 +64,9 @@ test('Package mapping - empty input rejected', () => {
   assert.strictEqual(Object.keys(imagePaths).length, 0, 'empty input yields no packages');
 });
 
-test('Package mapping - whitespace-only entries ignored', () => {
-  const { imagePaths } = mapPackages('  ,frontend,   ,backend  ,', 'bcgov/myapp');
-  assert.strictEqual(Object.keys(imagePaths).length, 2, 'whitespace-only entries are skipped');
+test('Package mapping - blank lines ignored', () => {
+  const { imagePaths } = mapPackages('  \nfrontend\n   \nbackend  \n', 'bcgov/myapp');
+  assert.strictEqual(Object.keys(imagePaths).length, 2, 'blank lines are skipped');
   assert.strictEqual(imagePaths['frontend'], 'bcgov/myapp/frontend', 'frontend retained');
   assert.strictEqual(imagePaths['backend'], 'bcgov/myapp/backend', 'backend retained');
 });
@@ -75,9 +75,9 @@ test('Package mapping - space separated packages are rejected', () => {
   assert.throws(() => mapPackages('frontend backend migrations', 'bcgov/myapp'), /Invalid packages input/);
 });
 
-test('Package mapping - JSON array', () => {
-  const { imagePaths } = mapPackages('["frontend", "backend"]', 'bcgov/myapp');
-  assert.deepStrictEqual(Object.keys(imagePaths), ['frontend', 'backend']);
+test('Package mapping - comma separated and JSON lists are rejected', () => {
+  assert.throws(() => mapPackages('frontend, backend', 'bcgov/myapp'), /Invalid packages input/);
+  assert.throws(() => mapPackages('["frontend", "backend"]', 'bcgov/myapp'), /Invalid packages input/);
 });
 
 test('Git plumbing sanity - HEAD resolution', () => {
@@ -1918,8 +1918,8 @@ test('runMain resolves multiple packages (frontend, rctool) on squash-merged mai
     process.env.GITHUB_EVENT_NAME = 'push';
     process.env.GITHUB_REF = 'refs/heads/main';
     process.env.GITHUB_SHA = squashSha;
-    process.env.INPUT_PACKAGES = 'frontend, rctool';
-    process.env.PACKAGES = 'frontend, rctool';
+    process.env.INPUT_PACKAGES = 'frontend\nrctool';
+    process.env.PACKAGES = 'frontend\nrctool';
     process.env.INPUT_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
     process.env.REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
     process.env.INPUT_REVISION = squashSha;
@@ -2919,7 +2919,7 @@ test('parseTags splits lines, drops blanks and duplicates, rejects invalid tags'
   assert.deepStrictEqual(parseTags(''), []);
   assert.deepStrictEqual(parseTags('abc123\n\n  latest \r\nlatest\n'), ['abc123', 'latest']);
   assert.throws(() => parseTags('bad tag'), /Invalid tags input/);
-  assert.deepStrictEqual(parseTags('abc123, latest'), ['abc123', 'latest']);
+  assert.throws(() => parseTags('abc123, latest'), /Invalid tags input/);
   assert.throws(() => parseTags('bad\ttag\nok'), /Invalid tag/);
   assert.throws(() => parseTags('-leading'), /Invalid tag/);
   assert.throws(() => parseTags('a'.repeat(129)), /Invalid tag/);
@@ -3124,7 +3124,7 @@ test('runMain without tags performs no registry writes', async () => {
 
 test('runMain tags every resolved digest, including latest at the default-branch tip', async () => {
   const r = await runTagScenario({
-    packages: 'frontend, backend',
+    packages: 'frontend\nbackend',
     built: ['frontend', 'backend'],
     tags: 'prod-candidate\nlatest',
     tipSha: (h) => h
@@ -3169,7 +3169,7 @@ test('runMain never moves latest from a pull_request event, even at the default-
 
 test('runMain does not tag anything when a package is missing', async () => {
   const r = await runTagScenario({
-    packages: 'frontend, backend',
+    packages: 'frontend\nbackend',
     built: ['frontend'],
     tags: 'latest',
     tipSha: (h) => h

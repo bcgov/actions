@@ -526,11 +526,11 @@ jobs:
           ref: ${{ github.event.pull_request.base.sha }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Test Formats (Bash / Comma / Semi / JSON)
+      - name: Test Single Value
         id: formats
         uses: $/diff-triggers
         with:
-          triggers: '["path/to/nowhere", ".diff-triggers-fixture/"]'
+          triggers: .diff-triggers-fixture/
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Test Dynamic Filters

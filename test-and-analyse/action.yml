@@ -74,7 +74,7 @@ inputs:
         triggers: |
           backend/
           frontend/
-      Also accepts a JSON array or a single path. See diff-triggers.
+      A single path also works. See diff-triggers.
   debug:
     description: Enable debug logging
     default: "false"

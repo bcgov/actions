@@ -8,28 +8,32 @@ const {
 
 const cli = path.join(__dirname, '..', 'inputs.js');
 
-test('parseList: multiline, comma, JSON, single', () => {
+test('parseList: one item per line, or a single value', () => {
   assert.deepStrictEqual(parseList('a/\n\n b/ \n'), ['a/', 'b/']);
-  assert.deepStrictEqual(parseList('a, b,c'), ['a', 'b', 'c']);
-  assert.deepStrictEqual(parseList('src/{a,b}/**, c/'), ['src/{a,b}/**', 'c/']);
   assert.deepStrictEqual(parseList('src/{a,b}/**\nc/'), ['src/{a,b}/**', 'c/']);
-  assert.deepStrictEqual(parseList('["a", "b"]'), ['a', 'b']);
+  assert.deepStrictEqual(parseList('src/{a,b}/**'), ['src/{a,b}/**']);
+  assert.deepStrictEqual(parseList('backend'), ['backend']);
   assert.deepStrictEqual(parseList("'a/**'"), ['a/**']);
-  assert.deepStrictEqual(parseList('"my path/"'), ['my path/']);
+  assert.deepStrictEqual(parseList('"my path/"\n"other path/"'), ['my path/', 'other path/']);
   assert.deepStrictEqual(parseList(''), []);
 });
 
 test('parseList: other formats throw the format error', () => {
-  for (const raw of ["('a/' 'b/')", 'a b', 'a;b', "'a' 'b'", 'a b, c']) {
+  for (const raw of [
+    "('a/' 'b/')", 'a b', 'a;b', "'a' 'b'", 'a b, c', 'a, b', 'a,b', '"backend/", "frontend/"',
+    '["a", "b"]', '["backend/",]', "(\n'backend/'\n'frontend/'\n)", 'a/\nb/, c/', 'a/\nb/ c/',
+  ]) {
     assert.throws(() => parseList(raw, 'triggers'), InputError, raw);
   }
   try {
-    parseList("('backend/' 'frontend/')", 'triggers');
+    parseList('backend/, frontend/', 'triggers');
+    assert.fail('expected an InputError');
   } catch (e) {
     const lines = e.message.split('%0A');
-    assert.match(lines[0], /Invalid triggers input: \('backend\/' 'frontend\/'\)/);
-    assert.match(lines[1], /triggers must be a multiline block/);
+    assert.match(lines[0], /Invalid triggers input: backend\/, frontend\//);
+    assert.strictEqual(lines[1], 'triggers takes one item per line, or a single value.');
     assert.ok(lines.includes('  triggers: |'));
+    assert.ok(lines.includes('    backend/'));
     assert.ok(lines.includes('    frontend/'));
     assert.ok(lines.at(-1).includes('https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idstepswith'));
   }
@@ -55,20 +59,11 @@ test('getInput, getToken, isDebug', () => {
 });
 
 test('CLI for composite actions', () => {
-  const env = { ...process.env, INPUT_PACKAGES: 'a, b', INPUT_DRY_RUN: 'TRUE', INPUT_MODE: '' };
+  const env = { ...process.env, INPUT_PACKAGES: 'a\nb', INPUT_DRY_RUN: 'TRUE', INPUT_MODE: '' };
   assert.strictEqual(execFileSync('node', [cli, 'list', 'packages'], { env }).toString(), 'a\nb\n');
   assert.strictEqual(execFileSync('node', [cli, 'bool', 'dry_run'], { env }).toString(), 'true\n');
   assert.strictEqual(execFileSync('node', [cli, 'enum', 'mode', 'a,b', 'b'], { env }).toString(), 'b\n');
-  const bad = spawnSync('node', [cli, 'list', 'packages'], { env: { ...env, INPUT_PACKAGES: '(a b)' } });
+  const bad = spawnSync('node', [cli, 'list', 'packages'], { env: { ...env, INPUT_PACKAGES: 'a, b' } });
   assert.strictEqual(bad.status, 1);
   assert.match(bad.stderr.toString(), /Invalid packages input/);
-});
-
-test('parseList: malformed JSON arrays and multiline parens fail', () => {
-  assert.throws(() => parseList('["backend/",]', 'triggers'), InputError);
-  assert.throws(() => parseList("(\n'backend/'\n'frontend/'\n)", 'triggers'), InputError);
-});
-
-test('parseList: quoted comma-separated items', () => {
-  assert.deepStrictEqual(parseList('"backend/", "frontend/"', 'triggers'), ['backend/', 'frontend/']);
 });

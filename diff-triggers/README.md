@@ -18,7 +18,7 @@ permissions:
 - ✅ **Push Event Support**: Works with push events for deployer workflows
 - ✅ **Flexible Ref Comparison**: Compare against any ref (branch, commit SHA, HEAD^, etc.)
 - ✅ **Smart Path Matching**: Uses git pathspec matching for accurate trigger detection
-- ✅ **Multiple Trigger Formats**: Multiline (recommended); JSON arrays; single path on one line
+- ✅ **Simple Trigger Format**: One path per line, or a single path
 - ✅ **Visible Logging**: Prominent banners and collapsible details in step logs, plus notice annotations in workflow summary and annotations views
 
 ## Trigger Formats
@@ -27,12 +27,10 @@ The action supports these formats for the `triggers` input:
 
 | Format | Example | Description |
 |---|---|---|
-| **Multiline string (recommended)** | `triggers: \|` then one path per line | Preferred. Supports spaces in paths without quotes. |
-| **Comma separated** | `triggers: backend/, frontend/` | One line. Commas inside `{...}` globs are kept. |
-| **JSON array** | `triggers: '["backend/", "frontend/"]'` | Inline list. Requires quotes to escape YAML parsing. |
+| **One path per line** | `triggers: \|` then one path per line | Supports spaces in paths without quotes. Commas inside `{...}` globs are kept. |
 | **Single path** | `triggers: backend/` | One path on a single line. |
 
-These are the list formats every bcgov/actions list input accepts (see [shared/inputs.js](../shared/inputs.js)). Any other value, such as a space separated line or `('backend/' 'frontend/')`, fails with an error that names the value and shows it as a multiline block:
+These are the list formats every bcgov/actions list input accepts (see [shared/inputs.js](../shared/inputs.js)). Any other value, such as `backend/, frontend/`, a JSON array or a space separated line, fails with an error that names the value and shows it as a multiline block:
 
 ```yaml
 triggers: |

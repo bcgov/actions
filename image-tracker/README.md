@@ -63,29 +63,50 @@ When package resolution fails, `image-tracker` automatically outputs a diagnosti
 
 ## Usage
 
-```yaml
-- name: Resolve image for HEAD
-  id: tracker
-  uses: bcgov/actions/image-tracker@vX.Y.Z
-  with:
-    packages: frontend, backend
-    max_depth: 100
-
-- name: Deploy
-  run: ./deploy.sh ${{ steps.tracker.outputs.digest }}
-```
-
-Multiple packages:
+Call image-tracker once per workflow, in the first job. List every package one
+per line, set `tags` when the workflow should retag, and have each deploy job
+read its digest from the `images` JSON output. This is the shape
+`bcgov/quickstart-openshift` `merge.yml` uses:
 
 ```yaml
-- id: tracker
-  uses: bcgov/actions/image-tracker@vX.Y.Z
-  with:
-    packages: frontend, backend, migrations
+jobs:
+  init:
+    name: Initialize
+    permissions:
+      contents: read
+      packages: write # tags writes to the registry
+      pull-requests: read
+    outputs:
+      images: ${{ steps.tracker.outputs.images }}
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 100
+      - id: tracker
+        uses: bcgov/actions/image-tracker@vX.Y.Z
+        with:
+          max_depth: 100
+          packages: |
+            migrations
+            backend
+            frontend
+          tags: |
+            latest
 
-- run: |
-    echo "frontend: $(echo '${{ steps.tracker.outputs.images }}' | jq -r '.frontend')"
+  deploy-test:
+    needs: [init]
+    runs-on: ubuntu-26.04
+    steps:
+      - run: |
+          echo "backend: ${{ fromJSON(needs.init.outputs.images).backend }}"
+          echo "frontend: ${{ fromJSON(needs.init.outputs.images).frontend }}"
 ```
+
+Each value in `images` is a full `ghcr.io/<owner>/<repo>/<package>@sha256:...`
+reference, so deploys pull exactly the image that was resolved. A single
+package can be one value (`packages: frontend`); `image` and `digest` then hold
+its reference and digest.
 
 Resolve a non-HEAD revision (tag, branch, or SHA):
 
@@ -149,14 +170,14 @@ be resolved, or no image exists for that revision, the action fails (`exit 1`).
 
 | Input        | Required | Default              | Description                                                                    |
 | ------------ | -------- | -------------------- | ------------------------------------------------------------------------------ |
-| `packages`   | ✔        | —                    | One or more package names (one per line, comma separated, or JSON array).      |
+| `packages`   | ✔        | —                    | One or more package names (one per line, or a single name).                    |
 | `revision`   |          | `HEAD`               | Git revision (SHA, branch, or tag) to resolve against.                         |
 | `repository` |          | current repo         | Repository owning the images.                                                  |
 | `dir`        |          | `.`                  | Working directory containing the git repository.                               |
 | `token`        |          | `github.token`       | GitHub token used to mint a GHCR bearer token.                                 |
 | `max_tags`   |          | `500`                | Upper bound on tags inspected per package before failing.                      |
 | `max_depth`  |          | `1`                  | Max commits of git ancestry to search. Default is this SHA only. Merge/promote must raise this (e.g. `100`) so a squash can resolve the last built image. |
-| `tags`       |          | —                    | Tags (one per line, comma separated, or JSON array) applied to every resolved digest. Omit to stay read-only. Needs `packages: write`. See [Tagging](#tagging). |
+| `tags`       |          | —                    | Tags (one per line, or a single tag) applied to every resolved digest. Omit to stay read-only. Needs `packages: write`. See [Tagging](#tagging). |
 
 Package-to-image-path convention:
 - If package name == repository name → `ghcr.io/<owner>/<repo>`
@@ -191,8 +212,10 @@ steps:
   - uses: actions/checkout@v6
   - uses: bcgov/actions/image-tracker@vX.Y.Z
     with:
-      packages: backend, frontend
       max_depth: 100
+      packages: |
+        backend
+        frontend
       tags: |
         ${{ github.sha }}
         latest
