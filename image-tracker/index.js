@@ -1496,7 +1496,7 @@ async function runMain() {
   // 2. Package Input
   let packageInput = '';
   if (args.length > 0) {
-    packageInput = args.join(',');
+    packageInput = args.join('\n');
   } else {
     packageInput = env.PACKAGES || env.INPUT_PACKAGES || '';
   }

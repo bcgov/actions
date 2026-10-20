@@ -39,6 +39,18 @@ test('parseList: other formats throw the format error', () => {
   }
 });
 
+test('format error keeps quotes on items with spaces', () => {
+  try {
+    parseList('["my path/", "other path/"]', 'triggers');
+    assert.fail('expected an InputError');
+  } catch (e) {
+    const lines = e.message.split('%0A');
+    const block = lines.slice(lines.indexOf('  triggers: |') + 1, -1).map(l => l.trim()).join('\n');
+    assert.deepStrictEqual(block.split('\n'), ['"my path/"', '"other path/"']);
+    assert.deepStrictEqual(parseList(block, 'triggers'), ['my path/', 'other path/']);
+  }
+});
+
 test('parseBool and parseEnum', () => {
   assert.strictEqual(parseBool('TRUE', 'x'), true);
   assert.strictEqual(parseBool('false', 'x', true), false);

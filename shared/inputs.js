@@ -57,7 +57,8 @@ function listFormatMessage(name, raw) {
     `  ${name}: ${trimmed}`,
     'Use:',
     `  ${name}: |`,
-    ...items.map(i => `    ${i}`),
+    // Items with spaces keep their quotes, so the suggested block parses
+    ...items.map(i => `    ${/\s/.test(i) ? `"${i}"` : i}`),
     `Multiline input syntax: ${WITH_DOCS}`,
   ].join('%0A');
 }

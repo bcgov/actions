@@ -1791,6 +1791,7 @@ test('runMain resolves multiple packages (frontend, rctool) on squash-merged mai
   const { runMain } = require('../index.js');
   const origFetch = global.fetch;
   const origExit = process.exit;
+  const origArgv = process.argv;
   const saved = snapshotEnv();
   const cwd = process.cwd();
 
@@ -1918,8 +1919,10 @@ test('runMain resolves multiple packages (frontend, rctool) on squash-merged mai
     process.env.GITHUB_EVENT_NAME = 'push';
     process.env.GITHUB_REF = 'refs/heads/main';
     process.env.GITHUB_SHA = squashSha;
-    process.env.INPUT_PACKAGES = 'frontend\nrctool';
-    process.env.PACKAGES = 'frontend\nrctool';
+    // Packages as positional CLI arguments (node index.js frontend rctool)
+    delete process.env.INPUT_PACKAGES;
+    delete process.env.PACKAGES;
+    process.argv = [origArgv[0], origArgv[1], 'frontend', 'rctool'];
     process.env.INPUT_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
     process.env.REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
     process.env.INPUT_REVISION = squashSha;
@@ -1937,6 +1940,7 @@ test('runMain resolves multiple packages (frontend, rctool) on squash-merged mai
   } finally {
     global.fetch = origFetch;
     process.exit = origExit;
+    process.argv = origArgv;
     process.chdir(cwd);
     restoreEnv(saved);
     fs.rmSync(repoDir, { recursive: true, force: true });
