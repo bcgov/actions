@@ -1,6 +1,16 @@
 #!/bin/bash
 set -euo pipefail
 
+# Shared input rules (see shared/README.md); each call fails the step with an annotation on bad input
+SHARED_INPUTS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../shared/inputs.js"
+INPUT_DEBUG="$(node "$SHARED_INPUTS" debug)"
+INPUT_ASSIGN="$(node "$SHARED_INPUTS" bool assign true)"
+INPUT_NOTIFY_AUTHOR="$(node "$SHARED_INPUTS" bool notify_author true)"
+INPUT_DRY_RUN="$(node "$SHARED_INPUTS" bool dry_run false)"
+NOTIFY_CODEOWNERS_MODE="$(node "$SHARED_INPUTS" enum notify_codeowners always,fallback,never fallback)"
+LABELS_LIST="$(node "$SHARED_INPUTS" list labels)"
+INPUT_TOKEN="$(node "$SHARED_INPUTS" token)"
+
 if [ "${INPUT_DEBUG:-}" == "true" ]; then
   set -x
 fi
@@ -122,12 +132,11 @@ if [ -n "$CODEOWNERS_PATH" ]; then
 fi
 
 # Determine whether CODEOWNERS should be included
-NOTIFY_CODEOWNERS_MODE=$(echo "${INPUT_NOTIFY_CODEOWNERS:-fallback}" | tr '[:upper:]' '[:lower:]')
 INCLUDE_CODEOWNERS=false
 
-if [ "$NOTIFY_CODEOWNERS_MODE" == "true" ]; then
+if [ "$NOTIFY_CODEOWNERS_MODE" == "always" ]; then
   INCLUDE_CODEOWNERS=true
-elif [ "$NOTIFY_CODEOWNERS_MODE" == "false" ]; then
+elif [ "$NOTIFY_CODEOWNERS_MODE" == "never" ]; then
   INCLUDE_CODEOWNERS=false
 else
   # "fallback": include CODEOWNERS only if no human authors were identified
@@ -240,14 +249,10 @@ else
     GH_ARGS+=(--repo "$GITHUB_REPOSITORY")
   fi
 
-  if [ -n "${INPUT_LABELS:-}" ]; then
-    IFS=',' read -r -a LABELS_ARRAY <<< "$INPUT_LABELS" || true
-    for label in "${LABELS_ARRAY[@]}"; do
-      label=$(echo "$label" | xargs)
-      if [ -n "$label" ]; then
-        GH_ARGS+=(--label "$label")
-      fi
-    done
+  if [ -n "$LABELS_LIST" ]; then
+    while IFS= read -r label; do
+      [ -n "$label" ] && GH_ARGS+=(--label "$label")
+    done <<< "$LABELS_LIST"
   fi
 
   if [ "${INPUT_ASSIGN:-}" = "true" ] && [ -n "$CLEAN_ASSIGNEES" ]; then
@@ -284,7 +289,8 @@ printf "\tAssignees: %s\n" "${CLEAN_ASSIGNEES}"
 # Write outputs (useful even in dry runs)
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
   echo "issue_number=${ISSUE_NUM}" >> "${GITHUB_OUTPUT}"
-  echo "assignees=${CLEAN_ASSIGNEES}" >> "${GITHUB_OUTPUT}"
+  # JSON array, like other list outputs (diff-triggers changes, ghcr-cleanup selected)
+  echo "assignees=$(jq -cn --arg a "$CLEAN_ASSIGNEES" '$a | split(",") | map(select(. != ""))')" >> "${GITHUB_OUTPUT}"
 fi
 
 log_debug "Action completed successfully."
