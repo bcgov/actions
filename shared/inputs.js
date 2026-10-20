@@ -222,6 +222,7 @@ module.exports = {
  *   bool <name> [true|false]    true or false (second arg is the default)
  *   enum <name> <a,b,c> <dflt>  the chosen value
  *   debug                       true or false
+ *   token                       the token input, else GITHUB_TOKEN
  */
 if (require.main === module) {
   const [cmd, name, a, b] = process.argv.slice(2);
@@ -231,6 +232,7 @@ if (require.main === module) {
     else if (cmd === 'bool') out = String(parseBool(getInput(name), name, a === 'true'));
     else if (cmd === 'enum') out = parseEnum(getInput(name), name, a.split(','), b);
     else if (cmd === 'debug') out = String(isDebug());
+    else if (cmd === 'token') out = getToken();
     else throw new Error(`unknown command: ${cmd}`);
     if (out) process.stdout.write(`${out}\n`);
   } catch (e) {
