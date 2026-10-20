@@ -439,7 +439,7 @@ test('runMain fork unresolvable revision exits 1', async () => {
       process.env.INPUT_REVISION = SHA;
       process.env.REVISION = SHA;
       process.env.DIR = dir;
-      process.env.INPUT_DIR = dir;
+      process.env.INPUT_WORKING_DIRECTORY = dir;
       delete process.env.GITHUB_TOKEN;
       delete process.env.GH_TOKEN;
       delete process.env.INPUT_GITHUB_TOKEN;
@@ -608,7 +608,7 @@ const ENV_KEYS = [
   'INPUT_REVISION',
   'REVISION',
   'DIR',
-  'INPUT_DIR',
+  'INPUT_WORKING_DIRECTORY',
   'GITHUB_TOKEN',
   'GH_TOKEN',
   'INPUT_GITHUB_TOKEN',
@@ -677,7 +677,7 @@ test('runMain same-repo unresolvable revision still exits 1', async () => {
       process.env.INPUT_REVISION = SHA;
       process.env.REVISION = SHA;
       process.env.DIR = dir;
-      process.env.INPUT_DIR = dir;
+      process.env.INPUT_WORKING_DIRECTORY = dir;
       delete process.env.INPUT_REPOSITORY;
       delete process.env.REPOSITORY;
       delete process.env.GITHUB_TOKEN;
@@ -1080,7 +1080,7 @@ test('runMain resolves PR image when git HEAD is a synthetic merge commit', asyn
     process.env.INPUT_REVISION = headSha;
     process.env.REVISION = headSha;
     process.env.DIR = repoDir;
-    process.env.INPUT_DIR = repoDir;
+    process.env.INPUT_WORKING_DIRECTORY = repoDir;
     delete process.env.GITHUB_TOKEN;
     delete process.env.INPUT_TOKEN;
     delete process.env.TOKEN;
@@ -1210,7 +1210,7 @@ test('runMain resolves PR image using GITHUB_EVENT_PATH merge_commit_sha without
     process.env.INPUT_REVISION = headSha;
     process.env.REVISION = headSha;
     process.env.DIR = repoDir;
-    process.env.INPUT_DIR = repoDir;
+    process.env.INPUT_WORKING_DIRECTORY = repoDir;
     delete process.env.GITHUB_TOKEN;
     delete process.env.INPUT_TOKEN;
     delete process.env.TOKEN;
@@ -1337,7 +1337,7 @@ test('runMain rejects two-parent merge commit on push event to prevent non-PR an
     process.env.INPUT_REVISION = headSha;
     process.env.REVISION = headSha;
     process.env.DIR = repoDir;
-    process.env.INPUT_DIR = repoDir;
+    process.env.INPUT_WORKING_DIRECTORY = repoDir;
     delete process.env.GITHUB_TOKEN;
     delete process.env.INPUT_TOKEN;
     delete process.env.TOKEN;
@@ -1456,7 +1456,7 @@ test('runMain ignores GITHUB_SHA fallback when GITHUB_REF is not synthetic merge
     process.env.INPUT_REVISION = headSha;
     process.env.REVISION = headSha;
     process.env.DIR = repoDir;
-    process.env.INPUT_DIR = repoDir;
+    process.env.INPUT_WORKING_DIRECTORY = repoDir;
     delete process.env.GITHUB_TOKEN;
     delete process.env.INPUT_TOKEN;
     delete process.env.TOKEN;
@@ -1624,7 +1624,7 @@ test('runMain resolves PR image for squash-merged commit on main when image revi
     process.env.INPUT_REVISION = squashSha;
     process.env.REVISION = squashSha;
     process.env.DIR = repoDir;
-    process.env.INPUT_DIR = repoDir;
+    process.env.INPUT_WORKING_DIRECTORY = repoDir;
     process.env.INPUT_TOKEN = 'mock-token';
 
     await runMain();
@@ -1925,7 +1925,7 @@ test('runMain resolves multiple packages (frontend, rctool) on squash-merged mai
     process.env.INPUT_REVISION = squashSha;
     process.env.REVISION = squashSha;
     process.env.DIR = repoDir;
-    process.env.INPUT_DIR = repoDir;
+    process.env.INPUT_WORKING_DIRECTORY = repoDir;
     process.env.INPUT_TOKEN = 'mock-token';
 
     await runMain();
@@ -2059,7 +2059,7 @@ test('runMain resolves PR image when running on PR head commit checkout', async 
     process.env.INPUT_REVISION = headSha;
     process.env.REVISION = headSha;
     process.env.DIR = repoDir;
-    process.env.INPUT_DIR = repoDir;
+    process.env.INPUT_WORKING_DIRECTORY = repoDir;
     process.env.INPUT_TOKEN = 'mock-token';
 
     await runMain();
@@ -2207,7 +2207,7 @@ test('runMain resolves PR image when squash commit is walked back via max_depth'
     process.env.MAX_DEPTH = '5';
     process.env.INPUT_MAX_DEPTH = '5';
     process.env.DIR = repoDir;
-    process.env.INPUT_DIR = repoDir;
+    process.env.INPUT_WORKING_DIRECTORY = repoDir;
     process.env.INPUT_TOKEN = 'mock-token';
 
     await runMain();
@@ -2484,7 +2484,7 @@ test('strict token input: consumes only INPUT_TOKEN and ignores legacy fallbacks
       process.env.INPUT_REVISION = 'HEAD';
       process.env.REVISION = 'HEAD';
       process.env.DIR = dir;
-      process.env.INPUT_DIR = dir;
+      process.env.INPUT_WORKING_DIRECTORY = dir;
       delete process.env.GITHUB_EVENT_PATH;
 
       process.env.TOKEN = 'legacy-token';
@@ -2725,7 +2725,7 @@ test('runMain writes diagnostic summary to GITHUB_STEP_SUMMARY on resolution fai
     process.env.INPUT_REVISION = headSha;
     process.env.REVISION = headSha;
     process.env.DIR = repoDir;
-    process.env.INPUT_DIR = repoDir;
+    process.env.INPUT_WORKING_DIRECTORY = repoDir;
     delete process.env.TOKEN;
     delete process.env.INPUT_TOKEN;
 
@@ -2884,7 +2884,7 @@ test('runMain defaults max_depth to 1 when unset and does not walk to an ancesto
     delete process.env.MAX_DEPTH;
     delete process.env.INPUT_MAX_DEPTH;
     process.env.DIR = repoDir;
-    process.env.INPUT_DIR = repoDir;
+    process.env.INPUT_WORKING_DIRECTORY = repoDir;
     process.env.INPUT_TOKEN = 'mock-token';
 
     await assert.rejects(() => runMain(), /process\.exit called with code 1/);
@@ -3093,7 +3093,7 @@ async function runTagScenario({ packages, built, tags, tipSha, eventName = 'push
     delete process.env.REPOSITORY;
     process.env.INPUT_REVISION = headSha;
     delete process.env.REVISION;
-    process.env.INPUT_DIR = repoDir;
+    process.env.INPUT_WORKING_DIRECTORY = repoDir;
     delete process.env.DIR;
     process.env.INPUT_TOKEN = 'gh-token';
     if (tags === undefined) delete process.env.INPUT_TAGS;

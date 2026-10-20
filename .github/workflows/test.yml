@@ -123,15 +123,15 @@ jobs:
             echo "Error! digest required when the image is in GHCR."
             exit 1
           fi
-          if [ "${{ steps.build.outputs.registry_host }}" != "ghcr.io" ]; then
-            echo "Error! registry_host mismatch: ${{ steps.build.outputs.registry_host }}"
+          if [ "${{ steps.build.outputs.registry }}" != "ghcr.io" ]; then
+            echo "Error! registry mismatch: ${{ steps.build.outputs.registry }}"
             exit 1
           fi
           if [ -z "${{ steps.build.outputs.image_path }}" ]; then
             echo "Error! image_path is empty."
             exit 1
           fi
-          echo "Verified registry_host and image_path: ${{ steps.build.outputs.registry_host }} and ${{ steps.build.outputs.image_path }}"
+          echo "Verified registry and image_path: ${{ steps.build.outputs.registry }} and ${{ steps.build.outputs.image_path }}"
 
   test-builder-matrix:
     name: Test Builder (No Attestation / Advanced / Single Package / Metadata / Self)
@@ -149,7 +149,7 @@ jobs:
         uses: $/builder
         with:
           package: frontend
-          build_context: frontend
+          context: frontend
           repository: bcgov/quickstart-openshift
           tags: ${{ github.event.number }}-no-attestation
           tag_fallback: test
@@ -161,8 +161,8 @@ jobs:
         uses: $/builder
         with:
           package: api
-          build_context: .
-          build_file: api/Dockerfile
+          context: .
+          file: api/Dockerfile
           repository: bcgov/nr-fom
           tags: |
             ${{ github.event.number }}
@@ -174,8 +174,8 @@ jobs:
         uses: $/builder
         with:
           package: action-builder
-          build_context: .
-          build_file: ./Dockerfile
+          context: .
+          file: ./Dockerfile
           repository: bcgov/nr-peach
           tags: |
             ${{ github.event.number }}
@@ -186,7 +186,7 @@ jobs:
         uses: $/builder
         with:
           package: frontend
-          build_context: frontend
+          context: frontend
           repository: bcgov/quickstart-openshift
           tags: |
             ${{ github.event.number }}
@@ -200,8 +200,8 @@ jobs:
         uses: $/builder
         with:
           package: builder-selftest
-          build_context: builder/tests
-          build_file: builder/tests/Dockerfile
+          context: builder/tests
+          file: builder/tests/Dockerfile
           tags: ${{ github.event.number }}-selftest
           sbom: 'false'
           triggers: |
@@ -225,8 +225,8 @@ jobs:
         with:
           package: builder-arm-selftest
           architecture: arm64
-          build_context: builder/tests
-          build_file: builder/tests/Dockerfile
+          context: builder/tests
+          file: builder/tests/Dockerfile
           tags: ${{ github.event.number }}
           sbom: 'false'
           triggers: |
@@ -264,8 +264,8 @@ jobs:
         with:
           package: builder-arm-selftest
           architecture: arm64
-          build_context: builder/tests
-          build_file: builder/tests/Dockerfile
+          context: builder/tests
+          file: builder/tests/Dockerfile
           tags: ${{ github.event.number }}
           sbom: 'false'
           triggers: |
@@ -280,8 +280,8 @@ jobs:
         uses: $/builder
         with:
           package: builder-arm-selftest
-          build_context: builder/tests
-          build_file: builder/tests/Dockerfile
+          context: builder/tests
+          file: builder/tests/Dockerfile
           tags: ${{ github.event.number }}
           sbom: 'false'
           triggers: |
@@ -808,7 +808,7 @@ jobs:
           packages: ${{ matrix.package }}
           revision: ${{ steps.discover.outputs.revision }}
           repository: ${{ matrix.repo }}
-          dir: target
+          working_directory: target
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Verify action outputs
@@ -859,7 +859,7 @@ jobs:
           packages: ${{ matrix.package }}
           revision: HEAD
           repository: ${{ matrix.repo }}
-          dir: target
+          working_directory: target
           max_depth: '100'
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -1240,38 +1240,38 @@ jobs:
           ]
         include:
           - name: backend-triggered
-            dir: backend
+            working_directory: backend
             triggers: ''
             expected_triggered: true
             repository: bcgov/quickstart-openshift
             test_command: npm install --no-package-lock && npm run test:cov
             exercise_sonar: true
           - name: backend-not-triggered
-            dir: backend
+            working_directory: backend
             triggers: not-existent-path/
             expected_triggered: false
             repository: bcgov/quickstart-openshift
             test_command: npm install --no-package-lock && npm run test:cov
           - name: frontend-basic
-            dir: frontend
+            working_directory: frontend
             triggers: ''
             expected_triggered: true
             repository: bcgov/quickstart-openshift
             test_command: npm install --no-package-lock && npm run test:cov
           - name: frontend-no-triggers
-            dir: frontend
+            working_directory: frontend
             expected_triggered: true
             dep_scan: off
             test_command: npm install --no-package-lock && npm run test:cov
             repository: bcgov/quickstart-openshift
           - name: waste-frontend
-            dir: frontend
+            working_directory: frontend
             expected_triggered: true
             dep_scan: warn
             test_command: echo "Good enough for testing knip!"
             repository: bcgov/nr-waste-plus
           - name: java-basic
-            dir: backend
+            working_directory: backend
             language: java
             java_version: '17'
             triggers: ''
@@ -1280,7 +1280,7 @@ jobs:
             test_command: timeout 10m mvn -B verify -P all-tests -DskipTests
             cache: 'none'
           - name: fom-autodiscover
-            dir: ''
+            working_directory: ''
             triggers: ''
             expected_triggered: true
             repository: bcgov/nr-fom
@@ -1306,10 +1306,10 @@ jobs:
       - id: action
         uses: $/test-and-analyse
         with:
-          checkout_path: test-project
+          path: test-project
           commands: |
             ${{ matrix.test_command }}
-          dir: test-project/${{ matrix.dir }}
+          working_directory: test-project/${{ matrix.working_directory }}
           node_version: '24'
           language: ${{ matrix.language || 'node' }}
           java_version: ${{ matrix.java_version || '21' }}
@@ -1374,7 +1374,7 @@ jobs:
       - uses: $/test-and-analyse
         with:
           commands: echo "Nothing to run; this cell is about the checkout."
-          dir: .
+          working_directory: .
           cache: none
           dep_scan: off
 
@@ -1419,7 +1419,7 @@ jobs:
         uses: $/test-and-analyse
         with:
           commands: echo "Semgrep test"
-          dir: test-and-analyse/fixtures/semgrep/clean
+          working_directory: test-and-analyse/fixtures/semgrep/clean
           node_version: '24'
           cache: none
           dep_scan: off
@@ -1432,7 +1432,7 @@ jobs:
         uses: $/test-and-analyse
         with:
           commands: echo "Semgrep test"
-          dir: test-and-analyse/fixtures/semgrep/findings
+          working_directory: test-and-analyse/fixtures/semgrep/findings
           node_version: '24'
           cache: none
           dep_scan: off
@@ -1446,7 +1446,7 @@ jobs:
         uses: $/test-and-analyse
         with:
           commands: echo "Semgrep test"
-          dir: test-and-analyse/fixtures/semgrep/findings
+          working_directory: test-and-analyse/fixtures/semgrep/findings
           node_version: '24'
           cache: none
           dep_scan: off
@@ -1460,7 +1460,7 @@ jobs:
         uses: $/test-and-analyse
         with:
           commands: echo "Semgrep test"
-          dir: test-and-analyse/fixtures/semgrep/findings
+          working_directory: test-and-analyse/fixtures/semgrep/findings
           node_version: '24'
           cache: none
           dep_scan: off

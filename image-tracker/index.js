@@ -1506,7 +1506,7 @@ async function runMain() {
   registry = registry.replace(/^https?:\/\//, '').replace(/\/$/, '') || 'ghcr.io';
 
   const revision = env.REVISION || env.INPUT_REVISION || 'HEAD';
-  const dir = env.DIR || env.INPUT_DIR || '.';
+  const dir = env.DIR || env.INPUT_WORKING_DIRECTORY || '.';
   // INPUT_TOKEN only (the action defaults it to github.token); ambient tokens are ignored on purpose.
   const token = getInput('token', env);
   const maxTagsStr = env.MAX_TAGS || env.INPUT_MAX_TAGS || '500';

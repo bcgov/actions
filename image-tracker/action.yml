@@ -26,7 +26,7 @@ inputs:
       Repository owning the images. Omit to follow builder publish
       targets (fork pull_request → head.repo). Any nonempty value is used as-is,
       including the workflow repository, so fork PRs can still resolve upstream images.
-  dir:
+  working_directory:
     description: 'Working directory containing the git repository.'
     default: '.'
   token:

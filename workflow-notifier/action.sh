@@ -4,7 +4,6 @@ set -euo pipefail
 # Shared input rules (see shared/README.md); each call fails the step with an annotation on bad input
 SHARED_INPUTS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../shared/inputs.js"
 INPUT_DEBUG="$(node "$SHARED_INPUTS" debug)"
-INPUT_ASSIGN="$(node "$SHARED_INPUTS" bool assign true)"
 INPUT_NOTIFY_AUTHOR="$(node "$SHARED_INPUTS" bool notify_author true)"
 INPUT_DRY_RUN="$(node "$SHARED_INPUTS" bool dry_run false)"
 NOTIFY_CODEOWNERS_MODE="$(node "$SHARED_INPUTS" enum notify_codeowners always,fallback,never fallback)"
@@ -255,7 +254,7 @@ else
     done <<< "$LABELS_LIST"
   fi
 
-  if [ "${INPUT_ASSIGN:-}" = "true" ] && [ -n "$CLEAN_ASSIGNEES" ]; then
+  if [ -n "$CLEAN_ASSIGNEES" ]; then
     GH_ARGS+=(--assignee "$CLEAN_ASSIGNEES")
   fi
 

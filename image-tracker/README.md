@@ -130,7 +130,7 @@ External repository:
   with:
     packages: frontend
     repository: bcgov/some-other-repo
-    dir: target
+    working_directory: target
 ```
 
 ### Deploying by digest
@@ -173,7 +173,7 @@ be resolved, or no image exists for that revision, the action fails (`exit 1`).
 | `packages`   | ✔        | —                    | One or more package names (one per line, or a single name).                    |
 | `revision`   |          | `HEAD`               | Git revision (SHA, branch, or tag) to resolve against.                         |
 | `repository` |          | current repo         | Repository owning the images.                                                  |
-| `dir`        |          | `.`                  | Working directory containing the git repository.                               |
+| `working_directory` |          | `.`                  | Working directory containing the git repository.                               |
 | `token`        |          | `github.token`       | GitHub token used to mint a GHCR bearer token.                                 |
 | `max_tags`   |          | `500`                | Upper bound on tags inspected per package before failing.                      |
 | `max_depth`  |          | `1`                  | Max commits of git ancestry to search. Default is this SHA only. Merge/promote must raise this (e.g. `100`) so a squash can resolve the last built image. |
