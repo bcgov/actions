@@ -14,9 +14,9 @@ inputs:
     default: "false"
 
   ### Typical / recommended
-  build_context:
+  context:
     description: Build context, not required for self-contained package/default directory
-  build_file:
+  file:
     description: Dockerfile with path, not required for self-contained package/default directory
   sbom:
     default: "true"
