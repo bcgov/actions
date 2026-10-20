@@ -54,8 +54,8 @@ inputs:
   build_args:
     description: A list of build-time variables, generally not advisable
     default: "BUILDKIT_INLINE_CACHE=1"
-  ref:
-    description: Reference to compare against (e.g. branch name, tag, or commit SHA)
+  base:
+    description: Base to diff triggers against (e.g. branch name, tag, or commit SHA)
     default: ${{ github.event.repository.default_branch }}
 
   repository:
@@ -200,7 +200,7 @@ runs:
       id: diff
       with:
         triggers: ${{ inputs.triggers }}
-        ref:  ${{ inputs.ref }}
+        base: ${{ inputs.base }}
         token: ${{ inputs.token }}
 
 

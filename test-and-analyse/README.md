@@ -50,7 +50,7 @@ permissions:
 | `annotations` / debug | `debug: false` | |
 | `require_sonar` | `false` | Skip Sonar quietly when token empty |
 | `triggers` | _(omitted)_ | When omitted, tests always run |
-| `ref` | repository default branch | Comparison ref for triggers |
+| `base` | repository default branch | Base to diff triggers against |
 | `token` | `${{ github.token }}` | |
 | `checkout_path` | `.` | |
 
@@ -128,17 +128,16 @@ permissions:
 
     # Overrides the default reference/branch to diff against
     # Defaults to the default branch, usually `main`
-    ref: ${{ github.event.repository.default_branch }}
+    base: ${{ github.event.repository.default_branch }}
 
     # Repository to clone and process
     # Useful for consuming other repos, like in testing
     # Defaults to the current one
     repository: ${{ github.repository }}
 
-    # Branch to clone and process
-    # Useful for consuming non-default branches, like in testing
-    # Defaults to empty, cloning the default branch
-    branch: ""
+    # Branch, tag or SHA of repository to check out (actions/checkout `ref`)
+    # Defaults to empty, the repository default branch
+    ref: ""
 ```
 
 # Example, Single Directory with SonarCloud Analysis, Supply Chain Scanning, and Dependency/Export Analysis
@@ -224,7 +223,7 @@ jobs:
 
 # Example, Matrix / Multiple Directories with Sonar Cloud and Triggers
 
-Test and analyze projects in multiple directories in parallel.  This time `repository` and `branch` are provided.  Please note how secrets must be passed in to composite Actions using the secrets[matrix.variable] syntax.
+Test and analyze projects in multiple directories in parallel.  This time `repository` and `ref` are provided.  Please note how secrets must be passed in to composite Actions using the secrets[matrix.variable] syntax.
 
 ```yaml
 jobs:
@@ -261,7 +260,7 @@ jobs:
           sonar_token: ${{ secrets[matrix.sonar_token] }}
           triggers: ${{ matrix.triggers }}
           repository: bcgov/quickstart-openshift
-          branch: main
+          ref: main
 ```
 
 # Outputs

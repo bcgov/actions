@@ -59,7 +59,7 @@ triggers: |
       # Reference to compare against
       # - PR events: defaults to base repo default branch
       # - Other events (push, workflow_dispatch, etc.): defaults to HEAD^
-      ref: main  # Branch, commit SHA, tag, or local ref (HEAD^, HEAD~2). Local refs work for non-PR events only
+      base: main  # Branch, commit SHA, tag, or local ref (HEAD^, HEAD~2). Local refs work for non-PR events only
 
       # Specify token (GH or PAT), instead of inheriting one from the calling workflow
       token: ${{ github.token }}
@@ -165,7 +165,7 @@ jobs:
           triggers: |
             backend/
           # ref defaults to HEAD^ for non-PR events
-          # Can override: ref: main
+          # Can override: base: main
 ```
 
 ## Compare Against Specific Commit
@@ -175,7 +175,7 @@ jobs:
   with:
     triggers: |
       backend/
-    ref: abc123def456  # Compare against specific commit
+    base: abc123def456  # Compare against specific commit
 ```
 
 # Fork PR Support
