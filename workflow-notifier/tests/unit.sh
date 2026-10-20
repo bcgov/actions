@@ -631,7 +631,7 @@ test_create_when_no_open_match() {
   out=$(run_action "$FIXTURE_DIR" \
     INPUT_TITLE="TEST Deployment Failure: api" \
     INPUT_BODY="Boom" \
-    INPUT_LABELS="bug, failure" \
+    INPUT_LABELS=$'bug\nfailure' \
     INPUT_ASSIGN="true" \
     INPUT_TOKEN="dummy-token" \
     INPUT_DRY_RUN="false" \
