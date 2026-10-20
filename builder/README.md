@@ -268,7 +268,9 @@ build-arm64:
           ${{ github.event.number }}
           ${{ github.event.pull_request.head.sha }}
         tag_fallback: latest
-        triggers: ('${{ matrix.package }}/', '.github/workflows/pr-open.yml')
+        triggers: |
+          ${{ matrix.package }}/
+          .github/workflows/pr-open.yml
 ```
 
 A Mac pulls `ghcr.io/<organization>/<repository>/backend-arm64:<pull request number>`. The cluster still pulls `backend` at the head SHA on a pull request, and at the pull request number after merge.

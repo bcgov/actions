@@ -23,7 +23,7 @@ The action reads `CODEOWNERS` from the **job workspace**, not from the action bu
 | `debug` | Enable debug logging | `"false"` | No |
 | `title` | Issue title. An open issue with this exact title gets a comment for each later run. A closed issue is not reused. | | **Yes** |
 | `body` | Issue body (pre-filled with workflow run URL if omitted) | | No |
-| `labels` | Labels to add to the issue: one per line, comma separated, or a JSON array | `"bug,failure"` | No |
+| `labels` | Labels to add to the issue: one per line, or a single label | `bug` and `failure`, one per line | No |
 | `assign` | Whether to assign owners to the issue | `"true"` | No |
 | `notify_author` | Whether to notify the triggering author/merger on failure | `"true"` | No |
 | `notify_codeowners` | When to notify repository CODEOWNERS on failure: `always`, `fallback` or `never`. By default (`fallback`), CODEOWNERS are only alerted if no human author/operator was resolved (e.g. scheduled cron runs). `always` always includes CODEOWNERS; `never` never does. The old `true`/`false` values fail with an error naming the accepted values. | `"fallback"` | No |

@@ -19,8 +19,10 @@ inputs:
     description: "Issue body (pre-filled with run URL if omitted)"
     required: false
   labels:
-    description: "Labels to add: one per line, comma separated, or a JSON array"
-    default: "bug,failure"
+    description: "Labels to add: one per line, or a single label"
+    default: |
+      bug
+      failure
   assign:
     description: "Whether to assign owners to the issue"
     default: "true"
