@@ -91,7 +91,7 @@ async function main() {
   // ── Phase 1: Read inputs & environment ──────────────────────────────
   const triggersStr = process.env.INPUT_TRIGGERS || '';
   const filtersStr = process.env.INPUT_FILTERS || '';
-  const inputRef = getInput('diff_base');
+  const inputRef = getInput('base');
   let annotationsEnabled;
   let debug;
   try {
