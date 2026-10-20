@@ -126,7 +126,7 @@ Only GitHub Container Registry (`ghcr.io`) is supported.
 
     # Overrides the default reference/branch to diff against
     # Defaults to the default branch, usually `main`
-    diff_base: ${{ github.event.repository.default_branch }}
+    base: ${{ github.event.repository.default_branch }}
 
     # Repository to clone and process
     # Useful for consuming other repos, like in testing
