@@ -289,7 +289,8 @@ printf "\tAssignees: %s\n" "${CLEAN_ASSIGNEES}"
 # Write outputs (useful even in dry runs)
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
   echo "issue_number=${ISSUE_NUM}" >> "${GITHUB_OUTPUT}"
-  echo "assignees=${CLEAN_ASSIGNEES}" >> "${GITHUB_OUTPUT}"
+  # JSON array, like other list outputs (diff-triggers changes, ghcr-cleanup selected)
+  echo "assignees=$(jq -cn --arg a "$CLEAN_ASSIGNEES" '$a | split(",") | map(select(. != ""))')" >> "${GITHUB_OUTPUT}"
 fi
 
 log_debug "Action completed successfully."
