@@ -66,7 +66,7 @@ When package resolution fails, `image-tracker` automatically outputs a diagnosti
 Call image-tracker once per workflow, in the first job. List every package one
 per line, set `tags` when the workflow should retag, and have each deploy job
 read its digest from the `images` JSON output. This is the shape
-`bcgov/quickstart-openshift` `merge.yml` uses:
+`bcgov/quickstart-openshift` `merge.yml` would use:
 
 ```yaml
 jobs:
