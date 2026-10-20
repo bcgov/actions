@@ -8,7 +8,7 @@ INPUT_NOTIFY_AUTHOR="$(node "$SHARED_INPUTS" bool notify_author true)"
 INPUT_DRY_RUN="$(node "$SHARED_INPUTS" bool dry_run false)"
 NOTIFY_CODEOWNERS_MODE="$(node "$SHARED_INPUTS" enum notify_codeowners always,fallback,never fallback)"
 LABELS_LIST="$(node "$SHARED_INPUTS" list labels)"
-INPUT_TOKEN="${INPUT_TOKEN:-${GITHUB_TOKEN:-}}"
+INPUT_TOKEN="$(node "$SHARED_INPUTS" token)"
 
 if [ "${INPUT_DEBUG:-}" == "true" ]; then
   set -x
