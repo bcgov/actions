@@ -14,7 +14,7 @@ jobs:
   dist:
     name: Rebuild dist on release tag
     if: github.repository == 'bcgov/actions' && github.event.release.draft == false
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: write
     steps:
