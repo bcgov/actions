@@ -6,7 +6,7 @@ branding:
 
 inputs:
   conventional_commits:
-    description: "Enforce conventional commits?"
+    description: "Require a Conventional Commits PR title (true or false)"
     default: "true"
   add_markdown:
     description: "Markdown to append to the PR description. Empty skips pr-description-add."
@@ -28,8 +28,19 @@ runs:
         source "${{ github.action_path }}/fork-notice.sh"
         echo "::warning::$(fork_pr_warning)"
 
+    # Shared boolean rules (shared/README.md); a bad value fails here
+    - name: Parse Inputs
+      id: inputs
+      shell: bash
+      env:
+        INPUT_CONVENTIONAL_COMMITS: ${{ inputs.conventional_commits }}
+        SHARED_INPUTS: ${{ github.action_path }}/../shared/inputs.js
+      run: |
+        conventional_commits=$(node "$SHARED_INPUTS" bool conventional_commits true)
+        echo "conventional_commits=${conventional_commits}" >> "$GITHUB_OUTPUT"
+
     - name: Conventional Commits
-      if: inputs.conventional_commits == 'true' && github.event_name == 'pull_request'
+      if: steps.inputs.outputs.conventional_commits == 'true' && github.event_name == 'pull_request'
       id: semantic
       uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
       env:

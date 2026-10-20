@@ -39,7 +39,7 @@ outputs:
     description: "The created issue number, or the open issue that received the comment (0 if dry run)"
     value: "${{ steps.run_script.outputs.issue_number }}"
   assignees:
-    description: "Comma-separated list of assigned owners"
+    description: "JSON array of assigned owners, e.g. [\"alice\",\"bob\"]"
     value: "${{ steps.run_script.outputs.assignees }}"
 
 runs:

@@ -34,7 +34,7 @@ The action reads `CODEOWNERS` from the **job workspace**, not from the action bu
 | Output | Description |
 |---|---|
 | `issue_number` | The created issue number, or the open issue that received the comment (0 if dry run) |
-| `assignees` | Comma-separated list of assigned owners |
+| `assignees` | JSON array of assigned owners, e.g. `["alice","bob"]` |
 
 ## Usage
 

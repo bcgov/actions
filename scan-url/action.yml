@@ -10,10 +10,10 @@ inputs:
     required: true
   # What to scan: each scanner is on by default; at least one must stay on
   zap:
-    description: Run the ZAP full scan ('true' or 'false')
+    description: Run the ZAP full scan (true or false)
     default: 'true'
   nuclei:
-    description: Run the Nuclei scan ('true' or 'false')
+    description: Run the Nuclei scan (true or false)
     default: 'true'
 
 outputs:
@@ -32,15 +32,15 @@ runs:
       shell: bash
       env:
         URL: ${{ inputs.url }}
-        ZAP: ${{ inputs.zap }}
-        NUCLEI: ${{ inputs.nuclei }}
+        INPUT_ZAP: ${{ inputs.zap }}
+        INPUT_NUCLEI: ${{ inputs.nuclei }}
+        SHARED_INPUTS: ${{ github.action_path }}/../shared/inputs.js
       run: |
-        for toggle in "zap=${ZAP}" "nuclei=${NUCLEI}"; do
-          if [[ "${toggle#*=}" != true && "${toggle#*=}" != false ]]; then
-            echo "::error::${toggle%%=*} must be 'true' or 'false', got '${toggle#*=}'"
-            exit 1
-          fi
-        done
+        # Shared boolean rules (shared/README.md); a bad value fails here
+        ZAP=$(node "$SHARED_INPUTS" bool zap true)
+        NUCLEI=$(node "$SHARED_INPUTS" bool nuclei true)
+        echo "zap=${ZAP}" >> "$GITHUB_OUTPUT"
+        echo "nuclei=${NUCLEI}" >> "$GITHUB_OUTPUT"
         if [[ "$ZAP" == false && "$NUCLEI" == false ]]; then
           echo "::error::zap and nuclei are both 'false'; enable at least one scanner"
           exit 1
@@ -67,7 +67,7 @@ runs:
 
     - name: ZAP Full Scan
       id: zap
-      if: inputs.zap == 'true'
+      if: steps.preflight.outputs.zap == 'true'
       continue-on-error: true
       uses: zaproxy/action-full-scan@3c58388149901b9a03b7718852c5ba889646c27c # v0.13.0
       with:
@@ -78,19 +78,19 @@ runs:
 
     - name: Nuclei Scan
       id: nuclei
-      if: inputs.nuclei == 'true'
+      if: steps.preflight.outputs.nuclei == 'true'
       continue-on-error: true
       uses: projectdiscovery/nuclei-action@cc153d0541e1adf8a42bbe31c0a4fb2376147538 # v3.1.1
       with:
         args: -u ${{ inputs.url }} -jsonl-export nuclei-results.jsonl -sarif-export nuclei-results.sarif
 
     - name: Convert ZAP Report to SARIF
-      if: inputs.zap == 'true' && hashFiles('report_json.json') != ''
+      if: steps.preflight.outputs.zap == 'true' && hashFiles('report_json.json') != ''
       shell: bash
       run: jq -f "${GITHUB_ACTION_PATH}/zap-sarif.jq" report_json.json > zap-results.sarif
 
     - name: Upload ZAP SARIF
-      if: inputs.zap == 'true' && hashFiles('zap-results.sarif') != ''
+      if: steps.preflight.outputs.zap == 'true' && hashFiles('zap-results.sarif') != ''
       uses: github/codeql-action/upload-sarif@v4
       with:
         sarif_file: zap-results.sarif
@@ -98,7 +98,7 @@ runs:
 
     # Nuclei writes SARIF only when it has findings; an empty run closes stale alerts
     - name: Empty Nuclei SARIF for a Clean Scan
-      if: ${{ !cancelled() && inputs.nuclei == 'true' && steps.nuclei.outcome == 'success' }}
+      if: ${{ !cancelled() && steps.preflight.outputs.nuclei == 'true' && steps.nuclei.outcome == 'success' }}
       shell: bash
       run: |
         if [[ -f nuclei-results.jsonl && ! -f nuclei-results.sarif ]]; then
@@ -106,7 +106,7 @@ runs:
         fi
 
     - name: Upload Nuclei SARIF
-      if: ${{ !cancelled() && inputs.nuclei == 'true' && steps.preflight.outcome == 'success' && hashFiles('nuclei-results.sarif') != '' }}
+      if: ${{ !cancelled() && steps.preflight.outputs.nuclei == 'true' && steps.preflight.outcome == 'success' && hashFiles('nuclei-results.sarif') != '' }}
       uses: github/codeql-action/upload-sarif@v4
       with:
         sarif_file: nuclei-results.sarif
@@ -117,8 +117,8 @@ runs:
       if: ${{ !cancelled() && steps.preflight.outcome == 'success' }}
       shell: bash
       env:
-        ZAP_ENABLED: ${{ inputs.zap }}
-        NUCLEI_ENABLED: ${{ inputs.nuclei }}
+        ZAP_ENABLED: ${{ steps.preflight.outputs.zap }}
+        NUCLEI_ENABLED: ${{ steps.preflight.outputs.nuclei }}
         ZAP_OUTCOME: ${{ steps.zap.outcome }}
         NUCLEI_OUTCOME: ${{ steps.nuclei.outcome }}
       run: bash "${GITHUB_ACTION_PATH}/verify.sh"
