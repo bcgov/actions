@@ -92,7 +92,8 @@ for caller_config in .github/actionlint.yaml .github/actionlint.yml; do
   break
 done
 
-shopt -s nullglob
+# dotglob: hidden files such as .github/workflows/.reusable.yml are workflows too.
+shopt -s nullglob dotglob
 workflow_files=(.github/workflows/*.yml .github/workflows/*.yaml)
 if (( ${#workflow_files[@]} == 0 )); then
   echo "::error title=actionlint workflows missing::No workflow files found in ${workspace}/.github/workflows"

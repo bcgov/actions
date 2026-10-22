@@ -87,6 +87,21 @@ else
   failed=$((failed + 1))
 fi
 
+mv "$fixture/.github/workflows/ok.yml" "$fixture/.github/workflows/.hidden.yml"
+set +e
+ACTIONLINT_CONFIG="$config" ACTIONLINT_WORKSPACE="$fixture" bash "$lint" >/tmp/pr-validate-hidden.txt 2>&1
+status=$?
+set -e
+if [[ "$status" -ne 0 ]] && grep -q "evnet" /tmp/pr-validate-hidden.txt; then
+  echo "ok  hidden workflow file is linted"
+  passed=$((passed + 1))
+else
+  echo "FAIL  hidden workflow file is linted"
+  cat /tmp/pr-validate-hidden.txt
+  failed=$((failed + 1))
+fi
+rm "$fixture/.github/workflows/.hidden.yml"
+
 set +e
 ACTIONLINT_CONFIG="$config" ACTIONLINT_WORKSPACE="$repo" bash "$lint" >/tmp/pr-validate-repo.txt 2>&1
 status=$?
