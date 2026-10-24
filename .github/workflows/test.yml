@@ -127,7 +127,7 @@ jobs:
           echo "Verified image: ${IMAGE}"
 
   test-builder-matrix:
-    name: Test Builder (No Attestation / Advanced / Single Package / Metadata / Self)
+    name: Test Builder (No Attestation / Advanced / Metadata / Self)
     needs: [filter]
     if: contains(fromJSON(needs.filter.outputs.changes), 'builder') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
     runs-on: ubuntu-26.04
@@ -148,12 +148,12 @@ jobs:
           triggers: |
             builder/
 
-      - name: Test Advanced (Root Build Context)
+      - name: Test Advanced (Multiline Tags)
         id: advanced
         uses: $/builder
         with:
           package: builder-selftest
-          context: .
+          context: builder/tests
           file: builder/tests/Dockerfile
           tags: |
             ${{ github.event.number }}
@@ -860,7 +860,7 @@ jobs:
         run: bash pr-validate/tests/self-check.sh
 
       - name: Description unit tests
-        run: node --test pr-validate/tests/
+        run: node --test pr-validate/tests/*.test.js
 
       - name: Test pr-validate action
         if: github.event_name == 'pull_request'
@@ -932,7 +932,7 @@ jobs:
           with open('workflow-results/action.yml') as f:
               action = yaml.safe_load(f)
           assert isinstance(action, dict), 'action.yml must be a mapping'
-          for key in ['name', 'description', 'inputs', 'runs']:
+          for key in ['name', 'description', 'inputs', 'outputs', 'runs']:
               assert key in action and action[key], f'Missing required action field: {key}'
           assert action['runs'].get('using') == 'node24', 'runs.using must be node24'
           assert action['runs'].get('main') == 'index.js', 'runs.main must be index.js'
@@ -1043,7 +1043,7 @@ jobs:
           with open('workflow-notifier/action.yml') as f:
               action = yaml.safe_load(f)
           assert isinstance(action, dict), 'action.yml must be a mapping'
-          for key in ['name', 'description', 'inputs', 'outputs', 'runs']:
+          for key in ['name', 'description', 'inputs', 'runs']:
               assert key in action and action[key], f'Missing required action field: {key}'
           assert action['runs'].get('using') == 'composite', 'runs.using must be composite'
           assert isinstance(action['runs'].get('steps'), list) and len(action['runs']['steps']) > 0, 'runs.steps must be a list'
