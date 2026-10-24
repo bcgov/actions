@@ -58,7 +58,7 @@ Input and output names follow GitHub's conventions first (actions/checkout and o
 | `username` | Registry login user | docker/login-action `username` |
 | `context`, `file`, `build_args`, `tags`, `sbom` | Image build settings | docker/build-push-action |
 | `node_version`, `java_version`, `python_version`, `cache` | Toolchain setup | actions/setup-node, setup-java, setup-python |
-| `labels`, `assignees` | Issue labels and assignees | GitHub issues API |
+| `assignees` | Issue assignees | GitHub issues API |
 | `debug` | Boolean debug switch | (none) |
 | `dry_run` | Log and change nothing | (none) |
 

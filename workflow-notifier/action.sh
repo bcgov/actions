@@ -7,8 +7,8 @@ INPUT_DEBUG="$(node "$SHARED_INPUTS" debug)"
 INPUT_NOTIFY_AUTHOR="$(node "$SHARED_INPUTS" bool notify_author true)"
 INPUT_DRY_RUN="$(node "$SHARED_INPUTS" bool dry_run false)"
 NOTIFY_CODEOWNERS_MODE="$(node "$SHARED_INPUTS" enum notify_codeowners always,fallback,never fallback)"
-LABELS_LIST="$(node "$SHARED_INPUTS" list labels)"
 INPUT_TOKEN="$(node "$SHARED_INPUTS" token)"
+INPUT_TITLE="${INPUT_TITLE:-"fix: failure in ${GITHUB_WORKFLOW:-workflow}"}"
 
 if [ "${INPUT_DEBUG:-}" == "true" ]; then
   set -x
@@ -246,12 +246,6 @@ else
   GH_ARGS=(issue create --title "$INPUT_TITLE" --body "$FINAL_BODY")
   if [ -n "${GITHUB_REPOSITORY:-}" ]; then
     GH_ARGS+=(--repo "$GITHUB_REPOSITORY")
-  fi
-
-  if [ -n "$LABELS_LIST" ]; then
-    while IFS= read -r label; do
-      [ -n "$label" ] && GH_ARGS+=(--label "$label")
-    done <<< "$LABELS_LIST"
   fi
 
   if [ -n "$CLEAN_ASSIGNEES" ]; then

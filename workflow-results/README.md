@@ -76,9 +76,6 @@ results:
     - name: Notify on Failure
       if: failure()
       uses: bcgov/actions/workflow-notifier@vX.Y.Z
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        title: 'Nightly Run Failed'
 ```
 
 ### Full Configuration Options
