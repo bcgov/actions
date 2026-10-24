@@ -707,6 +707,12 @@ test_default_title() {
   local create_args
   create_args="$(cat "${TMP_DIR}/gh_create_args")"
   assert_contains "$create_args" $'--title\nfix: failure in Merge' "defaults title to fix: failure in workflow"
+
+  local action_yml
+  action_yml="$(cat "${SCRIPT_DIR}/../action.yml")"
+  assert_not_contains "$action_yml" "labels:" "action.yml does not declare labels input"
+  assert_not_contains "$action_yml" "INPUT_LABELS" "action.yml does not pass INPUT_LABELS"
+  assert_contains "$action_yml" 'default: "fix: failure in ${{ github.workflow }}"' "action.yml defaults title to workflow failure"
 }
 
 test_create_when_no_open_match

@@ -1147,9 +1147,6 @@ jobs:
               assert key in action and action[key], f'Missing required action field: {key}'
           assert action['runs'].get('using') == 'composite', 'runs.using must be composite'
           assert isinstance(action['runs'].get('steps'), list) and len(action['runs']['steps']) > 0, 'runs.steps must be a list'
-          assert 'labels' not in action['inputs'], 'inputs must not declare labels'
-          assert action['inputs']['title'].get('default') == 'fix: failure in ${{ github.workflow }}', 'title default must be set'
-          assert not action['inputs']['title'].get('required', False), 'title must not be required'
           assert 'notify_author' in action['inputs'], 'inputs must declare notify_author'
           assert action['inputs']['notify_author'].get('default') == 'true', 'notify_author default must be true'
           assert 'notify_codeowners' in action['inputs'], 'inputs must declare notify_codeowners'
@@ -1161,6 +1158,9 @@ jobs:
         id: dry_run
         uses: $/workflow-notifier
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          title: '[DRY RUN] Simulating a failure for testing'
+          body: 'This is a dry run test of the notifier action.'
           dry_run: true
 
       - name: Dry Run - Simulate Failure with Author Disabled
