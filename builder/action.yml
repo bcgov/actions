@@ -244,6 +244,20 @@ runs:
         path: .builder-context
         clean: false
 
+    - name: Set up Docker Buildx
+      if: steps.build.outputs.triggered == 'true'
+      uses: docker/setup-buildx-action@v4
+
+    - name: Prepare Container Metadata labels
+      id: meta
+      if: steps.build.outputs.triggered == 'true'
+      uses: docker/metadata-action@v6
+      with:
+        images: ${{ steps.vars.outputs.image_name }}
+        flavor: |
+          latest=false
+        tags: ""
+
     - name: Format tags and labels
       id: tags
       if: steps.build.outputs.triggered == 'true'

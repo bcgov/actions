@@ -169,12 +169,26 @@ runs:
         npx -y @aikidosec/safe-chain setup-ci
 
 
-    # Clone when the workspace holds no repository yet.
+    # Find the repository enclosing working_directory (a caller may check out
+    # into a subdirectory). Empty when there is none.
+    - name: Locate project repository
+      id: repo
+      if: steps.final_triggered.outputs.triggered == 'true'
+      shell: bash
+      env:
+        WD: ${{ inputs.working_directory }}
+      run: |
+        top=""
+        if [ -d "${WD:-.}" ] && abs="$(git -C "${WD:-.}" rev-parse --show-toplevel 2>/dev/null)"; then
+          top="$(realpath --relative-to="${GITHUB_WORKSPACE}" "${abs}")"
+          case "${top}" in ..*) top="" ;; esac
+        fi
+        echo "root=${top}" >> "$GITHUB_OUTPUT"
+
+    # Clone into the workspace only when working_directory has no repository.
     - name: Internal Project Checkout
       uses: actions/checkout@v7
-      if: >-
-        steps.final_triggered.outputs.triggered == 'true' &&
-        hashFiles('.git/HEAD', '.git') == ''
+      if: steps.final_triggered.outputs.triggered == 'true' && steps.repo.outputs.root == ''
       with:
         clean: false
         token: ${{ inputs.token }}
@@ -184,10 +198,9 @@ runs:
     # new-code detection, and a caller's own checkout is usually depth 1.
     # Deepen in place rather than re-cloning over them.
     - name: Deepen shallow history
-      if: >-
-        steps.final_triggered.outputs.triggered == 'true' &&
-        hashFiles('.git/HEAD', '.git') != ''
+      if: steps.final_triggered.outputs.triggered == 'true' && steps.repo.outputs.root != ''
       shell: bash
+      working-directory: ${{ steps.repo.outputs.root }}
       run: |
         # A worktree keeps its shallow marker in the main repo's gitdir, so probe
         # git rather than looking for .git/shallow here.
@@ -203,6 +216,7 @@ runs:
         INPUT_CACHE: ${{ inputs.cache }}
         INPUT_LANGUAGE: ${{ steps.inputs.outputs.language }}
         INPUT_DIR: ${{ inputs.working_directory }}
+        INPUT_CHECKOUT_PATH: ${{ steps.repo.outputs.root || '.' }}
       run: |
         "${{ github.action_path }}/cache.sh"
 
@@ -213,6 +227,7 @@ runs:
       env:
         INPUT_NODE_VERSION: ${{ inputs.node_version }}
         INPUT_DIR: ${{ inputs.working_directory }}
+        INPUT_CHECKOUT_PATH: ${{ steps.repo.outputs.root || '.' }}
       run: |
         "${{ github.action_path }}/node-version.sh"
 
@@ -225,7 +240,7 @@ runs:
         cache: ${{ steps.cache_logic.outputs.cache }}
         cache-dependency-path: |
           ${{ inputs.working_directory }}/${{ steps.cache_logic.outputs.cache == 'yarn' && 'yarn.lock' || (steps.cache_logic.outputs.cache == 'pnpm' && 'pnpm-lock.yaml' || 'package-lock.json') }}
-          ${{ steps.cache_logic.outputs.cache == 'yarn' && 'yarn.lock' || (steps.cache_logic.outputs.cache == 'pnpm' && 'pnpm-lock.yaml' || 'package-lock.json') }}
+          ${{ steps.repo.outputs.root || '.' }}/${{ steps.cache_logic.outputs.cache == 'yarn' && 'yarn.lock' || (steps.cache_logic.outputs.cache == 'pnpm' && 'pnpm-lock.yaml' || 'package-lock.json') }}
 
     - name: Determine Java Version
       id: java_version_logic
@@ -234,6 +249,7 @@ runs:
       env:
         INPUT_JAVA_VERSION: ${{ inputs.java_version }}
         INPUT_DIR: ${{ inputs.working_directory }}
+        INPUT_CHECKOUT_PATH: ${{ steps.repo.outputs.root || '.' }}
       run: |
         "${{ github.action_path }}/java-version.sh"
 
@@ -258,6 +274,7 @@ runs:
       env:
         INPUT_PYTHON_VERSION: ${{ inputs.python_version }}
         INPUT_DIR: ${{ inputs.working_directory }}
+        INPUT_CHECKOUT_PATH: ${{ steps.repo.outputs.root || '.' }}
       run: |
         "${{ github.action_path }}/python-version.sh"
 
