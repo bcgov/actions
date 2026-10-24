@@ -14,15 +14,11 @@ inputs:
     default: "false"
   title:
     description: "Issue title. An open issue with this exact title gets a comment for each later run. A closed issue is not reused."
-    required: true
+    default: "fix: failure in ${{ github.workflow }}"
+    required: false
   body:
     description: "Issue body (pre-filled with run URL if omitted)"
     required: false
-  labels:
-    description: "Labels to add: one per line, or a single label"
-    default: |
-      bug
-      failure
   notify_author:
     description: "Whether to notify the triggering author/merger on failure"
     default: "true"
@@ -52,7 +48,6 @@ runs:
         INPUT_DEBUG: "${{ inputs.debug }}"
         INPUT_TITLE: "${{ inputs.title }}"
         INPUT_BODY: "${{ inputs.body }}"
-        INPUT_LABELS: "${{ inputs.labels }}"
         INPUT_NOTIFY_AUTHOR: "${{ inputs.notify_author }}"
         INPUT_NOTIFY_CODEOWNERS: "${{ inputs.notify_codeowners }}"
         INPUT_EVENT_NAME: "${{ github.event_name }}"

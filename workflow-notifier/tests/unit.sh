@@ -630,7 +630,6 @@ test_create_when_no_open_match() {
   out=$(run_action "$FIXTURE_DIR" \
     INPUT_TITLE="TEST Deployment Failure: api" \
     INPUT_BODY="Boom" \
-    INPUT_LABELS=$'bug\nfailure' \
     INPUT_TOKEN="dummy-token" \
     INPUT_DRY_RUN="false" \
     GITHUB_REPOSITORY="bcgov/actions" \
@@ -646,9 +645,7 @@ test_create_when_no_open_match() {
   assert_contains "$out" "Issue:     #77" "create path returns the new issue number"
   assert_contains "$list_args" $'--state\nopen' "lists open issues only"
   assert_contains "$list_args" $'--limit\n100' "scans at most 100 open issues"
-  assert_contains "$create_args" "--label" "create adds labels"
-  assert_contains "$create_args" "bug" "create adds the bug label"
-  assert_contains "$create_args" "failure" "create adds the failure label"
+  assert_not_contains "$create_args" "--label" "create does not set labels"
   assert_contains "$create_args" "--assignee" "create assigns owners"
   assert_contains "$create_args" "charlie" "create assigns the resolved author"
   assert_contains "$body" "Boom" "create keeps the caller body"
@@ -667,7 +664,6 @@ test_comment_on_exact_title() {
   out=$(run_action "$FIXTURE_DIR" \
     INPUT_TITLE="TEST Deployment Failure: api" \
     INPUT_BODY="Boom" \
-    INPUT_LABELS=$'bug\nfailure' \
     INPUT_TOKEN="dummy-token" \
     INPUT_DRY_RUN="false" \
     GITHUB_REPOSITORY="bcgov/actions" \
@@ -696,20 +692,27 @@ test_rejects_old_codeowners_value() {
   assert_contains "$out" "Use one of: always, fallback, never" "error lists the accepted values"
 }
 
-test_rejects_space_separated_labels() {
-  local out rc=0
+test_default_title() {
+  reset_issue_fixtures
+  local out
   out=$(run_action "$FIXTURE_DIR" \
-    INPUT_TITLE="t" \
-    INPUT_LABELS="bug failure" \
-    INPUT_DRY_RUN="true" 2>&1) || rc=$?
-  assert_eq "$rc" "1" "space separated labels fail"
-  assert_contains "$out" "Invalid labels input: bug failure" "error names the labels value"
+    INPUT_TOKEN="dummy-token" \
+    INPUT_DRY_RUN="false" \
+    GITHUB_WORKFLOW="Merge" \
+    GITHUB_REPOSITORY="bcgov/actions" \
+    GITHUB_SERVER_URL="https://github.com" \
+    GITHUB_RUN_ID="789" \
+    GITHUB_TRIGGERING_ACTOR="charlie")
+
+  local create_args
+  create_args="$(cat "${TMP_DIR}/gh_create_args")"
+  assert_contains "$create_args" $'--title\nfix: failure in Merge' "defaults title to fix: failure in workflow"
 }
 
 test_create_when_no_open_match
 test_comment_on_exact_title
 test_rejects_old_codeowners_value
-test_rejects_space_separated_labels
+test_default_title
 
 echo ""
 echo "Unit tests finished: ${passed} passed, ${failed} failed."
