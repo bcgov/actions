@@ -169,9 +169,7 @@ test('run: end-to-end success writes outputs and step summary with exitCode 0', 
 
   const outputContent = fs.readFileSync(outputPath, 'utf8')
   assert.ok(outputContent.includes('passed=true'))
-  assert.ok(outputContent.includes('total=2'))
-  assert.ok(outputContent.includes('failed=[]'))
-  assert.ok(outputContent.includes('skipped=["lint"]'))
+  assert.ok(!outputContent.includes('total='))
 
   const summaryContent = fs.readFileSync(summaryPath, 'utf8')
   assert.ok(summaryContent.includes('### PR Results'))
@@ -240,8 +238,6 @@ test('run: end-to-end failure emits annotations and exitCode 1', () => {
 
   const outputContent = fs.readFileSync(outputPath, 'utf8')
   assert.ok(outputContent.includes('passed=false'))
-  assert.ok(outputContent.includes('failed=["test"]'))
-  assert.ok(outputContent.includes('cancelled=["deploy"]'))
 
   fs.rmSync(tmpDir, {recursive: true, force: true})
 })
@@ -465,8 +461,7 @@ test('run: executes seamlessly when invoked purely via runner environment variab
 
     const outputContent = fs.readFileSync(outputPath, 'utf8')
     assert.ok(outputContent.includes('passed=true'))
-    assert.ok(outputContent.includes('total=2'))
-  } finally {
+    } finally {
     process.env = origEnv
     fs.rmSync(tmpDir, {recursive: true, force: true})
   }
@@ -492,7 +487,7 @@ test('run: gracefully handles execution outside GitHub Actions when env vars are
   assert.ok(logs.some(l => l.includes('=== Workflow Results ===')))
 })
 
-test('run: emits ::debug:: logs when debug is enabled or RUNNER_DEBUG is set', () => {
+test('run: emits ::debug:: logs when RUNNER_DEBUG is set', () => {
   const logs = []
   const mockLogger = {
     log: msg => logs.push(msg),
@@ -500,26 +495,12 @@ test('run: emits ::debug:: logs when debug is enabled or RUNNER_DEBUG is set', (
     warn: () => {}
   }
 
-  // 1. debug option
-  run({
-    needsInput: JSON.stringify({jobA: {result: 'success'}}),
-    debug: 'true',
-    summary: 'false',
-    annotations: 'false',
-    logger: mockLogger
-  })
-  assert.ok(
-    logs.some(l => l.includes('::debug::Workflow Results debug enabled'))
-  )
-
-  // 2. RUNNER_DEBUG env var
-  logs.length = 0
+  // RUNNER_DEBUG env var (no debug input)
   const origRunnerDebug = process.env.RUNNER_DEBUG
   try {
     process.env.RUNNER_DEBUG = '1'
     run({
       needsInput: JSON.stringify({jobA: {result: 'success'}}),
-      debug: 'false',
       summary: 'false',
       annotations: 'false',
       logger: mockLogger

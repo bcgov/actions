@@ -43,14 +43,13 @@ permissions:
 | `cache` | _(auto)_ | Detected from lockfiles; set `none` to disable |
 | `sonar_args` | bcgov-sonarcloud org + `bcgov_${{ github.repository }}` project key | |
 | `supply_scan` | `true` | Node only (`@aikidosec/safe-chain`) |
-| `dep_scan` | `warn` | Node only (Knip); options: `off`, `warn`, `error` |
+| `knip` | `warn` | Node only (Knip); options: `off`, `warn`, `error` |
 | `semgrep` | `false` | |
 | `semgrep_config` | `p/default` | |
 | `semgrep_fail` | `false` | Findings warn unless `true` |
-| `annotations` / debug | `debug: false` | |
 | `sonar_token` | _(empty)_ | Empty skips Sonar with a warning (fork PRs get no secrets) |
 | `triggers` | _(omitted)_ | When omitted, tests always run |
-| `base` | repository default branch | Base to diff triggers against |
+| `base` | PR base branch, or `HEAD^` on push | Base to diff triggers against |
 | `token` | `${{ github.token }}` | |
 | `path` | `.` | |
 
@@ -74,23 +73,20 @@ permissions:
 
     ### Versioning
     # Node.js version (for Node projects). If omitted, automatically detected.
-    # Resolution order: node_version; node_version_file; .node-version / .nvmrc
+    # Resolution order: node_version; .node-version / .nvmrc
     # (project dir, then root); Dockerfile (project dir, then root); package.json
     # engines.node (project dir, then root); then default: "24".
     # node_version: "24"
-    # node_version_file: ".nvmrc"  # Optional explicit version file
     
     # Java version (for Java projects). If omitted, automatically detected.
-    # Resolution order: java_version; java_version_file; .java-version /
+    # Resolution order: java_version; .java-version /
     # .sdkmanrc / .tool-versions; pom.xml / Gradle; Dockerfile; then default: "21".
     # java_version: "21"
-    # java_version_file: ".java-version"
 
     # Python version (for Python projects). If omitted, automatically detected.
-    # Resolution order: python_version; python_version_file; .python-version;
+    # Resolution order: python_version; .python-version;
     # pyproject.toml (requires-python / Poetry); Dockerfile; Pipfile; then default: "3.12".
     # python_version: "3.12"
-    # python_version_file: ".python-version"
 
     ### Typical / recommended
     # Sonar token available from sonarcloud.io
@@ -110,7 +106,7 @@ permissions:
     supply_scan: true
 
     # Knip dependency analysis (Node only). Options: off, warn (default), error
-    dep_scan: warn
+    knip: warn
 
     # Semgrep scan of working_directory (any language). Off by default; see Semgrep below.
     semgrep: false
@@ -128,16 +124,7 @@ permissions:
 
     # Overrides the default reference/branch to diff against
     # Defaults to the default branch, usually `main`
-    base: ${{ github.event.repository.default_branch }}
-
-    # Repository to clone and process
-    # Useful for consuming other repos, like in testing
-    # Defaults to the current one
-    repository: ${{ github.repository }}
-
-    # Branch, tag or SHA of repository to check out (actions/checkout `ref`)
-    # Defaults to empty, the repository default branch
-    ref: ""
+    base: main  # Optional; default is the PR base branch, or HEAD^ on push
 ```
 
 # Example, Single Directory with SonarCloud Analysis, Supply Chain Scanning, and Dependency/Export Analysis
@@ -218,7 +205,7 @@ jobs:
           working_directory: frontend
           node_version: "20"
           # supply_scan defaults to true (enabled) - strongly discouraged to disable
-          dep_scan: off  # Disable dependency analysis
+          knip: off  # Disable dependency analysis
 ```
 
 # Example, Matrix / Multiple Directories with Sonar Cloud and Triggers
@@ -259,8 +246,6 @@ jobs:
             -Dsonar.projectKey=bcgov_${{ github.repository }}_${{ matrix.working_directory }}
           sonar_token: ${{ secrets[matrix.sonar_token] }}
           triggers: ${{ matrix.triggers }}
-          repository: bcgov/quickstart-openshift
-          ref: main
 ```
 
 # Outputs
@@ -343,11 +328,11 @@ No additional configuration or API tokens are required. The scanning happens aut
 
 This action supports dependency and export analysis using [Knip](https://knip.dev/). When enabled, Knip scans JavaScript/TypeScript projects to identify unused dependencies, devDependencies, and exports, helping keep your codebase clean and maintainable.
 
-**Default behavior**: Runs in `warn` mode (shows issues without failing) to encourage adoption without blocking builds. You can disable with `dep_scan: off` or enforce with `dep_scan: error`.
+**Default behavior**: Runs in `warn` mode (shows issues without failing) to encourage adoption without blocking builds. You can disable with `knip: off` or enforce with `knip: error`.
 
 ## How to Use
 
-The `dep_scan` parameter supports three modes:
+The `knip` parameter supports three modes:
 
 - **`off`** - Skip Knip analysis entirely
 - **`warn`** - Run Knip and show issues, but don't fail the workflow (default)
@@ -363,7 +348,7 @@ The `dep_scan` parameter supports three modes:
       npm run test:cov
     working_directory: frontend
     node_version: "20"
-    dep_scan: warn
+    knip: warn
 ```
 
 ### Example: Error Mode (Enforce Cleanup)
@@ -376,7 +361,7 @@ The `dep_scan` parameter supports three modes:
       npm run test:cov
     working_directory: frontend
     node_version: "20"
-    dep_scan: error
+    knip: error
 ```
 
 When enabled, Knip will:
@@ -410,7 +395,7 @@ When `knip_config` is not provided, the action uses its default configuration. I
 ```yaml
 - uses: bcgov/actions/test-and-analyse@vX.Y.Z
   with:
-    dep_scan: error
+    knip: error
     knip_config: "configs/custom.knip.json"  # Path is relative to the GitHub workspace root, not to the `working_directory` input
 ```
 

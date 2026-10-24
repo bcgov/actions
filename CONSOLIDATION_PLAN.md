@@ -11,7 +11,7 @@ Each action will live in its own subdirectory within the appropriate repository.
 
 **Status (2026-09):** The general suite in `bcgov/actions` is feature-complete for the
 `v1.0.0` stabilization epic (#209): `builder/` (renamed from `builder-ghcr`),
-`diff-triggers`, `image-tracker` (replaces standalone `get-pr` usage), and the other
+`diff-triggers`, `image-tracker` (replaces `get-pr`, removed in v0.11.0), and the other
 actions listed below. **`bcgov/actions-openshift`** exists and holds the OpenShift
 actions, including `deployer/` (formerly `action-deployer-openshift`). `action-postgres`
 was not migrated.
@@ -22,7 +22,7 @@ All actions in each repository are versioned and released together as a **single
 
 > **Consumers must never pin to `@main`.** README examples use `@vX.Y.Z` — a placeholder that will not resolve — to force consumers to look up the [latest release](../../releases) and pick a real version or SHA.
 >
-> `pr-description-add` and `test-and-analyse` run ncc `dist/`, which is never on `main`. Publishing a release deletes that tag until `.github/workflows/release.yml` recreates it on the dist commit. `@main` for those two actions does not run current source.
+> `test-and-analyse` runs ncc `dist/`, which is never on `main`. Publishing a release deletes that tag until `.github/workflows/release.yml` recreates it on the dist commit. `@main` for that action does not run current source.
 
 ## Repository Structure
 
@@ -34,7 +34,6 @@ actions/
 ├── diff-triggers/
 ├── ghcr-cleanup/
 ├── image-tracker/
-├── pr-description-add/
 ├── pr-validate/
 ├── scan-url/
 ├── sysdig-monitor/

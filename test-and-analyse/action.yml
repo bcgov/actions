@@ -20,9 +20,6 @@ inputs:
       detected from project files (.node-version, .nvmrc, Dockerfile, package.json).
     default: ""
 
-  node_version_file:
-    description: Explicit file to resolve Node version from (.node-version, .nvmrc, package.json). Optional.
-    default: ""
 
   java_version:
     description: >-
@@ -31,9 +28,6 @@ inputs:
       pom.xml, Gradle, Dockerfile).
     default: ""
 
-  java_version_file:
-    description: Explicit file to resolve Java version from (.java-version, .sdkmanrc, .tool-versions). Optional.
-    default: ""
 
   java_distribution:
     description: Java distribution to use (e.g., temurin)
@@ -45,9 +39,6 @@ inputs:
       detected from project files (.python-version, pyproject.toml, Dockerfile, Pipfile).
     default: ""
 
-  python_version_file:
-    description: Explicit file to resolve Python version from (.python-version, pyproject.toml). Optional.
-    default: ""
 
   language:
     description: "Primary language of the project. Options: node (default), java, python"
@@ -76,15 +67,12 @@ inputs:
           backend/
           frontend/
       A single path also works. See diff-triggers.
-  debug:
-    description: Enable debug logging
-    default: "false"
   supply_scan:
     description: Enable supply chain attack detection using @aikidosec/safe-chain
     default: "true"
 
-  dep_scan:
-    description: "Enable dependency and export analysis using Knip for JS/TS projects. Options: off (skip), warn (run but don't fail, default), error (run and fail on issues)"
+  knip:
+    description: "Knip dependency and export analysis for JS/TS projects. Options: off (skip), warn (run but don't fail, default), error (run and fail on issues)"
     default: "warn"
 
   knip_config:
@@ -105,46 +93,21 @@ inputs:
 
   ### Usually a bad idea / not recommended
   base:
-    description: Base to diff triggers against (e.g. branch name, tag, or commit SHA)
-    default: ${{ github.event.repository.default_branch }}
+    description: Base to diff triggers against (branch, tag, or commit SHA). Empty uses the diff-triggers default (PR base branch, or HEAD^ on push).
+    required: false
 
 
-  repository:
-    description: >-
-      Non-default repository to clone (used for testing this action).
-      Setting this to anything but the current repository forces a clone,
-      since the workspace cannot be assumed to hold it already.
-    default: ${{ github.repository }}
   token:
     description: 'Authentication token (defaults to github.token; override with PAT if needed).'
     default: ${{ github.token }}
     required: false
 
-  ref:
-    description: >-
-      Branch, tag or SHA of repository to check out (actions/checkout `ref`).
-      Empty checks out the repository default.
-    default: ""
 
-  path:
-    description: >-
-      Path where the repository should be checked out, and the path probed to
-      decide whether a clone is needed at all. Default is current directory.
-    default: "."
 
 outputs:
   triggered:
     description: Whether the action was triggered based on path changes
     value: ${{ steps.final_triggered.outputs.triggered }}
-  unused_files:
-    description: Number of unused files found by Knip
-    value: ${{ steps.reporter_logic.outputs.unused_files }}
-  unused_deps:
-    description: Number of unused dependencies found by Knip
-    value: ${{ steps.reporter_logic.outputs.unused_deps }}
-  total_issues:
-    description: Total number of issues found by Knip
-    value: ${{ steps.reporter_logic.outputs.total_issues }}
   knip_config:
     description: The Knip configuration file that was auto-discovered or specified
     value: ${{ steps.knip_analysis.outputs.knip_config }}
@@ -163,30 +126,27 @@ runs:
       id: inputs
       shell: bash
       env:
-        INPUT_DEBUG: ${{ inputs.debug }}
         INPUT_SUPPLY_SCAN: ${{ inputs.supply_scan }}
         INPUT_SEMGREP: ${{ inputs.semgrep }}
         INPUT_SEMGREP_FAIL: ${{ inputs.semgrep_fail }}
-        INPUT_DEP_SCAN: ${{ inputs.dep_scan }}
+        INPUT_KNIP: ${{ inputs.knip }}
         INPUT_LANGUAGE: ${{ inputs.language }}
         SHARED_INPUTS: ${{ github.action_path }}/../shared/inputs.js
         HAS_SONAR_TOKEN: ${{ inputs.sonar_token != '' }}
       run: |
         # Assign first so a parse error fails the step (set -e ignores failures inside echo arguments)
-        debug=$(node "$SHARED_INPUTS" debug)
         supply_scan=$(node "$SHARED_INPUTS" bool supply_scan true)
         semgrep=$(node "$SHARED_INPUTS" bool semgrep false)
         semgrep_fail=$(node "$SHARED_INPUTS" bool semgrep_fail false)
-        dep_scan=$(node "$SHARED_INPUTS" enum dep_scan off,warn,error warn)
+        knip=$(node "$SHARED_INPUTS" enum knip off,warn,error warn)
         language=$(node "$SHARED_INPUTS" enum language node,java,python node)
-        parsed="debug=$debug
-        supply_scan=$supply_scan
+        parsed="supply_scan=$supply_scan
         semgrep=$semgrep
         semgrep_fail=$semgrep_fail
-        dep_scan=$dep_scan
+        knip=$knip
         language=$language"
         echo "$parsed" | sed 's/^ *//' >> "$GITHUB_OUTPUT"
-        if [ "$debug" = "true" ]; then
+        if [ "${RUNNER_DEBUG:-}" = "1" ]; then
           echo "Parsed inputs:"; echo "$parsed" | sed 's/^ */  /'
         fi
         if [ "$HAS_SONAR_TOKEN" != "true" ]; then
@@ -194,25 +154,12 @@ runs:
         fi
 
     - name: Check Triggers
-      if: github.event_name == 'pull_request' && inputs.triggers != ''
+      id: final_triggered
       uses: $/diff-triggers
-      id: diff
       with:
         triggers: ${{ inputs.triggers }}
         base: ${{ inputs.base }}
         token: ${{ inputs.token }}
-
-    # Final triggered state
-    - id: final_triggered
-      shell: bash
-      run: |
-        TRIGGERED="true"
-        if [ "${{ github.event_name == 'pull_request' && inputs.triggers != '' }}" == "true" ]; then
-          TRIGGERED="${{ steps.diff.outputs.triggered }}"
-        fi
-        echo "triggered=$TRIGGERED" >> $GITHUB_OUTPUT
-        echo "FINAL TRIGGERED: $TRIGGERED"
-
 
     - name: Setup Supply Chain Scan
       if: steps.final_triggered.outputs.triggered == 'true' && steps.inputs.outputs.supply_scan == 'true' && steps.inputs.outputs.language == 'node'
@@ -222,22 +169,15 @@ runs:
         npx -y @aikidosec/safe-chain setup-ci
 
 
-    # Clone when the caller asked for a repository other than this one, or when
-    # path holds none. A bare .git probe cannot decide: Check Triggers
-    # above may already have left a clone of *this* repo in the workspace, and
-    # skipping on that would analyse the wrong project.
+    # Clone when the workspace holds no repository yet.
     - name: Internal Project Checkout
       uses: actions/checkout@v7
       if: >-
         steps.final_triggered.outputs.triggered == 'true' &&
-        (inputs.repository != github.repository ||
-        hashFiles(format('{0}/.git/HEAD', inputs.path), format('{0}/.git', inputs.path)) == '')
+        hashFiles('.git/HEAD', '.git') == ''
       with:
         clean: false
-        repository: ${{ inputs.repository }}
-        ref: ${{ inputs.ref }}
         token: ${{ inputs.token }}
-        path: ${{ inputs.path }}
         fetch-depth: 0
 
     # Sonar reads the repo enclosing projectBaseDir (inputs.working_directory) for blame and
@@ -246,9 +186,8 @@ runs:
     - name: Deepen shallow history
       if: >-
         steps.final_triggered.outputs.triggered == 'true' &&
-        hashFiles(format('{0}/.git/HEAD', inputs.path), format('{0}/.git', inputs.path)) != ''
+        hashFiles('.git/HEAD', '.git') != ''
       shell: bash
-      working-directory: ${{ inputs.path }}
       run: |
         # A worktree keeps its shallow marker in the main repo's gitdir, so probe
         # git rather than looking for .git/shallow here.
@@ -264,7 +203,6 @@ runs:
         INPUT_CACHE: ${{ inputs.cache }}
         INPUT_LANGUAGE: ${{ steps.inputs.outputs.language }}
         INPUT_DIR: ${{ inputs.working_directory }}
-        INPUT_CHECKOUT_PATH: ${{ inputs.path }}
       run: |
         "${{ github.action_path }}/cache.sh"
 
@@ -274,9 +212,7 @@ runs:
       shell: bash
       env:
         INPUT_NODE_VERSION: ${{ inputs.node_version }}
-        INPUT_NODE_VERSION_FILE: ${{ inputs.node_version_file }}
         INPUT_DIR: ${{ inputs.working_directory }}
-        INPUT_CHECKOUT_PATH: ${{ inputs.path }}
       run: |
         "${{ github.action_path }}/node-version.sh"
 
@@ -289,7 +225,7 @@ runs:
         cache: ${{ steps.cache_logic.outputs.cache }}
         cache-dependency-path: |
           ${{ inputs.working_directory }}/${{ steps.cache_logic.outputs.cache == 'yarn' && 'yarn.lock' || (steps.cache_logic.outputs.cache == 'pnpm' && 'pnpm-lock.yaml' || 'package-lock.json') }}
-          ${{ inputs.path }}/${{ steps.cache_logic.outputs.cache == 'yarn' && 'yarn.lock' || (steps.cache_logic.outputs.cache == 'pnpm' && 'pnpm-lock.yaml' || 'package-lock.json') }}
+          ${{ steps.cache_logic.outputs.cache == 'yarn' && 'yarn.lock' || (steps.cache_logic.outputs.cache == 'pnpm' && 'pnpm-lock.yaml' || 'package-lock.json') }}
 
     - name: Determine Java Version
       id: java_version_logic
@@ -297,9 +233,7 @@ runs:
       shell: bash
       env:
         INPUT_JAVA_VERSION: ${{ inputs.java_version }}
-        INPUT_JAVA_VERSION_FILE: ${{ inputs.java_version_file }}
         INPUT_DIR: ${{ inputs.working_directory }}
-        INPUT_CHECKOUT_PATH: ${{ inputs.path }}
       run: |
         "${{ github.action_path }}/java-version.sh"
 
@@ -323,9 +257,7 @@ runs:
       shell: bash
       env:
         INPUT_PYTHON_VERSION: ${{ inputs.python_version }}
-        INPUT_PYTHON_VERSION_FILE: ${{ inputs.python_version_file }}
         INPUT_DIR: ${{ inputs.working_directory }}
-        INPUT_CHECKOUT_PATH: ${{ inputs.path }}
       run: |
         "${{ github.action_path }}/python-version.sh"
 
@@ -374,7 +306,7 @@ runs:
     # Run Analysis Tools (Knip for Node, Test Reports for others)
     - name: Knip Dependency Analysis
       id: knip_analysis
-      if: steps.final_triggered.outputs.triggered == 'true' && steps.inputs.outputs.dep_scan != 'off' && steps.inputs.outputs.language == 'node'
+      if: steps.final_triggered.outputs.triggered == 'true' && steps.inputs.outputs.knip != 'off' && steps.inputs.outputs.language == 'node'
       working-directory: ${{ inputs.working_directory }}
       shell: bash
       run: |
@@ -483,11 +415,6 @@ runs:
       uses: $/test-and-analyse/reporter
       with:
         dir: ${{ inputs.working_directory }}
-        dep_scan: ${{ steps.inputs.outputs.dep_scan }}
+        knip: ${{ steps.inputs.outputs.knip }}
         knip_output: knip-output.json
         language: ${{ steps.inputs.outputs.language }}
-
-    - name: Final cleanup
-      if: always() && inputs.repository != github.repository
-      shell: bash
-      run: echo "Cleanup complete"

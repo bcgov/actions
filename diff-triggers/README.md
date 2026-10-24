@@ -61,10 +61,6 @@ triggers: |
 
       # Specify token (GH or PAT), instead of inheriting one from the calling workflow
       token: ${{ github.token }}
-
-      # Emit workflow summary/annotations notices (default: true)
-      # Set false to suppress notices while keeping step logs
-      annotations: true
 ```
 
 # Output
@@ -80,7 +76,7 @@ The action provides detailed logging directly in the step output for easy debugg
 - **Banner** — A collapsible group clearly showing triggered/not-triggered status, with supplementary caller context in brackets: `[workflow / job]`
 - **Collapsible details** — Trigger configuration and per-trigger match results inside the group
 - **Ref source** — Shows whether comparison ref came from explicit input (`input`) or default behavior (`default`)
-- **Annotations** — Optional `::notice::` annotations (enabled by default; `annotations: true`) that appear in the workflow summary and annotations tab (e.g., `::notice title=Diff Triggers::✅ Fired. Triggers: ["backend/"]`)
+- **Annotations** — `::notice::` annotations that appear in the workflow summary and annotations tab (e.g., `::notice title=Diff Triggers::✅ Fired. Triggers: ["backend/"]`)
 
 # Examples
 

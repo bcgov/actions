@@ -4,7 +4,6 @@
 set -euo pipefail
 
 JAVA_VER="${INPUT_JAVA_VERSION:-}"
-JAVA_VER_FILE="${INPUT_JAVA_VERSION_FILE:-}"
 DIR="${INPUT_DIR:-.}"
 ROOT="${INPUT_CHECKOUT_PATH:-.}"
 
@@ -25,23 +24,8 @@ extract_java_major() {
 if [ -n "$JAVA_VER" ]; then
     OUTPUT_VERSION="$JAVA_VER"
     echo "Using explicit java_version input: '$OUTPUT_VERSION'"
-
-# 2. Explicit version-file input
-elif [ -n "$JAVA_VER_FILE" ]; then
-    if [ -f "$JAVA_VER_FILE" ]; then
-        OUTPUT_VERSION_FILE="$JAVA_VER_FILE"
-    elif [ -f "$DIR/$JAVA_VER_FILE" ]; then
-        OUTPUT_VERSION_FILE="$DIR/$JAVA_VER_FILE"
-    elif [ -f "$ROOT/$JAVA_VER_FILE" ]; then
-        OUTPUT_VERSION_FILE="$ROOT/$JAVA_VER_FILE"
-    else
-        echo "::error::Specified java_version_file '${JAVA_VER_FILE}' not found." >&2
-        exit 1
-    fi
-    echo "Using explicit java_version_file: '$OUTPUT_VERSION_FILE'"
-
 else
-    # 3. Version files in DIR then ROOT. .tool-versions / .sdkmanrc only if they name java.
+    # 2. Version files in DIR then ROOT. .tool-versions / .sdkmanrc only if they name java.
     for candidate in "$DIR/.java-version" "$DIR/.sdkmanrc" "$DIR/.tool-versions" \
                      "$ROOT/.java-version" "$ROOT/.sdkmanrc" "$ROOT/.tool-versions"; do
         if [ ! -f "$candidate" ]; then
@@ -70,7 +54,7 @@ else
         fi
     done
 
-    # 4. Maven / Gradle manifests
+    # 3. Maven / Gradle manifests
     if [ -z "$OUTPUT_VERSION" ] && [ -z "$OUTPUT_VERSION_FILE" ]; then
         for pom in "$DIR/pom.xml" "$ROOT/pom.xml"; do
             if [ -f "$pom" ]; then
@@ -106,7 +90,7 @@ else
         done
     fi
 
-    # 5. Dockerfile / Containerfile — first Java image FROM, not the first FROM
+    # 4. Dockerfile / Containerfile — first Java image FROM, not the first FROM
     if [ -z "$OUTPUT_VERSION" ] && [ -z "$OUTPUT_VERSION_FILE" ]; then
         for dockerfile in "$DIR/Dockerfile" "$DIR/Containerfile" "$ROOT/Dockerfile" "$ROOT/Containerfile"; do
             if [ -f "$dockerfile" ]; then
@@ -121,7 +105,7 @@ else
         done
     fi
 
-    # 6. Fallback
+    # 5. Fallback
     if [ -z "$OUTPUT_VERSION" ] && [ -z "$OUTPUT_VERSION_FILE" ]; then
         OUTPUT_VERSION="21"
         echo "No Java version detected; falling back to default: '$OUTPUT_VERSION'"

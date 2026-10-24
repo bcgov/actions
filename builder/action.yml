@@ -9,18 +9,12 @@ inputs:
   package:
     description: Package name; e.g. backend, frontend
     required: true
-  debug:
-    description: Enable debug logging
-    default: "false"
 
   ### Typical / recommended
   context:
     description: Build context, not required for self-contained package/default directory
   file:
     description: Dockerfile with path, not required for self-contained package/default directory
-  sbom:
-    default: "true"
-    description: Generate a Software Bill of Materials (SBOM) for the container image. Enabled by default for better security practices.
   tag_fallback:
     description: Where to pull default images from; e.g. prod, test. Omit to always build fresh if triggers do not match.
   tags:
@@ -55,19 +49,13 @@ inputs:
     description: A list of build-time variables, generally not advisable
     default: "BUILDKIT_INLINE_CACHE=1"
   base:
-    description: Base to diff triggers against (e.g. branch name, tag, or commit SHA)
-    default: ${{ github.event.repository.default_branch }}
+    description: Base to diff triggers against (branch, tag, or commit SHA). Empty uses the diff-triggers default (PR base branch, or HEAD^ on push).
+    required: false
 
-  repository:
-    description: Non-default repo to clone
-    default: ${{ github.repository }}
   token:
     description: 'Authentication token (defaults to github.token; override with PAT if needed).'
     default: ${{ github.token }}
     required: false
-  username:
-    description: Username for registry login; defaults to github.actor
-    default: ${{ github.actor }}
   secrets:
     description: |
       Multiline input for secrets to mount.
@@ -84,52 +72,21 @@ outputs:
     description: Did a deployment trigger?  [true|false]
     value: ${{ steps.build.outputs.triggered }}
 
-  labels:
-    description: "Generated OCI labels"
-    value: ${{ steps.tags.outputs.labels }}
-
-  annotations:
-    description: "Generated OCI annotations"
-    value: ${{ steps.tags.outputs.annotations }}
-
-  registry:
-    description: "The registry host name, always `ghcr.io`"
-    value: ${{ steps.vars.outputs.registry }}
-
-  image_path:
-    description: "The full image path including the tag, always with a leading slash, in the format `/owner/repo/image:tag` (or `/owner/repo:tag` when the package matches the repository name)"
-    value: ${{ steps.final_outputs.outputs.image_path }}
-
-  source_sha:
-    description: "Git commit SHA tagged on the image (PR head SHA, or github.sha on push). Deploy workflows can pull <registry>/<owner>/<repo>/<package>:<source_sha>."
-    value: ${{ steps.resolved_sha.outputs.source_sha || steps.vars.outputs.source_sha }}
+  image:
+    description: "Fully-qualified digest reference, `ghcr.io/owner/repo/package@sha256:...` (or `ghcr.io/owner/repo@sha256:...` when the package matches the repository name). Same format as image-tracker's `image`. Empty when there is no digest."
+    value: ${{ steps.final_outputs.outputs.image }}
 
 runs:
   using: composite
   steps:
     # Publish target follows the workflow context: fork push → fork GHCR;
     # fork pull_request → head-repo GHCR (read-only here; push on fork push).
-    # Shared boolean rules (shared/README.md); a bad value fails here
-    - name: Parse Inputs
-      id: inputs
-      shell: bash
-      env:
-        INPUT_DEBUG: ${{ inputs.debug }}
-        INPUT_SBOM: ${{ inputs.sbom }}
-        SHARED_INPUTS: ${{ github.action_path }}/../shared/inputs.js
-      run: |
-        debug=$(node "$SHARED_INPUTS" debug)
-        sbom=$(node "$SHARED_INPUTS" bool sbom true)
-        echo "debug=${debug}" >> "$GITHUB_OUTPUT"
-        echo "sbom=${sbom}" >> "$GITHUB_OUTPUT"
-
     - id: vars
       shell: bash
       env:
         INPUT_PACKAGE: ${{ inputs.package }}
         INPUT_ARCHITECTURE: ${{ inputs.architecture }}
         INPUT_TAGS: ${{ inputs.tags }}
-        INPUT_REPOSITORY: ${{ inputs.repository }}
         EVENT_NAME: ${{ github.event_name }}
         GH_REPOSITORY: ${{ github.repository }}
         HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
@@ -169,14 +126,8 @@ runs:
         publish_repo="$(publish_repository "${EVENT_NAME}" "${GH_REPOSITORY}" "${HEAD_REPO}")"
         publish_name="${publish_repo##*/}"
         image_path="$(image_path_for "${publish_package}" "${publish_repo}" "${publish_name}")"
-        if is_external_repository "${INPUT_REPOSITORY}" "${GH_REPOSITORY}"; then
-          # External checkouts resolve their own SHA after clone (see Resolve source SHA).
-          sha=""
-          tags="$(merge_sha_tag "${INPUT_TAGS}" "")"
-        else
-          sha="$(source_sha "${HEAD_SHA}" "${EVENT_SHA}")"
-          tags="$(merge_sha_tag "${INPUT_TAGS}" "${sha}")"
-        fi
+        sha="$(source_sha "${HEAD_SHA}" "${EVENT_SHA}")"
+        tags="$(merge_sha_tag "${INPUT_TAGS}" "${sha}")"
 
         if can_push_packages "${EVENT_NAME}" "${GH_REPOSITORY}" "${HEAD_REPO}"; then
           can_push=true
@@ -206,10 +157,7 @@ runs:
     # Fork PRs: diff-triggers automatically detects fork PR context from
     # github.event.pull_request and handles diff computation correctly by comparing the
     # fork's head branch against the base repository's target branch.
-    # External repos: Skip for external repo builds because diffing the current branch
-    # against another repository's branch is not meaningful in this context.
     - name: Check Triggers
-      if: inputs.repository == github.repository && inputs.triggers != ''
       uses: $/diff-triggers
       id: diff
       with:
@@ -224,22 +172,19 @@ runs:
       uses: docker/login-action@v4
       with:
         registry: ${{ steps.vars.outputs.registry }}
-        username: ${{ inputs.username }}
+        username: ${{ github.actor }}
         password: ${{ inputs.token }}
 
     # Check if a build is required (steps.build.outputs.triggered=true|false)
     - name: Check for builds
       env:
         URL_FALLBACK: ${{ steps.vars.outputs.registry }}/${{ steps.vars.outputs.image_path }}:${{ inputs.tag_fallback }}
-        DEBUG: ${{ steps.inputs.outputs.debug }}
       id: build
       shell: bash
       run: |
-        # Check for builds; debug: true prints these lines without a debug re-run
-        dbg() { if [ "$DEBUG" = "true" ]; then echo "[debug] $*"; else echo "::debug::$*"; fi; }
+        # Check for builds; ::debug:: lines show when the run has debug logging (RUNNER_DEBUG)
+        dbg() { echo "::debug::$*"; }
         dbg "Build decision logic:"
-        dbg "  Input repository: ${{ inputs.repository }}"
-        dbg "  GitHub repository: ${{ github.repository }}"
         dbg "  Diff triggered: ${{ steps.diff.outputs.triggered }}"
         dbg "  Tag fallback: ${{ inputs.tag_fallback }}"
         dbg "  Fallback URL: ${URL_FALLBACK}"
@@ -247,12 +192,8 @@ runs:
         triggered=true
         fallback_digest=""
         
-        if [ "${{ inputs.repository }}" != "${{ github.repository }}" ]; then
-          echo "Build triggered. External repository provided (diff skipped)."
-        elif [ -z "${{ inputs.triggers }}" ]; then
-          echo "Build triggered. Triggers are empty (always fires)."
-        elif [ "${{ steps.diff.outputs.triggered }}" == "true" ]; then
-          echo "Build triggered. Used diff-triggers."
+        if [ "${{ steps.diff.outputs.triggered }}" == "true" ]; then
+          echo "Build triggered (triggers matched or omitted)."
         elif [ -z "${{ inputs.tag_fallback }}" ]; then
           echo "Build triggered. No tag_fallback provided."
         else
@@ -291,21 +232,9 @@ runs:
           ${{ steps.vars.outputs.tags }}
         token: ${{ inputs.token }}
 
-    # Checkout code for building - external repo (use default branch)
-    - name: Checkout external repository
-      if: steps.build.outputs.triggered == 'true' && inputs.repository != github.repository
-      uses: actions/checkout@v7
-      with:
-        repository: ${{ inputs.repository }}
-        token: ${{ inputs.token }}
-        persist-credentials: false
-        path: .builder-context
-        clean: false
-        # No ref specified = default branch of that repo
-
     # Checkout code for building - same repo PR (use PR head for fork support)
     - name: Checkout PR head
-      if: steps.build.outputs.triggered == 'true' && inputs.repository == github.repository
+      if: steps.build.outputs.triggered == 'true'
       uses: actions/checkout@v7
       with:
         repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
@@ -315,56 +244,15 @@ runs:
         path: .builder-context
         clean: false
 
-    - name: Resolve source SHA
-      id: resolved_sha
-      if: steps.build.outputs.triggered == 'true'
-      shell: bash
-      env:
-        INPUT_TAGS: ${{ inputs.tags }}
-        INPUT_REPOSITORY: ${{ inputs.repository }}
-        GH_REPOSITORY: ${{ github.repository }}
-        WORKFLOW_SHA: ${{ steps.vars.outputs.source_sha }}
-      run: |
-        set -euo pipefail
-        # shellcheck source=context.sh
-        source "${{ github.action_path }}/context.sh"
-
-        if is_external_repository "${INPUT_REPOSITORY}" "${GH_REPOSITORY}"; then
-          sha="$(git -C .builder-context rev-parse HEAD)"
-        else
-          sha="${WORKFLOW_SHA}"
-        fi
-        tags="$(merge_sha_tag "${INPUT_TAGS}" "${sha}")"
-        echo "source_sha=${sha}" >> "$GITHUB_OUTPUT"
-        {
-          echo "tags<<EOF"
-          printf '%s\n' "${tags}"
-          echo "EOF"
-        } >> "$GITHUB_OUTPUT"
-
-    - name: Set up Docker Buildx
-      if: steps.build.outputs.triggered == 'true'
-      uses: docker/setup-buildx-action@v4
-
-    - name: Prepare Container Metadata labels
-      id: meta
-      if: steps.build.outputs.triggered == 'true'
-      uses: docker/metadata-action@v6
-      with:
-        images: ${{ steps.vars.outputs.image_name }}
-        flavor: |
-          latest=false
-        tags: ""
-
     - name: Format tags and labels
       id: tags
       if: steps.build.outputs.triggered == 'true'
       shell: bash
       env:
-        INPUT_TAGS: ${{ steps.resolved_sha.outputs.tags }}
+        INPUT_TAGS: ${{ steps.vars.outputs.tags }}
         META_LABELS: ${{ steps.meta.outputs.labels || '' }}
         META_ANNOTATIONS: ${{ steps.meta.outputs.annotations || '' }}
-        SOURCE_SHA: ${{ steps.resolved_sha.outputs.source_sha || steps.vars.outputs.source_sha }}
+        SOURCE_SHA: ${{ steps.vars.outputs.source_sha }}
       run: |
         set -euo pipefail
         # shellcheck source=context.sh
@@ -418,7 +306,7 @@ runs:
       shell: bash
       env:
         IMAGE_PATH: ${{ steps.vars.outputs.image_path }}
-        SOURCE_SHA: ${{ steps.resolved_sha.outputs.source_sha || steps.vars.outputs.source_sha }}
+        SOURCE_SHA: ${{ steps.vars.outputs.source_sha }}
       run: |
         # shellcheck source=context.sh
         source "${{ github.action_path }}/context.sh"
@@ -427,7 +315,7 @@ runs:
 
     - name: Generate SBOM
       id: sbom
-      if: steps.build.outputs.triggered == 'true' && steps.vars.outputs.can_push == 'true' && steps.inputs.outputs.sbom == 'true'
+      if: steps.build.outputs.triggered == 'true' && steps.vars.outputs.can_push == 'true'
       continue-on-error: true
       shell: bash
       run: |
@@ -479,7 +367,7 @@ runs:
 
     - name: Upload SBOMs
       uses: actions/upload-artifact@v7
-      if: steps.build.outputs.triggered == 'true' && steps.inputs.outputs.sbom == 'true' && steps.sbom.outputs.sbom_files_exist == 'true'
+      if: steps.build.outputs.triggered == 'true' && steps.sbom.outputs.sbom_files_exist == 'true'
       continue-on-error: true
       with:
         name: sboms-${{ steps.sbom.outputs.package_sanitized }}-${{ steps.vars.outputs.first_tag }}
@@ -514,23 +402,16 @@ runs:
       shell: bash
       run: |
         if [ "${{ steps.build.outputs.triggered }}" == "true" ]; then
-          echo "digest=${{ steps.build_and_push.outputs.digest }}" >> $GITHUB_OUTPUT
-          # Derive image_path from the actual tags generated/pushed
-          # steps.tags.outputs.final_tags is a comma-separated list of full URLs
-          full_primary_image=$(echo "${{ steps.tags.outputs.final_tags }}" | cut -d, -f1)
-          image_path=$(echo "${full_primary_image}" | sed 's|^${{ steps.vars.outputs.registry }}||')
+          digest="${{ steps.build_and_push.outputs.digest }}"
         else
-          echo "digest=${{ steps.build.outputs.fallback_digest }}" >> $GITHUB_OUTPUT
-          # For retagged images, use the first tag from inputs.tags or fallback
-          tag=$(printf '%s\n' "${{ steps.vars.outputs.tags }}" | grep -v '^$' | head -n 1 | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]._-' || true)
-          tag="${tag:-${{ steps.resolved_sha.outputs.source_sha || steps.vars.outputs.source_sha }}}"
-          if [ -z "${tag}" ]; then
-            echo "::error::Could not determine primary tag for retagged image."
-            exit 1
-          fi
-          image_path="/${{ steps.vars.outputs.image_path }}:${tag}"
+          digest="${{ steps.build.outputs.fallback_digest }}"
         fi
-        echo "image_path=${image_path}" >> $GITHUB_OUTPUT
+        echo "digest=${digest}" >> $GITHUB_OUTPUT
+        image=""
+        if [ -n "${digest}" ]; then
+          image="${{ steps.vars.outputs.registry }}/${{ steps.vars.outputs.image_path }}@${digest}"
+        fi
+        echo "image=${image}" >> $GITHUB_OUTPUT
 
     - name: Print summary outputs
       if: always()
@@ -539,9 +420,7 @@ runs:
         echo "---- Build Summary ----"
         echo "triggered: ${{ steps.build.outputs.triggered }}"
         echo "digest: ${{ steps.final_outputs.outputs.digest }}"
-        echo "registry: ${{ steps.vars.outputs.registry }}"
-        echo "image_path: ${{ steps.final_outputs.outputs.image_path }}"
-        echo "source_sha: ${{ steps.resolved_sha.outputs.source_sha || steps.vars.outputs.source_sha }}"
+        echo "image: ${{ steps.final_outputs.outputs.image }}"
 
         # Add to GitHub Job Summary
         echo "### Container Build Summary" >> $GITHUB_STEP_SUMMARY
@@ -549,9 +428,7 @@ runs:
         echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
         echo "| **triggered** | \`${{ steps.build.outputs.triggered }}\` |" >> $GITHUB_STEP_SUMMARY
         echo "| **digest** | \`${{ steps.final_outputs.outputs.digest }}\` |" >> $GITHUB_STEP_SUMMARY
-        echo "| **registry** | \`${{ steps.vars.outputs.registry }}\` |" >> $GITHUB_STEP_SUMMARY
-        echo "| **image_path** | \`${{ steps.final_outputs.outputs.image_path }}\` |" >> $GITHUB_STEP_SUMMARY
-        echo "| **source_sha** | \`${{ steps.resolved_sha.outputs.source_sha || steps.vars.outputs.source_sha }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| **image** | \`${{ steps.final_outputs.outputs.image }}\` |" >> $GITHUB_STEP_SUMMARY
 
         if [ "${{ steps.build.outputs.triggered }}" == "true" ]; then
           echo "tags: ${{ steps.tags.outputs.final_tags }}"
@@ -572,7 +449,7 @@ runs:
       shell: bash
       env:
         IMAGE_PATH: ${{ steps.vars.outputs.image_path }}
-        SOURCE_SHA: ${{ steps.resolved_sha.outputs.source_sha || steps.vars.outputs.source_sha }}
+        SOURCE_SHA: ${{ steps.vars.outputs.source_sha }}
       run: |
         set -euo pipefail
         # shellcheck source=context.sh

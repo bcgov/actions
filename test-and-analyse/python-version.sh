@@ -4,7 +4,6 @@
 set -euo pipefail
 
 PY_VER="${INPUT_PYTHON_VERSION:-}"
-PY_VER_FILE="${INPUT_PYTHON_VERSION_FILE:-}"
 DIR="${INPUT_DIR:-.}"
 ROOT="${INPUT_CHECKOUT_PATH:-.}"
 
@@ -28,23 +27,8 @@ extract_py_from_spec() {
 if [ -n "$PY_VER" ]; then
     OUTPUT_VERSION="$PY_VER"
     echo "Using explicit python_version input: '$OUTPUT_VERSION'"
-
-# 2. Explicit version-file input
-elif [ -n "$PY_VER_FILE" ]; then
-    if [ -f "$PY_VER_FILE" ]; then
-        OUTPUT_VERSION_FILE="$PY_VER_FILE"
-    elif [ -f "$DIR/$PY_VER_FILE" ]; then
-        OUTPUT_VERSION_FILE="$DIR/$PY_VER_FILE"
-    elif [ -f "$ROOT/$PY_VER_FILE" ]; then
-        OUTPUT_VERSION_FILE="$ROOT/$PY_VER_FILE"
-    else
-        echo "::error::Specified python_version_file '${PY_VER_FILE}' not found." >&2
-        exit 1
-    fi
-    echo "Using explicit python_version_file: '$OUTPUT_VERSION_FILE'"
-
 else
-    # 3. .python-version in DIR, then ROOT
+    # 2. .python-version in DIR, then ROOT
     for candidate in "$DIR/.python-version" "$ROOT/.python-version"; do
         if [ -f "$candidate" ]; then
             OUTPUT_VERSION_FILE="$candidate"
@@ -53,7 +37,7 @@ else
         fi
     done
 
-    # 4. pyproject.toml — delegate requires-python to setup-python; Poetry python = extracted
+    # 3. pyproject.toml — delegate requires-python to setup-python; Poetry python = extracted
     if [ -z "$OUTPUT_VERSION" ] && [ -z "$OUTPUT_VERSION_FILE" ]; then
         for pyproject in "$DIR/pyproject.toml" "$ROOT/pyproject.toml"; do
             if [ -f "$pyproject" ]; then
@@ -82,7 +66,7 @@ else
         done
     fi
 
-    # 5. Dockerfile / Containerfile FROM python:X.Y
+    # 4. Dockerfile / Containerfile FROM python:X.Y
     if [ -z "$OUTPUT_VERSION" ] && [ -z "$OUTPUT_VERSION_FILE" ]; then
         for dockerfile in "$DIR/Dockerfile" "$DIR/Containerfile" "$ROOT/Dockerfile" "$ROOT/Containerfile"; do
             if [ -f "$dockerfile" ]; then
@@ -96,7 +80,7 @@ else
         done
     fi
 
-    # 6. Pipfile [requires] python_version — real assignment only
+    # 5. Pipfile [requires] python_version — real assignment only
     if [ -z "$OUTPUT_VERSION" ] && [ -z "$OUTPUT_VERSION_FILE" ]; then
         for pipfile in "$DIR/Pipfile" "$ROOT/Pipfile"; do
             if [ -f "$pipfile" ]; then
@@ -120,7 +104,7 @@ else
         done
     fi
 
-    # 7. Fallback
+    # 6. Fallback
     if [ -z "$OUTPUT_VERSION" ] && [ -z "$OUTPUT_VERSION_FILE" ]; then
         OUTPUT_VERSION="3.12"
         echo "No Python version detected; falling back to default: '$OUTPUT_VERSION'"

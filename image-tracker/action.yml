@@ -12,12 +12,6 @@ inputs:
       package name matches the repo name, in which case it resolves to
       `<registry>/<owner>/<repo>`.
     required: true
-  registry:
-    description: 'OCI registry host (defaults to ghcr.io).'
-    default: 'ghcr.io'
-  debug:
-    description: 'Enable debug logging'
-    default: 'false'
   revision:
     description: 'Git revision (SHA, branch, or tag) to resolve against.'
     default: 'HEAD'
@@ -38,9 +32,10 @@ inputs:
     default: '500'
   max_depth:
     description: |
-      Max commits of git ancestry to search. Default 1 (the target revision only).
-      Raise this to reuse an older image for a package that was not rebuilt.
-    default: '1'
+      Max commits of git ancestry to search. Default 100, enough for merge/promote
+      to reuse an older image for a package that was not rebuilt. Set 1 to
+      accept only the target revision.
+    default: '100'
   tags:
     description: |
       Optional tags (one per line, or a single tag) to apply to every resolved digest, e.g. the
@@ -52,10 +47,6 @@ inputs:
     required: false
 
 outputs:
-  images:
-    description: |
-      JSON object mapping each package to its fully-qualified digest reference:
-      `{"frontend": "ghcr.io/owner/repo/frontend@sha256:..."}`.
   digests:
     description: |
       JSON object mapping each package to its manifest digest only:

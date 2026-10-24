@@ -193,18 +193,17 @@ function run(opts = {}) {
     (opts.title ?? process.env.INPUT_TITLE ?? 'Workflow Results').trim() ||
     'Workflow Results'
   const enableSummary = parseBool(
-    opts.summary ?? process.env.INPUT_SUMMARY,
+    opts.summary,
     'summary',
     true
   )
   const enableAnnotations = parseBool(
-    opts.annotations ?? process.env.INPUT_ANNOTATIONS,
+    opts.annotations,
     'annotations',
     true
   )
-  const debug =
-    parseBool(opts.debug ?? process.env.INPUT_DEBUG, 'debug') ||
-    process.env.RUNNER_DEBUG === '1'
+  // Summary and annotations are always on for callers; the options are test seams.
+  const debug = process.env.RUNNER_DEBUG === '1'
   const outputPath = opts.outputPath ?? process.env.GITHUB_OUTPUT
   const summaryPath = opts.summaryPath ?? process.env.GITHUB_STEP_SUMMARY
   const logger = opts.logger ?? console
@@ -260,13 +259,7 @@ function run(opts = {}) {
   // 4. Write Output Variables
   if (outputPath) {
     try {
-      const outputLines = [
-        `passed=${evaluation.passed}`,
-        `failed=${JSON.stringify(evaluation.failed)}`,
-        `cancelled=${JSON.stringify(evaluation.cancelled)}`,
-        `skipped=${JSON.stringify(evaluation.skipped)}`,
-        `total=${evaluation.total}`
-      ]
+      const outputLines = [`passed=${evaluation.passed}`]
       fs.appendFileSync(outputPath, outputLines.join('\n') + '\n', 'utf8')
     } catch (err) {
       logger.warn(`::warning::Failed to write outputs: ${err.message}`)

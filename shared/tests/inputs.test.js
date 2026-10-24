@@ -65,7 +65,7 @@ test('getInput, getToken, isDebug', () => {
   assert.strictEqual(getInput('dry run', { INPUT_DRY_RUN: ' x ' }), 'x');
   assert.strictEqual(getToken({ INPUT_TOKEN: 'a', GITHUB_TOKEN: 'b' }), 'a');
   assert.strictEqual(getToken({ GITHUB_TOKEN: 'b' }), 'b');
-  assert.strictEqual(isDebug({ INPUT_DEBUG: 'true' }), true);
+  assert.strictEqual(isDebug({ INPUT_DEBUG: 'true' }), false);
   assert.strictEqual(isDebug({ RUNNER_DEBUG: '1' }), true);
   assert.strictEqual(isDebug({}), false);
 });

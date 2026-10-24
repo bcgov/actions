@@ -103,11 +103,6 @@ EOF
   fi
 }
 
-# is_external_repository INPUT_REPOSITORY GH_REPOSITORY
-# True when building from a different repo than the workflow context.
-is_external_repository() {
-  [ "${1,,}" != "${2,,}" ]
-}
 # is_fork_pr GH_REPOSITORY HEAD_REPO
 # True when a pull_request originates from a different repository (fork).
 is_fork_pr() {

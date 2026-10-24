@@ -6,21 +6,21 @@ Repository facts for automated coding assistants. Teams may edit or remove this 
 
 Pipeline: build, then `image-tracker`, then deploy by digest (`outputs.digest` / `images`). Details: [image-tracker/README.md](image-tracker/README.md).
 
-- Don't use `quickstart-openshift` `.github/workflows/merge.yml` as the image spec. It still promotes mutable `:<pr>` tags via `get-pr`.
-- A squash merge `HEAD` was never built. Merge/promote must set `max_depth` high enough to find the last OCI-labeled image per package (e.g. `100`). `max_depth: 1` only asks "was this SHA built?"; it is not merge promotion.
+- Don't use `quickstart-openshift` `.github/workflows/merge.yml` as the image spec. It still promotes mutable `:<pr>` tags via the old standalone `get-pr`.
+- A squash merge `HEAD` was never built. Merge/promote must walk far enough to find the last OCI-labeled image per package; `max_depth` defaults to `100`. `max_depth: 1` only asks "was this SHA built?"; it is not merge promotion.
 - A miss is `exit 1`. Forks don't change that: no empty-digest skip, no fork `if:`.
 - Don't reject a digest because it was built on a different PR (unchanged package).
-- Don't add `get-pr` or retag-by-PR-number as the deploy identity.
+- Don't re-add `get-pr` (removed; image-tracker replaces it) or retag-by-PR-number as the deploy identity.
 
 ## Release ncc bundles
 
-`pr-description-add/dist/` and `test-and-analyse/dist/` are git-ignored and never on `main`. Only `.github/workflows/release.yml` commits them, on the release commit.
+`test-and-analyse/dist/` is git-ignored and never on `main`. Only `.github/workflows/release.yml` commits them, on the release commit.
 
 - Trigger: `release` / `published` on `bcgov/actions`. Do not run it on `pull_request` or `push` to `main`. Do not require a draft release.
 - Checkout `github.event.release.tag_name`. Exit 0 when `github.actor` is `github-actions[bot]`, or when `HEAD` subject is `chore(dist): rebuild ncc bundles for release`.
 - Otherwise `gh release delete <tag> --yes --cleanup-tag` before `npm ci`. A failed job leaves that tag deleted. Do not delete any other tag.
 - Then `npm ci` and `npm run build`. Fail when either `dist/index.js` is missing. Force-add both `dist/` folders (`git add -f`). When they differ, commit that subject and create the tag on the new commit. When they match, create the tag on the original commit. `gh release create` keeps the saved title, notes, and prerelease flag. Do not push `main`. Do not commit `dist/` on pull requests.
-- Consumers pin the tag, or that tag's SHA after this workflow succeeds. `@main` does not contain the rebuild. `uses: $/…` in this repo loads the workflow commit, which has no `dist/`. Suite tests build in the job, use `./pr-description-add` directly, and run `.github/scripts/stage-dist.sh` before `$/pr-validate` (with `add_markdown`) or `$/test-and-analyse`. Jobs that lint this repo's workflows (`Validate PR`, `Test PR Validate`) build first, because actionlint requires `./pr-description-add/dist/index.js`.
+- Consumers pin the tag, or that tag's SHA after this workflow succeeds. `@main` does not contain the rebuild. `uses: $/…` in this repo loads the workflow commit, which has no `dist/`. Suite tests build in the job and run `.github/scripts/stage-dist.sh` before `$/test-and-analyse`.
 
 ## PR triggers
 
@@ -40,7 +40,7 @@ PR workflows must not fire unnecessarily.
 
 ## Inputs
 
-Read list, boolean, enum, debug and token inputs through [shared/inputs.js](shared/inputs.js), never with ad hoc splitting or string compares. Details: [shared/README.md](shared/README.md).
+Read list, boolean, enum and token inputs, and the run's debug state, through [shared/inputs.js](shared/inputs.js), never with ad hoc splitting or string compares. Details: [shared/README.md](shared/README.md).
 
 ## Input names
 
@@ -48,18 +48,12 @@ Input and output names follow GitHub's conventions first (actions/checkout and o
 
 | Name | Meaning | Convention |
 |---|---|---|
-| `ref` | Branch, tag or SHA to check out. Only on actions that check out. | actions/checkout `ref` |
-| `repository` | Repository to check out or read from | actions/checkout `repository` |
-| `path` | Where the repository is checked out | actions/checkout `path` |
+| `repository` | Repository whose images are read (image-tracker only). No action clones another repository; tests check out fixtures with actions/checkout. | actions/checkout `repository` |
 | `token` | GitHub token, default `github.token` | actions/checkout `token` |
 | `working_directory` | Directory the action works in, relative to the workspace | step `working-directory` |
 | `base` | Base that `triggers` are diffed against. Never `ref`, `diff_base`, `diff_branch` or `branch`. | dorny/paths-filter `base` |
-| `registry` | Registry host, e.g. `ghcr.io` (input and output) | docker/login-action `registry` |
-| `username` | Registry login user | docker/login-action `username` |
-| `context`, `file`, `build_args`, `tags`, `sbom` | Image build settings | docker/build-push-action |
+| `context`, `file`, `build_args`, `tags` | Image build settings | docker/build-push-action |
 | `node_version`, `java_version`, `python_version`, `cache` | Toolchain setup | actions/setup-node, setup-java, setup-python |
-| `assignees` | Issue assignees | GitHub issues API |
-| `debug` | Boolean debug switch | (none) |
 | `dry_run` | Log and change nothing | (none) |
 
 ## Outputs

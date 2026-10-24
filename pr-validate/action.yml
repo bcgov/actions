@@ -5,11 +5,8 @@ branding:
   color: "blue"
 
 inputs:
-  conventional_commits:
-    description: "Require a Conventional Commits PR title (true or false)"
-    default: "true"
-  add_markdown:
-    description: "Markdown to append to the PR description. Empty skips pr-description-add."
+  markdown:
+    description: "Markdown to append to the PR description once. Empty skips it. Needs pull-requests: write."
     required: false
     default: ""
   token:
@@ -28,19 +25,8 @@ runs:
         source "${{ github.action_path }}/fork-notice.sh"
         echo "::warning::$(fork_pr_warning)"
 
-    # Shared boolean rules (shared/README.md); a bad value fails here
-    - name: Parse Inputs
-      id: inputs
-      shell: bash
-      env:
-        INPUT_CONVENTIONAL_COMMITS: ${{ inputs.conventional_commits }}
-        SHARED_INPUTS: ${{ github.action_path }}/../shared/inputs.js
-      run: |
-        conventional_commits=$(node "$SHARED_INPUTS" bool conventional_commits true)
-        echo "conventional_commits=${conventional_commits}" >> "$GITHUB_OUTPUT"
-
     - name: Conventional Commits
-      if: steps.inputs.outputs.conventional_commits == 'true' && github.event_name == 'pull_request'
+      if: github.event_name == 'pull_request'
       id: semantic
       uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
       env:
@@ -67,8 +53,9 @@ runs:
       run: bash "${{ github.action_path }}/lint-workflows.sh"
 
     - name: PR Description
-      if: inputs.add_markdown != ''
-      uses: $/pr-description-add
-      with:
-        token: ${{ inputs.token }}
-        add_markdown: ${{ inputs.add_markdown }}
+      if: inputs.markdown != ''
+      shell: bash
+      env:
+        INPUT_MARKDOWN: ${{ inputs.markdown }}
+        INPUT_TOKEN: ${{ inputs.token }}
+      run: node "${{ github.action_path }}/description.js"

@@ -91,7 +91,7 @@ export function summarizeJUnitXmlFiles(xmlFiles) {
 async function run() {
   try {
     const dir = core.getInput('dir') || '.'
-    const depScan = core.getInput('dep_scan') || 'off'
+    const depScan = core.getInput('knip') || 'off'
     const knipOutputFile = core.getInput('knip_output') || 'knip-output.json'
     const language = core.getInput('language') || 'node'
     const knipSummaryFile = 'knip-summary.txt'
@@ -123,10 +123,6 @@ async function run() {
         testResults = summarizeJUnitXmlFiles(xmlFiles)
       }
     }
-
-    core.setOutput('unused_files', stats.unusedFiles)
-    core.setOutput('unused_deps', stats.unusedDeps)
-    core.setOutput('total_issues', stats.totalIssues)
 
     const hasKnipIssues = language === 'node' && stats.totalIssues > 0
     const testFailSignal = process.env.TEST_FAIL_SIGNAL === 'true'

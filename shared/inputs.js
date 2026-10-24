@@ -149,13 +149,13 @@ function parseEnum(raw, name, allowed, fallback) {
 }
 
 /**
- * Debug is on when the `debug` input is true or the run has step debug
- * logging enabled (re-run with debug logging sets RUNNER_DEBUG=1).
+ * Debug is on when the run has step debug logging enabled (re-run with
+ * debug logging sets RUNNER_DEBUG=1). Actions have no `debug` input.
  * @param {NodeJS.ProcessEnv} [env]
  * @returns {boolean}
  */
 function isDebug(env = process.env) {
-  return parseBool(getInput('debug', env), 'debug') || env.RUNNER_DEBUG === '1';
+  return env.RUNNER_DEBUG === '1';
 }
 
 /**
