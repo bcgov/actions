@@ -1,96 +1,82 @@
-name: Release Rebuilder
+name: Release
 
 on:
-  release:
-    types: [published]
+  push:
+    tags: ["v*-src"]
 
 concurrency:
-  group: release-dist-${{ github.event.release.tag_name }}
+  group: release-${{ github.ref_name }}
   cancel-in-progress: false
 
 permissions: {}
 
 jobs:
-  dist:
-    name: Rebuild dist on release tag
-    if: github.repository == 'bcgov/actions' && github.event.release.draft == false
+  release:
+    name: Build dist and publish release
+    if: github.repository == 'bcgov/actions'
     runs-on: ubuntu-26.04
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
 
-      - name: Unpublish tag until dist is rebuilt
-        id: unpublish
+      - name: Check tags
+        id: tags
         env:
-          ACTOR: ${{ github.actor }}
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name }}
+          SRC_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          if [ -z "$TAG" ]; then
-            echo "release tag is empty" >&2
+          if ! [[ "$SRC_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-src$ ]]; then
+            echo "${SRC_TAG} is not vX.Y.Z-src" >&2
             exit 1
           fi
-          if [ "$ACTOR" = "github-actions[bot]" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "ignoring release published by github-actions[bot]"
-            exit 0
+          tag="${SRC_TAG%-src}"
+          if git rev-parse -q --verify "refs/tags/${tag}" > /dev/null; then
+            echo "${tag} already exists" >&2
+            exit 1
           fi
-          subject=$(git log -1 --format=%s)
-          if [ "$subject" = "chore(dist): rebuild ncc bundles for release" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "tag ${TAG} already points at the dist rebuild"
-            exit 0
+          previous=$(git tag -l 'v*' --sort=-v:refname | grep -v -- '-src$' | head -n 1 || true)
+          if [ -z "$previous" ]; then
+            echo "no previous v* release tag found" >&2
+            exit 1
           fi
-          echo "skip=false" >> "$GITHUB_OUTPUT"
-          git rev-parse HEAD > "$RUNNER_TEMP/release-base-sha"
-          gh release view "$TAG" --json name,body,isPrerelease > "$RUNNER_TEMP/release.json"
-          gh release delete "$TAG" --yes --cleanup-tag
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "previous=${previous}" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@v7
-        if: steps.unpublish.outputs.skip != 'true'
         with:
           node-version-file: .tool-versions
           cache: npm
 
-      - name: Rebuild ncc bundles and republish tag
-        if: steps.unpublish.outputs.skip != 'true'
+      - name: Build dist on a side commit and tag it
         env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ steps.tags.outputs.tag }}
         run: |
           set -euo pipefail
-          base=$(cat "$RUNNER_TEMP/release-base-sha")
-          title=$(jq -r '.name // empty' "$RUNNER_TEMP/release.json")
-          jq -r '.body // empty' "$RUNNER_TEMP/release.json" > "$RUNNER_TEMP/release-notes.md"
-          prerelease=$(jq -r '.isPrerelease' "$RUNNER_TEMP/release.json")
-          if [ -z "$title" ]; then
-            title="$TAG"
-          fi
           npm ci
           npm run build
-          for entry in test-and-analyse/dist/index.js; do
-            if [ ! -f "$entry" ]; then
-              echo "${entry} is missing after the build" >&2
-              exit 1
-            fi
-          done
-          # dist/ is git-ignored on main, so it is force-added to the release commit
-          git add -f -A -- test-and-analyse/dist
-          if git diff --cached --ignore-space-at-eol --quiet -- test-and-analyse/dist; then
-            git tag "$TAG" "$base"
-          else
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git config user.name "github-actions[bot]"
-            git commit -m "chore(dist): rebuild ncc bundles for release"
-            git tag "$TAG"
+          if [ ! -f test-and-analyse/dist/index.js ]; then
+            echo "test-and-analyse/dist/index.js is missing after the build" >&2
+            exit 1
           fi
+          # dist/ is git-ignored on main; it only lives on this side commit
+          git add -f -- test-and-analyse/dist
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git commit -m "chore(dist): build ncc bundles for ${TAG}"
+          git tag "$TAG"
           git push origin "refs/tags/${TAG}"
-          if [ "$prerelease" = "true" ]; then
-            gh release create "$TAG" --title "$title" --notes-file "$RUNNER_TEMP/release-notes.md" --prerelease --verify-tag
-          else
-            gh release create "$TAG" --title "$title" --notes-file "$RUNNER_TEMP/release-notes.md" --verify-tag
-          fi
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tags.outputs.tag }}
+          PREVIOUS: ${{ steps.tags.outputs.previous }}
+        run: gh release create "$TAG" --verify-tag --title "$TAG" --generate-notes --notes-start-tag "$PREVIOUS"
+
+      - name: Delete source tag
+        env:
+          SRC_TAG: ${{ github.ref_name }}
+        run: git push origin --delete "refs/tags/${SRC_TAG}"
