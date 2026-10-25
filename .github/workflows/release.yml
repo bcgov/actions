@@ -14,7 +14,7 @@ jobs:
   release:
     name: Build dist and publish release
     # skip bot-made releases so automation never re-enters itself
-    if: github.repository == 'bcgov/actions' && github.event.release.author.login != 'github-actions[bot]'
+    if: github.repository == 'bcgov/actions' && github.actor != 'github-actions[bot]' && github.event.release.author.login != 'github-actions[bot]'
     runs-on: ubuntu-26.04
     permissions:
       contents: write
@@ -34,6 +34,12 @@ jobs:
             exit 1
           fi
           src="${TAG}-src"
+          # loop guard: release already points at a dist rebuild
+          if git log -1 --format=%s HEAD | grep -q '^chore(dist): build ncc bundles'; then
+            echo "${TAG} already has dist; skipping" >&2
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           if git rev-parse -q --verify "refs/tags/${src}" > /dev/null; then
             echo "${src} already exists" >&2
             exit 1
@@ -67,11 +73,13 @@ jobs:
           echo "previous=${previous}" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@v7
+        if: steps.tags.outputs.skip != 'true'
         with:
           node-version-file: .tool-versions
           cache: npm
 
       - name: Build dist on a side commit and move the release tag to it
+        if: steps.tags.outputs.skip != 'true'
         env:
           TAG: ${{ github.event.release.tag_name }}
         run: |
@@ -91,6 +99,7 @@ jobs:
           git push -f origin "refs/tags/${TAG}"
 
       - name: Regenerate release notes (-src to -src)
+        if: steps.tags.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name }}
