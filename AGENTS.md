@@ -19,7 +19,7 @@ Pipeline: build, then `image-tracker`, then deploy by digest (`outputs.digest` /
 - Trigger: push of a `vX.Y.Z-src` tag on the `main` tip. Do not run it on `pull_request`, `push` to `main`, or `release` events.
 - Fail when the tag is not `vX.Y.Z-src`, when `vX.Y.Z` already exists, or when `test-and-analyse/dist/index.js` is missing after `npm ci` and `npm run build`.
 - Force-add `dist/`, commit on top of the `-src` tag, tag that commit `vX.Y.Z`, and push only that tag. Do not push `main` or any branch.
-- `gh release create vX.Y.Z --generate-notes --notes-start-tag <last v* tag that is not -src>`, then delete the `-src` tag.
+- `gh release create vX.Y.Z --generate-notes --notes-start-tag <previous v*-src tag>`. Never delete `-src` tags; they are permanent.
 - Consumers pin `vX.Y.Z` or its SHA. `@main` and `-src` tags have no `dist/`. `uses: $/…` in this repo loads the workflow commit, which has no `dist/`. Suite tests build in the job and run `.github/scripts/stage-dist.sh` before `$/test-and-analyse`.
 
 ## PR triggers

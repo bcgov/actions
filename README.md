@@ -115,6 +115,6 @@ Refer to each action's directory for its exact minimum required permissions bloc
 
 Never pin `@main`. Pin a [release](../../releases) tag (`@v1.2.3`) or that tag’s commit SHA.
 
-`test-and-analyse` executes `dist/` from ncc. `dist/` is git-ignored and never on `main`. To release, push a `vX.Y.Z-src` tag on the `main` tip; [`.github/workflows/release.yml`](./.github/workflows/release.yml) builds `dist/` on a side commit, tags it `vX.Y.Z`, publishes that release, and deletes the `-src` tag ([ADR 0001](./docs/adr/0001-double-tag-release.md)). Pin `vX.Y.Z`, never a `-src` tag. Composite actions in this repo are YAML, but still must not be pinned to `@main`.
+`test-and-analyse` executes `dist/` from ncc. `dist/` is git-ignored and never on `main`. To release, push a `vX.Y.Z-src` tag on the `main` tip; [`.github/workflows/release.yml`](./.github/workflows/release.yml) builds `dist/` on a side commit, tags it `vX.Y.Z`, and publishes that release; `-src` tags stay permanently ([ADR 0001](./docs/adr/0001-double-tag-release.md)). Pin `vX.Y.Z`, never a `-src` tag. Composite actions in this repo are YAML, but still must not be pinned to `@main`.
 
 Usage examples use `@vX.Y.Z` — a placeholder that will not resolve — so copy-paste fails until you pick a real tag. All actions are versioned and released together as a single suite.
