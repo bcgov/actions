@@ -10,15 +10,15 @@ Accepted
 
 ## Decision
 
-1. Cut `vX.Y.Z-src` on the tip of `main` and push it. The workflow rejects a tag that is not the `main` tip.
-2. `.github/workflows/release.yml` runs on that tag. It builds `dist/` on a side commit off the `-src` tag, tags that commit `vX.Y.Z`, and publishes the `vX.Y.Z` release. Release notes compare `-src` to `-src`: they start from the newest earlier `v*-src` tag whose `vX.Y.Z` release exists (the first double-tag release starts from the last `v*` tag, since no `-src` tag exists yet).
+1. A maintainer publishes release `vX.Y.Z` from the GitHub Releases page, targeting the tip of `main`. Nobody pushes release tags by hand. The workflow rejects a release that is not on the `main` tip or not `vX.Y.Z`.
+2. `.github/workflows/release.yml` runs on `release: published`. It tags the release commit `vX.Y.Z-src`, builds `dist/` on a side commit, moves `vX.Y.Z` to that commit, and regenerates the notes `-src` to `-src` (`previous_tag_name` is the newest earlier `v*-src`; the first double-tag release starts from the last `v*` tag).
 3. `-src` tags are kept permanently; they mark the `main` commit each release was built from.
 
-`dist/` only exists on the side commit, which no branch points to. No long-lived release branches. No merge queues.
+`dist/` only exists on the side commit, which no branch points to. No long-lived release branches. No merge queues. This repo has no tag ruleset; tag protection is procedural.
 
 ## Consequences
 
-- `vX.Y.Z` appears once, already containing `dist/`, so Renovate and pins never see a tag without it.
-- A failed run leaves `vX.Y.Z-src` and no `vX.Y.Z`. Fix the cause and cut the next patch version's `-src` tag.
+- The human step stays the Releases page; the double tag is hidden in automation.
+- `vX.Y.Z` briefly points at the `main` commit without `dist/` until the run finishes, so a pin or Renovate PR made in that window can need a re-run.
+- A failed run leaves `vX.Y.Z` without `dist/` (and possibly `vX.Y.Z-src`). Fix the cause and publish the next patch version.
 - Pins and Renovate use `vX.Y.Z`, never `-src`.
-- Publishing a release from the Releases page no longer builds `dist/`.

@@ -115,18 +115,17 @@ Refer to each action's directory for its exact minimum required permissions bloc
 
 Never pin `@main`. Pin a [release](../../releases) tag (`@v1.2.3`) or that tag’s commit SHA.
 
-`test-and-analyse` executes `dist/` from ncc. `dist/` is git-ignored and never on `main`. To release, push a `vX.Y.Z-src` tag on the `main` tip; [`.github/workflows/release.yml`](./.github/workflows/release.yml) builds `dist/` on a side commit, tags it `vX.Y.Z`, and publishes that release; `-src` tags stay permanently ([ADR 0001](./docs/adr/0001-double-tag-release.md)). Pin `vX.Y.Z`, never a `-src` tag. Composite actions in this repo are YAML, but still must not be pinned to `@main`.
+`test-and-analyse` executes `dist/` from ncc. `dist/` is git-ignored and never on `main`. To release, publish `vX.Y.Z` from the GitHub Releases page on the `main` tip; [`.github/workflows/release.yml`](./.github/workflows/release.yml) tags that commit `vX.Y.Z-src`, builds `dist/` on a side commit, moves `vX.Y.Z` onto it, and regenerates the notes; `-src` tags stay permanently ([ADR 0001](./docs/adr/0001-double-tag-release.md)). Pin `vX.Y.Z`, never a `-src` tag. Composite actions in this repo are YAML, but still must not be pinned to `@main`.
 
 ### Cutting a release (maintainers)
 
-> **Changed:** do **not** publish from the GitHub Releases page. A release published there gets no `dist/` and breaks `test-and-analyse` for anyone pinning it. Always cut by pushing a `-src` tag.
+Cut releases from the [Releases page](../../releases/new) only. **Do not push release tags by hand** (neither `vX.Y.Z` nor `vX.Y.Z-src`); the workflow creates and moves them.
 
-1. Update local `main` to the tip: `git switch main && git pull`.
-2. Push the source tag: `git tag vX.Y.Z-src && git push origin vX.Y.Z-src`.
-3. Watch the [release workflow](./.github/workflows/release.yml); it publishes `vX.Y.Z` with `dist/`.
+1. On the Releases page, create tag `vX.Y.Z` targeting `main` (the tip) and publish.
+2. The [release workflow](./.github/workflows/release.yml) then tags that commit `vX.Y.Z-src`, builds `dist/` on a side commit, moves `vX.Y.Z` onto it, and regenerates the notes from the previous `-src`. For a minute or two `vX.Y.Z` has no `dist/`; wait for the run to go green before pinning.
 
-- **Tag protection is procedural.** This repo has no tag ruleset (only the `main` branch ruleset); that is expected. Only maintainers should push `v*` tags, and never by hand except `-src`.
-- **First release:** delete the old draft `v0.11.0` on the Releases page before the first `-src` cut, so nobody publishes it by habit.
-- **Failed run:** an orphan `vX.Y.Z-src` with no `vX.Y.Z` is fine. Fix the cause and cut the next patch's `-src` (e.g. `vX.Y.(Z+1)-src`); don't reuse or move the tag ([ADR 0001](./docs/adr/0001-double-tag-release.md)).
+- **Tag protection is procedural.** This repo has no tag ruleset (only the `main` branch ruleset); that is expected.
+- **First release:** delete the old draft `v0.11.0` on the Releases page before the first cut, so nobody publishes it by habit, then publish a fresh `v0.11.0`.
+- **Failed run:** a release whose run failed (no `dist/`, or an orphan `vX.Y.Z-src`) is not reused. Fix the cause and publish the next patch version ([ADR 0001](./docs/adr/0001-double-tag-release.md)).
 
 Usage examples use `@vX.Y.Z` — a placeholder that will not resolve — so copy-paste fails until you pick a real tag. All actions are versioned and released together as a single suite.

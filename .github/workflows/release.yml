@@ -1,11 +1,11 @@
 name: Release
 
 on:
-  push:
-    tags: ["v*-src"]
+  release:
+    types: [published]
 
 concurrency:
-  group: release-${{ github.ref_name }}
+  group: release-${{ github.event.release.tag_name }}
   cancel-in-progress: false
 
 permissions: {}
@@ -22,44 +22,47 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check tags
+      - name: Check tags and cut -src
         id: tags
         env:
-          SRC_TAG: ${{ github.ref_name }}
+          TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
-          if ! [[ "$SRC_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-src$ ]]; then
-            echo "${SRC_TAG} is not vX.Y.Z-src" >&2
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "${TAG} is not vX.Y.Z" >&2
             exit 1
           fi
-          tag="${SRC_TAG%-src}"
-          if git rev-parse -q --verify "refs/tags/${tag}" > /dev/null; then
-            echo "${tag} already exists" >&2
+          src="${TAG}-src"
+          if git rev-parse -q --verify "refs/tags/${src}" > /dev/null; then
+            echo "${src} already exists" >&2
             exit 1
           fi
           if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
-            echo "${SRC_TAG} is not on the main tip" >&2
+            echo "${TAG} is not on the main tip" >&2
             exit 1
           fi
-          # notes compare -src to -src: newest earlier -src tag whose release tag exists
+          # notes compare -src to -src: newest earlier -src tag
           previous=""
           for t in $(git tag -l 'v*-src' --sort=-v:refname); do
             v="${t%-src}"
-            older=$(printf '%s\n%s\n' "$v" "$tag" | sort -V | head -n 1)
-            if [ "$v" != "$tag" ] && [ "$older" = "$v" ] && git rev-parse -q --verify "refs/tags/${v}" > /dev/null; then
+            older=$(printf '%s\n%s\n' "$v" "$TAG" | sort -V | head -n 1)
+            if [ "$v" != "$TAG" ] && [ "$older" = "$v" ]; then
               previous="$t"
               break
             fi
           done
           if [ -z "$previous" ]; then
-            # first double-tag release: no earlier -src tag exists, so start from the last v* tag
-            previous=$(git tag -l 'v*' --sort=-v:refname | grep -v -- '-src$' | head -n 1 || true)
+            # first double-tag release: no earlier -src tag exists, so start from the last other v* tag
+            previous=$(git tag -l 'v*' --sort=-v:refname | grep -v -- '-src$' | grep -vx -- "$TAG" | head -n 1 || true)
           fi
           if [ -z "$previous" ]; then
             echo "no previous release tag found" >&2
             exit 1
           fi
-          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          # permanent marker for the main commit this release was built from
+          git tag "$src" HEAD
+          git push origin "refs/tags/${src}"
+          echo "src=${src}" >> "$GITHUB_OUTPUT"
           echo "previous=${previous}" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@v7
@@ -67,9 +70,9 @@ jobs:
           node-version-file: .tool-versions
           cache: npm
 
-      - name: Build dist on a side commit and tag it
+      - name: Build dist on a side commit and move the release tag to it
         env:
-          TAG: ${{ steps.tags.outputs.tag }}
+          TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
           npm ci
@@ -83,13 +86,17 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
           git commit -m "chore(dist): build ncc bundles for ${TAG}"
-          git tag "$TAG"
-          git push origin "refs/tags/${TAG}"
+          git tag -f "$TAG"
+          git push -f origin "refs/tags/${TAG}"
 
-      - name: Publish release
+      - name: Regenerate release notes (-src to -src)
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.tags.outputs.tag }}
+          TAG: ${{ github.event.release.tag_name }}
+          SRC: ${{ steps.tags.outputs.src }}
           PREVIOUS: ${{ steps.tags.outputs.previous }}
-        run: gh release create "$TAG" --verify-tag --title "$TAG" --generate-notes --notes-start-tag "$PREVIOUS"
-
+        run: |
+          set -euo pipefail
+          notes=$(gh api "repos/${GITHUB_REPOSITORY}/releases/generate-notes" \
+            -f tag_name="$SRC" -f previous_tag_name="$PREVIOUS" --jq .body)
+          gh release edit "$TAG" --notes "$notes"
