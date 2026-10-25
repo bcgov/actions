@@ -37,7 +37,20 @@ jobs:
             echo "${tag} already exists" >&2
             exit 1
           fi
-          previous=$(git tag -l 'v*-src' --sort=-v:refname | grep -vx -- "$SRC_TAG" | head -n 1 || true)
+          if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+            echo "${SRC_TAG} is not on the main tip" >&2
+            exit 1
+          fi
+          # notes compare -src to -src: newest earlier -src tag whose release tag exists
+          previous=""
+          for t in $(git tag -l 'v*-src' --sort=-v:refname); do
+            v="${t%-src}"
+            older=$(printf '%s\n%s\n' "$v" "$tag" | sort -V | head -n 1)
+            if [ "$v" != "$tag" ] && [ "$older" = "$v" ] && git rev-parse -q --verify "refs/tags/${v}" > /dev/null; then
+              previous="$t"
+              break
+            fi
+          done
           if [ -z "$previous" ]; then
             # first double-tag release: no earlier -src tag exists, so start from the last v* tag
             previous=$(git tag -l 'v*' --sort=-v:refname | grep -v -- '-src$' | head -n 1 || true)

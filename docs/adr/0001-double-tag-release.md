@@ -10,8 +10,8 @@ Accepted
 
 ## Decision
 
-1. Cut `vX.Y.Z-src` on the tip of `main` and push it.
-2. `.github/workflows/release.yml` runs on that tag. It builds `dist/` on a side commit off the `-src` tag, tags that commit `vX.Y.Z`, and publishes the `vX.Y.Z` release. Release notes compare `-src` to `-src`: they start from the previous `v*-src` tag (the first double-tag release starts from the last `v*` tag, since no `-src` tag exists yet).
+1. Cut `vX.Y.Z-src` on the tip of `main` and push it. The workflow rejects a tag that is not the `main` tip.
+2. `.github/workflows/release.yml` runs on that tag. It builds `dist/` on a side commit off the `-src` tag, tags that commit `vX.Y.Z`, and publishes the `vX.Y.Z` release. Release notes compare `-src` to `-src`: they start from the newest earlier `v*-src` tag whose `vX.Y.Z` release exists (the first double-tag release starts from the last `v*` tag, since no `-src` tag exists yet).
 3. `-src` tags are kept permanently; they mark the `main` commit each release was built from.
 
 `dist/` only exists on the side commit, which no branch points to. No long-lived release branches. No merge queues.
