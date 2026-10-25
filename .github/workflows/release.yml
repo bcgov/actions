@@ -72,15 +72,15 @@ jobs:
           fi
           npm ci
           npm run build
-          for entry in pr-description-add/dist/index.js test-and-analyse/dist/index.js; do
+          for entry in test-and-analyse/dist/index.js; do
             if [ ! -f "$entry" ]; then
               echo "${entry} is missing after the build" >&2
               exit 1
             fi
           done
           # dist/ is git-ignored on main, so it is force-added to the release commit
-          git add -f -A -- pr-description-add/dist test-and-analyse/dist
-          if git diff --cached --ignore-space-at-eol --quiet -- pr-description-add/dist test-and-analyse/dist; then
+          git add -f -A -- test-and-analyse/dist
+          if git diff --cached --ignore-space-at-eol --quiet -- test-and-analyse/dist; then
             git tag "$TAG" "$base"
           else
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

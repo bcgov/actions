@@ -6,11 +6,10 @@
     "node": "^24.0.0"
   },
   "workspaces": [
-    "pr-description-add",
     "test-and-analyse"
   ],
   "scripts": {
-    "build": "npm run build --workspace=pr-description-add && npm run package --workspace=pr-description-add && npm run build --workspace=test-and-analyse",
+    "build": "npm run build --workspace=test-and-analyse",
     "lint": "npm run lint --workspaces",
     "format": "npm run format --workspaces",
     "format:check": "npm run format:check --workspaces",

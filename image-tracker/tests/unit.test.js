@@ -2763,7 +2763,7 @@ test('runMain writes diagnostic summary to GITHUB_STEP_SUMMARY on resolution fai
   }
 });
 
-test('runMain defaults max_depth to 1 when unset and does not walk to an ancestor image', async () => {
+test('runMain defaults max_depth to 100 when unset and walks to an ancestor image', async () => {
   const fs = require('node:fs');
   const path = require('node:path');
   const os = require('node:os');
@@ -2891,9 +2891,9 @@ test('runMain defaults max_depth to 1 when unset and does not walk to an ancesto
     process.env.INPUT_WORKING_DIRECTORY = repoDir;
     process.env.INPUT_TOKEN = 'mock-token';
 
-    await assert.rejects(() => runMain(), /process\.exit called with code 1/);
+    await runMain();
     const outputContent = fs.readFileSync(out, 'utf8');
-    assert.doesNotMatch(outputContent, new RegExp(expectedDigest), 'must not resolve ancestor squash image at default max_depth 1');
+    assert.match(outputContent, new RegExp(expectedDigest), 'resolves ancestor squash image at default max_depth 100');
   } finally {
     global.fetch = origFetch;
     process.exit = origExit;
@@ -2903,11 +2903,11 @@ test('runMain defaults max_depth to 1 when unset and does not walk to an ancesto
   }
 });
 
-test('action.yml defines max_depth default of 1', () => {
+test('action.yml defines max_depth default of 100', () => {
   const fs = require('node:fs');
   const path = require('node:path');
   const actionYaml = fs.readFileSync(path.join(__dirname, '..', 'action.yml'), 'utf8');
-  assert.match(actionYaml, /max_depth:[\s\S]*?default:\s*['"]?1['"]?/, 'action.yml must default max_depth to 1');
+  assert.match(actionYaml, /max_depth:[\s\S]*?default:\s*['"]?100['"]?/, 'action.yml must default max_depth to 100');
 });
 
 

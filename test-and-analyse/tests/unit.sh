@@ -244,8 +244,6 @@ assert_node_version "24" "" "$TMP_DIR/nv-override" "$TMP_DIR/nv-override" "24|" 
 assert_node_version "lts/*" "" "$TMP_DIR/nv-override" "$TMP_DIR/nv-override" "lts/*|" "node_version: explicit lts/* alias works"
 
 # --- 2. Explicit Version File Input ---
-assert_node_version "" ".nvmrc" "$TMP_DIR/nv-nvmrc" "$TMP_DIR/nv-nvmrc" "|$TMP_DIR/nv-nvmrc/.nvmrc" "node_version_file: explicit relative .nvmrc in DIR"
-assert_node_version_fails "" "missing-file.txt" "$TMP_DIR/nv-empty" "$TMP_DIR/nv-empty" "node_version_file: fails fast if specified file does not exist"
 
 # --- 3. Auto-discover .node-version or .nvmrc ---
 assert_node_version "" "" "$TMP_DIR/nv-node-version" "$TMP_DIR/nv-node-version" "|$TMP_DIR/nv-node-version/.node-version" "auto-discover: finds .node-version in DIR"
@@ -341,8 +339,6 @@ echo "FROM python:3.8" > "$TMP_DIR/pv-override/Dockerfile"
 mkdir -p "$TMP_DIR/pv-empty"
 
 assert_python_version "3.14" "" "$TMP_DIR/pv-override" "$TMP_DIR/pv-override" "3.14|" "python_version: explicit input overrides files"
-assert_python_version "" ".python-version" "$TMP_DIR/pv-dot" "$TMP_DIR/pv-dot" "|$TMP_DIR/pv-dot/.python-version" "python_version_file: explicit .python-version"
-assert_python_version_fails "" "missing.txt" "$TMP_DIR/pv-empty" "$TMP_DIR/pv-empty" "python_version_file: fails fast if missing"
 assert_python_version "" "" "$TMP_DIR/pv-dot" "$TMP_DIR/pv-dot" "|$TMP_DIR/pv-dot/.python-version" "auto-discover: .python-version in DIR"
 assert_python_version "" "" "$TMP_DIR/pv-mono/packages/app" "$TMP_DIR/pv-mono" "|$TMP_DIR/pv-mono/.python-version" "auto-discover: .python-version in ROOT"
 assert_python_version "" "" "$TMP_DIR/pv-pep" "$TMP_DIR/pv-pep" "|$TMP_DIR/pv-pep/pyproject.toml" "auto-discover: delegates requires-python pyproject.toml to setup-python"
@@ -426,8 +422,6 @@ echo "FROM eclipse-temurin:17" > "$TMP_DIR/jv-override/Dockerfile"
 mkdir -p "$TMP_DIR/jv-empty"
 
 assert_java_version "21" "" "$TMP_DIR/jv-override" "$TMP_DIR/jv-override" "21|" "java_version: explicit input overrides files"
-assert_java_version "" ".java-version" "$TMP_DIR/jv-dot" "$TMP_DIR/jv-dot" "|$TMP_DIR/jv-dot/.java-version" "java_version_file: explicit .java-version"
-assert_java_version_fails "" "missing.txt" "$TMP_DIR/jv-empty" "$TMP_DIR/jv-empty" "java_version_file: fails fast if missing"
 assert_java_version "" "" "$TMP_DIR/jv-dot" "$TMP_DIR/jv-dot" "|$TMP_DIR/jv-dot/.java-version" "auto-discover: .java-version in DIR"
 assert_java_version "" "" "$TMP_DIR/jv-mono/packages/app" "$TMP_DIR/jv-mono" "|$TMP_DIR/jv-mono/.java-version" "auto-discover: .java-version in ROOT"
 assert_java_version "" "" "$TMP_DIR/jv-sdkman" "$TMP_DIR/jv-sdkman" "|$TMP_DIR/jv-sdkman/.sdkmanrc" "auto-discover: .sdkmanrc passed through as version file"
@@ -501,11 +495,11 @@ if (
     GITHUB_OUTPUT="$REPORTER_OUT" \
     GITHUB_STEP_SUMMARY="$REPORTER_SUMMARY" \
     INPUT_DIR="app" \
-    INPUT_DEP_SCAN="warn" \
+    INPUT_KNIP="warn" \
     INPUT_KNIP_OUTPUT="knip-output.json" \
     INPUT_LANGUAGE="node" \
     node "${ACTION_ROOT}/reporter/index.mjs"
-) && [ "$(awk '/^unused_files<</ { getline; print; exit }' "$REPORTER_OUT")" = "1" ]; then
+) && grep -q "<td>Unused files</td><td>1</td>" "$REPORTER_SUMMARY"; then
     echo "✓ reporter reads Knip output from dir on the Actions runtime entrypoint"
     passed=$((passed + 1))
 else

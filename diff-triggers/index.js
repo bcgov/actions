@@ -1,7 +1,7 @@
 const { execFileSync } = require('child_process');
 const fs = require('fs');
 
-const { InputError, getInput, getToken, isDebug, parseBool, parseList, stripQuotes } = require('../shared/inputs.js');
+const { InputError, getInput, getToken, isDebug, parseList, stripQuotes } = require('../shared/inputs.js');
 
 /**
  * Parse trigger paths with the shared list parser (one path per line, or a
@@ -92,15 +92,8 @@ async function main() {
   const triggersStr = process.env.INPUT_TRIGGERS || '';
   const filtersStr = process.env.INPUT_FILTERS || '';
   const inputRef = getInput('base');
-  let annotationsEnabled;
-  let debug;
-  try {
-    annotationsEnabled = parseBool(getInput('annotations'), 'annotations', true);
-    debug = isDebug();
-  } catch (e) {
-    console.error(e.message);
-    process.exit(1);
-  }
+  const annotationsEnabled = true;
+  const debug = isDebug();
   const token = getToken();
   const workflow = process.env.GITHUB_WORKFLOW || '';
   const job = process.env.GITHUB_JOB || '';

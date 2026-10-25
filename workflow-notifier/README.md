@@ -20,19 +20,13 @@ The action reads `CODEOWNERS` from the **job workspace**, not from the action bu
 | Input | Description | Default | Required |
 |---|---|---|---|
 | `token` | GitHub token | `${{ github.token }}` | No |
-| `debug` | Enable debug logging | `"false"` | No |
 | `title` | Issue title. An open issue with this exact title gets a comment for each later run. A closed issue is not reused. | `"fix: failure in ${{ github.workflow }}"` | No |
 | `body` | Issue body (pre-filled with workflow run URL if omitted) | | No |
 | `notify_author` | Whether to notify the triggering author/merger on failure | `"true"` | No |
 | `notify_codeowners` | When to notify repository CODEOWNERS on failure: `always`, `fallback` or `never`. By default (`fallback`), CODEOWNERS are only alerted if no human author/operator was resolved (e.g. scheduled cron runs). `always` always includes CODEOWNERS; `never` never does. | `"fallback"` | No |
 | `dry_run` | If true, logs the issue create or comment without calling it | `"false"` | No |
 
-## Outputs
-
-| Output | Description |
-|---|---|
-| `issue_number` | The created issue number, or the open issue that received the comment (0 if dry run) |
-| `assignees` | JSON array of assigned owners, e.g. `["alice","bob"]`. Everyone `notify_author` and `notify_codeowners` select is assigned on create (up to 10); set `notify_author: false` and `notify_codeowners: never` to assign nobody. |
+Everyone `notify_author` and `notify_codeowners` select is assigned on create (up to 10); set `notify_author: false` and `notify_codeowners: never` to assign nobody. The action has no outputs.
 
 ## Usage
 
@@ -48,7 +42,7 @@ You can test and debug the bash script locally by setting the inputs as environm
 
 ```bash
 export INPUT_TOKEN="your_personal_access_token"
-export INPUT_DEBUG="true"
+export RUNNER_DEBUG="1"
 export INPUT_TITLE="Local Test Failure"
 export INPUT_BODY="Testing action script locally"
 export INPUT_DRY_RUN="true"

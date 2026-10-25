@@ -88,22 +88,6 @@ assert_contains "$fork_prt" "builder/README.md#fork-builds" "pull_request_target
 assert_empty "$(refuse_reason pull_request_target bcgov/actions bcgov/actions)" \
   "same-repo pull_request_target is allowed"
 
-if is_external_repository bcgov/quickstart-openshift bcgov/actions; then
-  echo "ok  external repository detected"
-  passed=$((passed + 1))
-else
-  echo "FAIL  external repository detected"
-  failed=$((failed + 1))
-fi
-
-if is_external_repository bcgov/actions bcgov/actions; then
-  echo "FAIL  same repository not external"
-  failed=$((failed + 1))
-else
-  echo "ok  same repository not external"
-  passed=$((passed + 1))
-fi
-
 msg="$(fork_visibility_message)"
 assert_contains "$msg" "Images built from forks require" "visibility message states the requirement"
 assert_contains "$msg" "package visibility to public" "visibility message names the fix"

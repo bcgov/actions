@@ -1502,18 +1502,17 @@ async function runMain() {
   }
 
   // 3. Settings
-  let registry = env.REGISTRY || env.INPUT_REGISTRY || 'ghcr.io';
-  registry = registry.replace(/^https?:\/\//, '').replace(/\/$/, '') || 'ghcr.io';
+  const registry = 'ghcr.io';
 
   const revision = env.REVISION || env.INPUT_REVISION || 'HEAD';
   const dir = env.DIR || env.INPUT_WORKING_DIRECTORY || '.';
   // INPUT_TOKEN only (the action defaults it to github.token); ambient tokens are ignored on purpose.
   const token = getInput('token', env);
   const maxTagsStr = env.MAX_TAGS || env.INPUT_MAX_TAGS || '500';
-  const maxDepthStr = env.MAX_DEPTH || env.INPUT_MAX_DEPTH || '1';
+  const maxDepthStr = env.MAX_DEPTH || env.INPUT_MAX_DEPTH || '100';
   let debug;
   try {
-    debug = isDebug(env) || parseBool(env.DEBUG, 'debug');
+    debug = isDebug(env);
   } catch (err) {
     console.error(err.message);
     process.exit(1);
@@ -1886,7 +1885,6 @@ async function runMain() {
   if (env.GITHUB_ACTIONS === 'true') {
     if (env.GITHUB_OUTPUT) {
       const outputLines = [];
-      outputLines.push(`images=${JSON.stringify(imagesJson)}`);
 
       const firstPkg = pkgOrder[0];
       let rPr = '';

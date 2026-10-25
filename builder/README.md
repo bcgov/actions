@@ -30,9 +30,9 @@ Use the **same workflow** on upstream and fork (`on: [push, pull_request]`). The
 
 There is **no `pushed` output**. Do not add one, and do not gate deploy on builder. Use `build → image-tracker → deploy`. `image-tracker` fails the job when the image is missing.
 
-`org.opencontainers.image.revision` is always `source_sha` (PR `head.sha`, or `github.sha` on push) — never the `pull_request` merge ref. That is what lets merge workflows resolve the PR image with `image-tracker` without rebuilding.
+`org.opencontainers.image.revision` is always the source SHA (PR `head.sha`, or `github.sha` on push) — never the `pull_request` merge ref. That is what lets merge workflows resolve the PR image with `image-tracker` without rebuilding.
 
-On a fork pull request, `image_path` and `source_sha` name the fork image (`ghcr.io/<fork-owner>/...:<head.sha>`). Images publish on `push` to the fork.
+On a fork pull request, the source SHA tag names the fork image (`ghcr.io/<fork-owner>/...:<head.sha>`) and `image` is not pullable until it publishes. Images publish on `push` to the fork.
 
 **Do not use `pull_request_target` for builds or deploys.** That event runs the workflow file from the upstream default branch, not from the contributor's PR. This action refuses fork `pull_request_target` outright.
 
@@ -126,23 +126,10 @@ Only GitHub Container Registry (`ghcr.io`) is supported.
 
     # Overrides the default reference/branch to diff against
     # Defaults to the default branch, usually `main`
-    base: ${{ github.event.repository.default_branch }}
-
-    # Repository to clone and process
-    # Useful for consuming other repos, like in testing
-    # Defaults to the current one
-    repository: ${{ github.repository }}
-
-    # SBOM generation is enabled by default as a security best practice
-    # String value, not boolean
-    sbom: 'true'
+    base: main  # Optional; default is the PR base branch, or HEAD^ on push
 
     # Specify token (GH or PAT), instead of inheriting one from the calling workflow
     token: ${{ secrets.GITHUB_TOKEN }}
-
-    # Specify username for registry login; defaults to github.actor
-    # Useful when using a PAT or service account
-    username: ${{ github.actor }}
 
     # Multiline input for secrets to mount.
     # Note: GITHUB_TOKEN is not injected by default. If your build needs it
@@ -161,13 +148,13 @@ This action supports building from and pushing to private repositories.
 ### Authentication
 
 - **Same Repository/Organization**: By default, the action uses the automatic `GITHUB_TOKEN`. Ensure your workflow has `contents: read` and `packages: write` permissions.
-- **Cross-Organization**: To build from a private repository in a different organization, provide a **Personal Access Token (PAT)** with `repo` scope via the `token` input and specify the associated `username`.
+- **Cross-Organization**: To build from a private repository in a different organization, provide a **Personal Access Token (PAT)** with `repo` scope via the `token` input. Registry login always uses `github.actor` as the user name.
 
 ### Security
 
 To prevent credential leakage, this action:
 - Uses `persist-credentials: false` during all checkout steps.
-- Performs a clean registry login using the provided `username` and `token` before any manifest or build operations.
+- Performs a clean registry login as `github.actor` with the provided `token` before any manifest or build operations.
 - Follows the principle of least privilege by **not** automatically injecting `GITHUB_TOKEN` into the Docker build process. If your build needs a token (e.g., to pull private packages), you must explicitly provide it via the `secrets` input.
 
 
@@ -237,7 +224,6 @@ builds:
         package: ${{ matrix.package }}
         tags: ${{ github.event.number }}
         tag_fallback: test
-        repository: bcgov/nr-quickstart-typescript
         token: ${{ secrets.GITHUB_TOKEN }}
         triggers: ${{ matrix.triggers }}
 
@@ -360,11 +346,7 @@ Two SBOM formats are generated and uploaded as workflow artifacts:
 |------------|---------------------------------------------|
 | `digest`   | Immutable digest of the built or retagged image |
 | `triggered`| Whether a build was triggered (`true/false`)|
-| `labels`   | Generated OCI labels                        |
-| `annotations` | Generated OCI annotations                   |
-| `registry` | The registry host name, always `ghcr.io` |
-| `image_path` | The full image path including the tag, always with a leading slash, in the format `/owner/repo/image:tag` (or `/owner/repo:tag` when the package matches the repository name) |
-| `source_sha` | Git commit SHA tagged on the image (PR head SHA, or `github.sha` on push) |
+| `image` | Fully-qualified digest reference, `ghcr.io/owner/repo/package@sha256:...` (or `ghcr.io/owner/repo@sha256:...` when the package matches the repository name); same format as image-tracker's `image`. Empty when there is no digest |
 
 New image digest (SHA).  This applies to build and retags.
 
@@ -389,7 +371,6 @@ Has an image been built?  [true|false]
 - name: Echo build trigger
   run: |
     echo "Trigger result: ${{ steps.trigger.outputs.triggered }}"
-    echo "Source SHA: ${{ steps.trigger.outputs.source_sha }}"
   ...
 ```
 

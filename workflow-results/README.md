@@ -89,14 +89,6 @@ results:
     # Optional: Header title for the step summary table and log group
     # Default: "Workflow Results"
     title: 'Workflow Results'
-
-    # Optional: Whether to write markdown table to $GITHUB_STEP_SUMMARY
-    # Default: "true"
-    summary: 'true'
-
-    # Optional: Whether to emit ::error:: annotations on failures/cancellations
-    # Default: "true"
-    annotations: 'true'
 ```
 
 ## Outputs
@@ -104,7 +96,3 @@ results:
 | Output      | Description                                                                          |
 | :---------- | :----------------------------------------------------------------------------------- |
 | `passed`    | Boolean string indicating if all jobs passed or were skipped (`'true'` or `'false'`) |
-| `failed`    | JSON array string containing keys of failed jobs (e.g. `'["test-backend"]'`)         |
-| `cancelled` | JSON array string containing keys of cancelled jobs                                  |
-| `skipped`   | JSON array string containing keys of skipped jobs                                    |
-| `total`     | Total count of upstream jobs evaluated                                               |

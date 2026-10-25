@@ -37,7 +37,7 @@ it the recommended form for deployment references.
 **Promotion contract:** `build → image-tracker → deploy` that digest. Do not
 promote by mutable PR tag (`:<pr>` / retag `:test`). A squash merge SHA was
 never built, so merge/promote must **walk** (`max_depth` large enough to find
-the last image for each package, e.g. `100`). `max_depth: 1` only asks “was
+the last image for each package; the default is `100`). `max_depth: 1` only asks “was
 this git SHA built?” — that fails ordinary merges. A miss is always `exit 1`.
 Fork does not change that: hit or stop. Do not copy `quickstart-openshift`
 `merge.yml` as the image spec until it uses this contract.
@@ -65,7 +65,7 @@ When package resolution fails, `image-tracker` automatically outputs a diagnosti
 
 Call image-tracker once per workflow, in the first job. List every package one
 per line, set `tags` when the workflow should retag, and have each deploy job
-read its digest from the `images` JSON output. This is the shape
+read its digest from the `digests` JSON output. This is the shape
 `bcgov/quickstart-openshift` `merge.yml` would use:
 
 ```yaml
@@ -77,7 +77,7 @@ jobs:
       packages: write # tags writes to the registry
       pull-requests: read
     outputs:
-      images: ${{ steps.tracker.outputs.images }}
+      digests: ${{ steps.tracker.outputs.digests }}
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v6
@@ -99,12 +99,12 @@ jobs:
     runs-on: ubuntu-26.04
     steps:
       - run: |
-          echo "backend: ${{ fromJSON(needs.init.outputs.images).backend }}"
-          echo "frontend: ${{ fromJSON(needs.init.outputs.images).frontend }}"
+          echo "backend: ghcr.io/${{ github.repository }}/backend@${{ fromJSON(needs.init.outputs.digests).backend }}"
+          echo "frontend: ghcr.io/${{ github.repository }}/frontend@${{ fromJSON(needs.init.outputs.digests).frontend }}"
 ```
 
-Each value in `images` is a full `ghcr.io/<owner>/<repo>/<package>@sha256:...`
-reference, so deploys pull exactly the image that was resolved. A single
+Each value in `digests` is a `sha256:...` manifest digest; prefix it with
+`ghcr.io/<owner>/<repo>/<package>@` so deploys pull exactly the image that was resolved. A single
 package can be one value (`packages: frontend`); `image` and `digest` then hold
 its reference and digest.
 
@@ -176,7 +176,7 @@ be resolved, or no image exists for that revision, the action fails (`exit 1`).
 | `working_directory` |          | `.`                  | Working directory containing the git repository.                               |
 | `token`        |          | `github.token`       | GitHub token used to mint a GHCR bearer token.                                 |
 | `max_tags`   |          | `500`                | Upper bound on tags inspected per package before failing.                      |
-| `max_depth`  |          | `1`                  | Max commits of git ancestry to search. Default is this SHA only. Merge/promote must raise this (e.g. `100`) so a squash can resolve the last built image. |
+| `max_depth`  |          | `100`                | Max commits of git ancestry to search. The default lets merge/promote resolve the last built image after a squash. `1` accepts only this SHA. |
 | `tags`       |          | —                    | Tags (one per line, or a single tag) applied to every resolved digest. Omit to stay read-only. Needs `packages: write`. See [Tagging](#tagging). |
 
 Package-to-image-path convention:
@@ -225,7 +225,6 @@ steps:
 
 | Output    | Description                                                                                       |
 | --------- | ------------------------------------------------------------------------------------------------- |
-| `images`  | JSON object: `{"<pkg>": "ghcr.io/<owner>/<repo>/<pkg>@sha256:..."}`. Fully pullable references.   |
 | `digests` | JSON object: `{"<pkg>": "sha256:..."}`. Bare digests only.                                        |
 | `image`   | Convenience — the fully-qualified digest reference for the first package. Empty on failure.       |
 | `digest`  | Convenience — the bare digest for the first package. Empty on failure.                            |

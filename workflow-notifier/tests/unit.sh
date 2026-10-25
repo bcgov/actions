@@ -327,7 +327,7 @@ test_pr_api_fallback() {
   out=$(run_action "$FIXTURE_DIR" \
     INPUT_TITLE="Test PR API Fallback" \
     INPUT_NOTIFY_AUTHOR="true" \
-    INPUT_DEBUG="true" \
+    RUNNER_DEBUG="1" \
     INPUT_DRY_RUN="true" \
     INPUT_TOKEN="dummy-token" \
     GITHUB_TRIGGERING_ACTOR="github-actions[bot]" \
@@ -349,7 +349,7 @@ test_pr_merger_priority_over_rerunner() {
   out=$(run_action "$FIXTURE_DIR" \
     INPUT_TITLE="Test PR Merger Priority" \
     INPUT_NOTIFY_AUTHOR="true" \
-    INPUT_DEBUG="true" \
+    RUNNER_DEBUG="1" \
     INPUT_DRY_RUN="true" \
     INPUT_TOKEN="dummy-token" \
     GITHUB_TRIGGERING_ACTOR="rerun-actor" \
@@ -514,11 +514,7 @@ EOF
     "caps --assignee argument at 10 with author first"
   assert_contains "$out" "Assignees: leadauthor,u01,u02,u03,u04,u05,u06,u07,u08,u09" \
     "caps summary assignees output at 10"
-  local out_env
-  out_env=$(cat "${TMP_DIR}/output.env")
-  assert_contains "$out_env" 'assignees=["leadauthor","u01","u02","u03","u04","u05","u06","u07","u08","u09"]' \
-    "clamps step output assignees to 10"
-  assert_not_contains "$out_env" "u10" "excludes 11th owner from step output"
+  assert_not_contains "$out" ",u10" "excludes 11th owner from assignees"
 }
 
 # Test 11: PR lookup retries on indexing lag and recovers

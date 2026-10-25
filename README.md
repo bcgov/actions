@@ -24,15 +24,6 @@ Checks git diff for file and path changes to conditionally trigger workflow jobs
   uses: bcgov/actions/diff-triggers@vX.Y.Z # Replace with latest release tag
 ```
 
-### [get-pr](./get-pr/)
-Drop-in replacement for `bcgov/action-get-pr`: resolves the PR number for PRs, merge queues, pushes, and releases. For new image promotion work, use `image-tracker`.
-
-```yaml
-- name: Get PR Number
-  id: pr
-  uses: bcgov/actions/get-pr@vX.Y.Z # Replace with latest release tag
-```
-
 ### [ghcr-cleanup](./ghcr-cleanup/)
 Opt-in deletion of closed-PR and unreferenced untagged GHCR versions of the repository's own packages. Dry-run by default.
 
@@ -54,13 +45,6 @@ Forensic history traversal to resolve stable image SHAs from Tags or SHAs.
   uses: bcgov/actions/image-tracker@vX.Y.Z # Replace with latest release tag
 ```
 
-### [pr-description-add](./pr-description-add/)
-Add markdown content to Pull Request descriptions dynamically.
-
-```yaml
-- name: Update PR Description
-  uses: bcgov/actions/pr-description-add@vX.Y.Z # Replace with latest release tag
-```
 
 ### [pr-validate](./pr-validate/)
 Validate Pull Request metadata and apply organizational guardrails.
@@ -119,11 +103,9 @@ In alignment with security best practices, you should always declare minimum exp
 Refer to each action's directory for its exact minimum required permissions block:
 - **[builder](./builder/)**: `contents: read`, `packages: write`, plus `id-token: write` and `attestations: write` (optional, for build provenance attestations)
 - **[diff-triggers](./diff-triggers/)**: `contents: read`
-- **[get-pr](./get-pr/)**: `contents: read`, `pull-requests: read`
 - **[ghcr-cleanup](./ghcr-cleanup/)**: `contents: read`, `packages: write`, `pull-requests: read` (`packages: read` for a dry run)
 - **[image-tracker](./image-tracker/)**: `contents: read`, `pull-requests: read`, `packages: read`
-- **[pr-description-add](./pr-description-add/)**: `pull-requests: write`
-- **[pr-validate](./pr-validate/)**: `contents: read`, `pull-requests: read`, plus `pull-requests: write` when `add_markdown` is set
+- **[pr-validate](./pr-validate/)**: `contents: read`, `pull-requests: read`, plus `pull-requests: write` when `markdown` is set
 - **[scan-url](./scan-url/)**: `contents: read`, `issues: write`, `security-events: write`
 - **[test-and-analyse](./test-and-analyse/)**: `contents: read`, `actions: write` (optional, for caching)
 - **[workflow-notifier](./workflow-notifier/)**: `contents: read`, `issues: write`, `pull-requests: read` (optional, for PR merge author resolution)
@@ -133,6 +115,6 @@ Refer to each action's directory for its exact minimum required permissions bloc
 
 Never pin `@main`. Pin a [release](../../releases) tag (`@v1.2.3`) or that tag’s commit SHA.
 
-`pr-description-add` and `test-and-analyse` execute `dist/` from ncc. `dist/` is git-ignored and never on `main`. Pull requests build it in the job and test that build. Publishing a release from the Releases page runs [`.github/workflows/release.yml`](./.github/workflows/release.yml). Unless this run is the workflow republishing the tag, or the tag already points at the dist rebuild, the workflow deletes that release and its git tag before `npm ci`. It then builds, fails if `pr-description-add/dist/index.js` or `test-and-analyse/dist/index.js` is missing, and force-adds both `dist/` folders. When they differ from the released commit, it commits `chore(dist): rebuild ncc bundles for release` and creates the tag on that commit. When they match, it creates the tag on the commit you released. The GitHub Release is recreated with the same title and notes. It does not push `main`. While the job runs, and if the job fails, the tag does not resolve. Copy the pin SHA after the workflow succeeds. `@main` does not contain this rebuild. Composite actions in this repo are YAML, but still must not be pinned to `@main`.
+`test-and-analyse` executes `dist/` from ncc. `dist/` is git-ignored and never on `main`. Pull requests build it in the job and test that build. Publishing a release from the Releases page runs [`.github/workflows/release.yml`](./.github/workflows/release.yml). Unless this run is the workflow republishing the tag, or the tag already points at the dist rebuild, the workflow deletes that release and its git tag before `npm ci`. It then builds, fails if `test-and-analyse/dist/index.js` is missing, and force-adds that `dist/` folder. When they differ from the released commit, it commits `chore(dist): rebuild ncc bundles for release` and creates the tag on that commit. When they match, it creates the tag on the commit you released. The GitHub Release is recreated with the same title and notes. It does not push `main`. While the job runs, and if the job fails, the tag does not resolve. Copy the pin SHA after the workflow succeeds. `@main` does not contain this rebuild. Composite actions in this repo are YAML, but still must not be pinned to `@main`.
 
 Usage examples use `@vX.Y.Z` — a placeholder that will not resolve — so copy-paste fails until you pick a real tag. All actions are versioned and released together as a single suite.

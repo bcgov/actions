@@ -6,7 +6,7 @@ Validate Pull Request metadata and apply organizational guardrails to contributo
 
 - ✅ **Conventional Commits**: Enforces semantic pull request titles (e.g. `feat: ...`, `fix: ...`) per [conventionalcommits.org](https://www.conventionalcommits.org/) using `amannn/action-semantic-pull-request`.
 - ✅ **Educational UX**: Provides explicit, custom GitHub annotations when title validation fails, instructing contributors exactly how to fix the issue without manually retrying CI.
-- ✅ **PR description**: Optional `add_markdown` appends text via [`pr-description-add`](../pr-description-add/).
+- ✅ **PR description**: Optional `markdown` is appended to the PR description once (checkbox state is ignored when checking for it).
 - ✅ **Fork notice**: Emits a warning on fork pull requests with a link to fork CI configuration guidance. Validation continues (conventional commits, etc.).
 - ✅ **Workflow lint**: Runs `rhysd/actionlint` v1.7.12 on Linux x86_64 against every `.yml` and `.yaml` file in `.github/workflows`, hidden files (such as `.reusable.yml`) included. Other runners fail the step. The linux/amd64 tarball is checked against the SHA-256 in `actionlint_1.7.12_checksums.txt` before extraction. Checks the files out with `clean: false` when they are not already in the workspace. A failed download fails the step. The bundled config adds the `ubuntu-26.04` and `ubuntu-26.04-arm` runner labels. If the repo has `.github/actionlint.yaml` (or `.yml`), its `self-hosted-runner` labels are added too; its other settings are not used.
 
@@ -20,7 +20,7 @@ permissions:
   pull-requests: read
 ```
 
-If `add_markdown` is set, also grant `pull-requests: write`.
+If `markdown` is set, also grant `pull-requests: write`.
 
 ## Usage
 
@@ -32,12 +32,8 @@ If `add_markdown` is set, also grant `pull-requests: write`.
 - name: Validate PR (With Custom Inputs)
   uses: bcgov/actions/pr-validate@vX.Y.Z
   with:
-    # Optional: Enforce Conventional Commits format on the PR title
-    # Default: "true"
-    conventional_commits: "true"
-
     # Optional: Append markdown to the PR body (skips when empty)
-    add_markdown: |
+    markdown: |
       ---
       Deployments will be available below.
 
@@ -47,4 +43,4 @@ If `add_markdown` is set, also grant `pull-requests: write`.
 
 ### Fork pull requests
 
-Fork PRs receive a workflow warning and continue validation. They use read-only tokens on the base repo; `pr-description-add` no-ops on forks.
+Fork PRs receive a workflow warning and continue validation. They use read-only tokens on the base repo; `markdown` is skipped on forks with a notice.
