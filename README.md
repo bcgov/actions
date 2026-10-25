@@ -119,7 +119,7 @@ Never pin `@main`. Pin a [release](../../releases) tag (`@v1.2.3`) or that tagâ€
 
 ### Cutting a release (maintainers)
 
-Cut releases from the [Releases page](../../releases/new) only. **Do not push release tags by hand** (neither `vX.Y.Z` nor `vX.Y.Z-src`); the workflow creates and moves them.
+Publish from the [Releases page](../../releases/new); automation does the rest. **Do not push release tags by hand** (neither `vX.Y.Z` nor `vX.Y.Z-src`); the workflow creates and moves them.
 
 1. On the Releases page, create tag `vX.Y.Z` targeting `main` (the tip) and publish.
 2. The [release workflow](./.github/workflows/release.yml) then tags that commit `vX.Y.Z-src`, builds `dist/` on a side commit, moves `vX.Y.Z` onto it, and regenerates the notes from the previous `-src`. For a minute or two `vX.Y.Z` has no `dist/`; wait for the run to go green before pinning.

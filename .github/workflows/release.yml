@@ -13,7 +13,8 @@ permissions: {}
 jobs:
   release:
     name: Build dist and publish release
-    if: github.repository == 'bcgov/actions'
+    # skip bot-made releases so automation never re-enters itself
+    if: github.repository == 'bcgov/actions' && github.event.release.author.login != 'github-actions[bot]'
     runs-on: ubuntu-26.04
     permissions:
       contents: write
