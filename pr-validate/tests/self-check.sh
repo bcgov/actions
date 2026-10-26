@@ -238,6 +238,18 @@ jobs:
       - uses: bcgov/actions/builder@v0.11.0
         with:
           package: ${{ matrix.package }}
+      - uses: bcgov/actions/image-tracker@v0.11.0
+        with:
+          package: "${{ matrix.package }}"
+      - uses: bcgov/actions/image-tracker@v0.11.0
+        with:
+          package: app-${{ matrix.package }}
+      - uses: bcgov/actions/image-tracker@v0.11.0
+        with:
+          package: backend   
+      - run: echo ok
+        env:
+          packages: curl jq
       - uses: example/apt-install@v1
         with:
           packages: curl jq

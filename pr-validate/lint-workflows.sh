@@ -110,11 +110,17 @@ status=0
 # flag plain or quoted scalars with spaces under a bcgov/actions* `uses:`.
 # Matrix lists ([a, b]), block scalars (|) and ${{ }} expressions are not checked.
 if ! awk '
-  FNR == 1 { bcgov = 0 }
+  function indent(l) { match(l, /^[[:space:]]*/); return RLENGTH }
+  { sub(/[[:space:]]+$/, "") }
+  FNR == 1 { bcgov = 0; with = -1 }
+  /^[[:space:]]*$/ || /^[[:space:]]*#/ { next }
+  with >= 0 && indent($0) <= with { with = -1 }
   /^[[:space:]]*(-[[:space:]]+)?uses:/ { bcgov = ($0 ~ /bcgov\/actions(-openshift)?[\/@]/); next }
-  bcgov && /^[[:space:]]+packages?:[[:space:]]/ {
+  /^[[:space:]]*-[[:space:]]/ { bcgov = 0 }
+  bcgov && /^[[:space:]]*with:$/ { with = indent($0); next }
+  with >= 0 && /^[[:space:]]+packages?:[[:space:]]/ {
     v = $0; sub(/^[^:]*:[[:space:]]*/, "", v); sub(/[[:space:]]+#.*$/, "", v)
-    if (v ~ /^[[{|>$]/) next
+    if (v ~ /^[[{|>]/ || index(v, "${{")) next
     gsub(/^["\047]|["\047]$/, "", v)
     if (v ~ /[[:space:]]/) {
       printf "::error file=%s,line=%d,title=space-separated packages::Use one package per line (packages: |)\n", FILENAME, FNR
