@@ -1,96 +1,112 @@
-name: Release Rebuilder
+name: Release
 
 on:
   release:
     types: [published]
 
 concurrency:
-  group: release-dist-${{ github.event.release.tag_name }}
+  group: release-${{ github.event.release.tag_name }}
   cancel-in-progress: false
 
 permissions: {}
 
 jobs:
-  dist:
-    name: Rebuild dist on release tag
-    if: github.repository == 'bcgov/actions' && github.event.release.draft == false
+  release:
+    name: Build dist and publish release
+    # skip bot-made releases so automation never re-enters itself
+    if: github.repository == 'bcgov/actions' && github.actor != 'github-actions[bot]' && github.event.release.author.login != 'github-actions[bot]'
     runs-on: ubuntu-26.04
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
 
-      - name: Unpublish tag until dist is rebuilt
-        id: unpublish
+      - name: Check tags and cut -src
+        id: tags
         env:
-          ACTOR: ${{ github.actor }}
-          GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
-          if [ -z "$TAG" ]; then
-            echo "release tag is empty" >&2
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "${TAG} is not vX.Y.Z" >&2
             exit 1
           fi
-          if [ "$ACTOR" = "github-actions[bot]" ]; then
+          src="${TAG}-src"
+          # loop guard: release already points at a dist rebuild
+          if git log -1 --format=%s HEAD | grep -q '^chore(dist): build ncc bundles'; then
+            echo "${TAG} already has dist; skipping" >&2
             echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "ignoring release published by github-actions[bot]"
             exit 0
           fi
-          subject=$(git log -1 --format=%s)
-          if [ "$subject" = "chore(dist): rebuild ncc bundles for release" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "tag ${TAG} already points at the dist rebuild"
-            exit 0
+          if git rev-parse -q --verify "refs/tags/${src}" > /dev/null; then
+            echo "${src} already exists" >&2
+            exit 1
           fi
-          echo "skip=false" >> "$GITHUB_OUTPUT"
-          git rev-parse HEAD > "$RUNNER_TEMP/release-base-sha"
-          gh release view "$TAG" --json name,body,isPrerelease > "$RUNNER_TEMP/release.json"
-          gh release delete "$TAG" --yes --cleanup-tag
+          if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+            echo "${TAG} is not on the main tip" >&2
+            exit 1
+          fi
+          # notes compare -src to -src: newest earlier -src tag
+          previous=""
+          for t in $(git tag -l 'v*-src' --sort=-v:refname); do
+            v="${t%-src}"
+            older=$(printf '%s\n%s\n' "$v" "$TAG" | sort -V | head -n 1)
+            if [ "$v" != "$TAG" ] && [ "$older" = "$v" ]; then
+              previous="$t"
+              break
+            fi
+          done
+          if [ -z "$previous" ]; then
+            # first double-tag release: no earlier -src tag exists, so start from the last other v* tag
+            previous=$(git tag -l 'v*' --sort=-v:refname | grep -v -- '-src$' | grep -vx -- "$TAG" | head -n 1 || true)
+          fi
+          if [ -z "$previous" ]; then
+            echo "no previous release tag found" >&2
+            exit 1
+          fi
+          # permanent marker for the main commit this release was built from
+          git tag "$src" HEAD
+          git push origin "refs/tags/${src}"
+          echo "src=${src}" >> "$GITHUB_OUTPUT"
+          echo "previous=${previous}" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@v7
-        if: steps.unpublish.outputs.skip != 'true'
+        if: steps.tags.outputs.skip != 'true'
         with:
           node-version-file: .tool-versions
           cache: npm
 
-      - name: Rebuild ncc bundles and republish tag
-        if: steps.unpublish.outputs.skip != 'true'
+      - name: Build dist on a side commit and move the release tag to it
+        if: steps.tags.outputs.skip != 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
-          base=$(cat "$RUNNER_TEMP/release-base-sha")
-          title=$(jq -r '.name // empty' "$RUNNER_TEMP/release.json")
-          jq -r '.body // empty' "$RUNNER_TEMP/release.json" > "$RUNNER_TEMP/release-notes.md"
-          prerelease=$(jq -r '.isPrerelease' "$RUNNER_TEMP/release.json")
-          if [ -z "$title" ]; then
-            title="$TAG"
-          fi
           npm ci
           npm run build
-          for entry in test-and-analyse/dist/index.js; do
-            if [ ! -f "$entry" ]; then
-              echo "${entry} is missing after the build" >&2
-              exit 1
-            fi
-          done
-          # dist/ is git-ignored on main, so it is force-added to the release commit
-          git add -f -A -- test-and-analyse/dist
-          if git diff --cached --ignore-space-at-eol --quiet -- test-and-analyse/dist; then
-            git tag "$TAG" "$base"
-          else
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git config user.name "github-actions[bot]"
-            git commit -m "chore(dist): rebuild ncc bundles for release"
-            git tag "$TAG"
+          if [ ! -f test-and-analyse/dist/index.js ]; then
+            echo "test-and-analyse/dist/index.js is missing after the build" >&2
+            exit 1
           fi
-          git push origin "refs/tags/${TAG}"
-          if [ "$prerelease" = "true" ]; then
-            gh release create "$TAG" --title "$title" --notes-file "$RUNNER_TEMP/release-notes.md" --prerelease --verify-tag
-          else
-            gh release create "$TAG" --title "$title" --notes-file "$RUNNER_TEMP/release-notes.md" --verify-tag
-          fi
+          # dist/ is git-ignored on main; it only lives on this side commit
+          git add -f -- test-and-analyse/dist
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git commit -m "chore(dist): build ncc bundles for ${TAG}"
+          git tag -f "$TAG"
+          git push -f origin "refs/tags/${TAG}"
+
+      - name: Regenerate release notes (-src to -src)
+        if: steps.tags.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+          SRC: ${{ steps.tags.outputs.src }}
+          PREVIOUS: ${{ steps.tags.outputs.previous }}
+        run: |
+          set -euo pipefail
+          notes=$(gh api "repos/${GITHUB_REPOSITORY}/releases/generate-notes" \
+            -f tag_name="$SRC" -f previous_tag_name="$PREVIOUS" --jq .body)
+          gh release edit "$TAG" --notes "$notes"

@@ -115,6 +115,17 @@ Refer to each action's directory for its exact minimum required permissions bloc
 
 Never pin `@main`. Pin a [release](../../releases) tag (`@v1.2.3`) or that tag’s commit SHA.
 
-`test-and-analyse` executes `dist/` from ncc. `dist/` is git-ignored and never on `main`. Pull requests build it in the job and test that build. Publishing a release from the Releases page runs [`.github/workflows/release.yml`](./.github/workflows/release.yml). Unless this run is the workflow republishing the tag, or the tag already points at the dist rebuild, the workflow deletes that release and its git tag before `npm ci`. It then builds, fails if `test-and-analyse/dist/index.js` is missing, and force-adds that `dist/` folder. When they differ from the released commit, it commits `chore(dist): rebuild ncc bundles for release` and creates the tag on that commit. When they match, it creates the tag on the commit you released. The GitHub Release is recreated with the same title and notes. It does not push `main`. While the job runs, and if the job fails, the tag does not resolve. Copy the pin SHA after the workflow succeeds. `@main` does not contain this rebuild. Composite actions in this repo are YAML, but still must not be pinned to `@main`.
+`test-and-analyse` executes `dist/` from ncc. `dist/` is git-ignored and never on `main`. To release, publish `vX.Y.Z` from the GitHub Releases page on the `main` tip; [`.github/workflows/release.yml`](./.github/workflows/release.yml) tags that commit `vX.Y.Z-src`, builds `dist/` on a side commit, moves `vX.Y.Z` onto it, and regenerates the notes; `-src` tags stay permanently ([ADR 0001](./docs/adr/0001-double-tag-release.md)). Pin `vX.Y.Z`, never a `-src` tag. Composite actions in this repo are YAML, but still must not be pinned to `@main`.
+
+### Cutting a release (maintainers)
+
+Publish from the [Releases page](../../releases/new); automation does the rest. **Do not push release tags by hand** (neither `vX.Y.Z` nor `vX.Y.Z-src`); the workflow creates and moves them.
+
+1. On the Releases page, create tag `vX.Y.Z` targeting `main` (the tip) and publish.
+2. The [release workflow](./.github/workflows/release.yml) then tags that commit `vX.Y.Z-src`, builds `dist/` on a side commit, moves `vX.Y.Z` onto it, and regenerates the notes from the previous `-src`. For a minute or two `vX.Y.Z` has no `dist/`; wait for the run to go green before pinning.
+
+- **Tag protection is procedural.** This repo has no tag ruleset (only the `main` branch ruleset); that is expected.
+- **First release:** delete the old draft `v0.11.0` on the Releases page before the first cut, so nobody publishes it by habit, then publish a fresh `v0.11.0`.
+- **Failed run:** a release whose run failed (no `dist/`, or an orphan `vX.Y.Z-src`) is not reused. Fix the cause and publish the next patch version ([ADR 0001](./docs/adr/0001-double-tag-release.md)).
 
 Usage examples use `@vX.Y.Z` — a placeholder that will not resolve — so copy-paste fails until you pick a real tag. All actions are versioned and released together as a single suite.
