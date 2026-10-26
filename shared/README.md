@@ -24,3 +24,5 @@ GitHub downloads the whole repository for `uses: bcgov/actions/<action>@<sha>`, 
 ```
 
 CLI commands: `list <name>`, `bool <name> [default]`, `enum <name> <a,b,c> <default>`, `debug`, `token`.
+
+- `pr-description.js`: append markdown to a PR description once (pr-description-add, pr-validate `markdown`). Resolves the PR from the `pr` input or the event, so it works outside `pull_request`.
