@@ -49,6 +49,10 @@ jobs:
               - 'image-tracker/**'
               - 'shared/**'
               - '!*.md'
+            pr-description-add:
+              - 'pr-description-add/**'
+              - 'shared/**'
+              - '!*.md'
             pr-validate:
               - 'pr-validate/**'
               - 'shared/**'
@@ -859,14 +863,46 @@ jobs:
       - name: Context self-check
         run: bash pr-validate/tests/self-check.sh
 
-      - name: Description unit tests
-        run: node --test pr-validate/tests/*.test.js
+      - name: Description unit tests (shared)
+        run: node --test shared/tests/pr-description.test.js
 
       - name: Test pr-validate action
         if: github.event_name == 'pull_request'
         uses: $/pr-validate
         with:
           markdown: 'pr-validate wrapper integration test'
+
+  test-pr-description-add:
+    name: Test PR Description Add
+    # Serialized after test-pr-validate: both rewrite this PR's description.
+    needs: [filter, test-pr-validate]
+    if: |
+      always() &&
+      needs.filter.result == 'success' &&
+      (needs.test-pr-validate.result == 'success' || needs.test-pr-validate.result == 'skipped') &&
+      (contains(fromJSON(needs.filter.outputs.changes), 'pr-description-add') || contains(fromJSON(needs.filter.outputs.changes), 'workflows'))
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Unit tests
+        run: node --test pr-description-add/tests/*.test.js shared/tests/pr-description.test.js
+
+      - name: Test pr-description-add action
+        if: github.event_name == 'pull_request'
+        uses: $/pr-description-add
+        with:
+          markdown: 'pr-description-add integration test'
+
+      - name: Test pr-description-add with explicit pr
+        if: github.event_name == 'pull_request'
+        uses: $/pr-description-add
+        with:
+          pr: ${{ github.event.pull_request.number }}
+          markdown: 'pr-description-add integration test'
 
   test-pr-validate-lint:
     name: Test PR Validate workflow lint
@@ -1387,6 +1423,7 @@ jobs:
       - test-diff-triggers
       - test-ghcr-cleanup
       - test-image-tracker
+      - test-pr-description-add
       - test-pr-validate
       - test-pr-validate-lint
       - test-notifier

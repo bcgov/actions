@@ -1,0 +1,24 @@
+name: 'PR Description Add'
+description: 'Append markdown to a pull request description once. Works on any event.'
+branding:
+  icon: 'edit'
+  color: 'blue'
+
+inputs:
+  markdown:
+    description: 'Markdown to append to the PR description once (checkbox state is ignored when checking for it).'
+    required: true
+  pr:
+    description: |
+      PR number to update. Omit on pull_request events. Otherwise it is read from the
+      event (issue_comment on a PR, workflow_run) and fails if none is found.
+    required: false
+    default: ''
+  token:
+    description: 'Authentication token (defaults to github.token; override with PAT if needed).'
+    default: ${{ github.token }}
+    required: false
+
+runs:
+  using: 'node24'
+  main: 'index.js'

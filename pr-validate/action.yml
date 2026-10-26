@@ -58,4 +58,4 @@ runs:
       env:
         INPUT_MARKDOWN: ${{ inputs.markdown }}
         INPUT_TOKEN: ${{ inputs.token }}
-      run: node "${{ github.action_path }}/description.js"
+      run: node "${{ github.action_path }}/../shared/pr-description.js"

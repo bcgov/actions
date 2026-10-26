@@ -46,6 +46,16 @@ Forensic history traversal to resolve stable image SHAs from Tags or SHAs.
 ```
 
 
+### [pr-description-add](./pr-description-add/)
+Append markdown to a PR description once. Works outside `pull_request` events (e.g. post-deploy) with the `pr` input.
+
+```yaml
+- name: PR Description
+  uses: bcgov/actions/pr-description-add@vX.Y.Z # Replace with latest release tag
+  with:
+    markdown: Deployed to TEST
+```
+
 ### [pr-validate](./pr-validate/)
 Validate Pull Request metadata and apply organizational guardrails.
 
@@ -105,6 +115,7 @@ Refer to each action's directory for its exact minimum required permissions bloc
 - **[diff-triggers](./diff-triggers/)**: `contents: read`
 - **[ghcr-cleanup](./ghcr-cleanup/)**: `contents: read`, `packages: write`, `pull-requests: read` (`packages: read` for a dry run)
 - **[image-tracker](./image-tracker/)**: `contents: read`, `pull-requests: read`, `packages: read`
+- **[pr-description-add](./pr-description-add/)**: `pull-requests: write`
 - **[pr-validate](./pr-validate/)**: `contents: read`, `pull-requests: read`, plus `pull-requests: write` when `markdown` is set
 - **[scan-url](./scan-url/)**: `contents: read`, `issues: write`, `security-events: write`
 - **[test-and-analyse](./test-and-analyse/)**: `contents: read`, `actions: write` (optional, for caching)
