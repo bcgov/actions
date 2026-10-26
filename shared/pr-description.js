@@ -31,12 +31,7 @@ function appendBody(body, markdown) {
  * PR number from the `pr` input, else the event payload.
  * @returns {{ number: number|null, fork: boolean, error?: string }}
  */
-function resolvePr(input, event) {
-  const raw = String(input ?? '').trim().replace(/^#/, '');
-  if (raw) {
-    if (!/^[1-9]\d*$/.test(raw)) return { number: null, fork: false, error: `pr input must be a PR number, got: ${input}` };
-    return { number: Number(raw), fork: false };
-  }
+function eventPr(event) {
   const e = event || {};
   if (e.pull_request && e.pull_request.number) {
     const head = e.pull_request.head;
@@ -46,6 +41,23 @@ function resolvePr(input, event) {
   const runPrs = e.workflow_run && e.workflow_run.pull_requests;
   if (Array.isArray(runPrs) && runPrs.length && runPrs[0].number) return { number: runPrs[0].number, fork: false };
   if (e.number && (e.pull_request || e.action)) return { number: e.number, fork: false };
+  return null;
+}
+
+/**
+ * Explicit `pr` input wins for the number. If it matches the event PR, the
+ * event's fork flag is kept so fork PRs still no-op. A different PR number
+ * is treated as same-repo (fork: false).
+ */
+function resolvePr(input, event) {
+  const raw = String(input ?? '').trim().replace(/^#/, '');
+  const fromEvent = eventPr(event);
+  if (raw) {
+    if (!/^[1-9]\d*$/.test(raw)) return { number: null, fork: false, error: `pr input must be a PR number, got: ${input}` };
+    const number = Number(raw);
+    return { number, fork: Boolean(fromEvent && fromEvent.number === number && fromEvent.fork) };
+  }
+  if (fromEvent) return fromEvent;
   return {
     number: null,
     fork: false,

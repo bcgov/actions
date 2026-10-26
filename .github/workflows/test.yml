@@ -874,8 +874,13 @@ jobs:
 
   test-pr-description-add:
     name: Test PR Description Add
-    needs: [filter]
-    if: contains(fromJSON(needs.filter.outputs.changes), 'pr-description-add') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
+    # Serialized after test-pr-validate: both rewrite this PR's description.
+    needs: [filter, test-pr-validate]
+    if: |
+      always() &&
+      needs.filter.result == 'success' &&
+      (needs.test-pr-validate.result == 'success' || needs.test-pr-validate.result == 'skipped') &&
+      (contains(fromJSON(needs.filter.outputs.changes), 'pr-description-add') || contains(fromJSON(needs.filter.outputs.changes), 'workflows'))
     runs-on: ubuntu-26.04
     permissions:
       contents: read

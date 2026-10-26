@@ -25,6 +25,12 @@ test('resolvePr: input wins, accepts #N, rejects junk', () => {
 test('resolvePr: pull_request event, fork flagged', () => {
   assert.deepStrictEqual(resolvePr('', { pull_request: { number: 3, head: { repo: { fork: true } } } }), { number: 3, fork: true });
 });
+test('resolvePr: explicit pr matching fork event PR keeps fork flag', () => {
+  const ev = { pull_request: { number: 3, head: { repo: { fork: true } } } };
+  assert.deepStrictEqual(resolvePr('3', ev), { number: 3, fork: true });
+  assert.deepStrictEqual(resolvePr('#3', ev), { number: 3, fork: true });
+  assert.deepStrictEqual(resolvePr('9', ev), { number: 9, fork: false });
+});
 test('resolvePr: issue_comment on a PR and workflow_run', () => {
   assert.strictEqual(resolvePr('', { issue: { number: 5, pull_request: {} } }).number, 5);
   assert.ok(resolvePr('', { issue: { number: 5 } }).error, 'plain issue is not a PR');
