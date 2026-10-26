@@ -192,6 +192,58 @@ printf 'self-hosted-runner:\n  labels:\n    - other-runner\n' > "$fixture/.githu
 lint_fixture fail "caller config without the label still fails"
 rm "$fixture/.github/actionlint.yml"
 
+# Space-separated packages for bcgov/actions* callers fail; one per line passes.
+cat > "$fixture/.github/workflows/ok.yml" <<'EOF'
+name: packages
+on: push
+jobs:
+  close:
+    uses: bcgov/actions-openshift/.github/workflows/.pr-close.yml@v0.6.0
+    permissions:
+      packages: write # comment
+    with:
+      packages: api frontend
+EOF
+set +e
+ACTIONLINT_CONFIG="$config" ACTIONLINT_WORKSPACE="$fixture" RUNNER_TEMP="$fixture" bash "$lint" >/tmp/pr-validate-packages.txt 2>&1
+status=$?
+set -e
+if [[ "$status" -ne 0 ]] && grep -q 'space-separated packages' /tmp/pr-validate-packages.txt; then
+  echo "ok  space-separated packages fail"
+  passed=$((passed + 1))
+else
+  echo "FAIL  space-separated packages fail"
+  cat /tmp/pr-validate-packages.txt
+  failed=$((failed + 1))
+fi
+
+cat > "$fixture/.github/workflows/ok.yml" <<'EOF'
+name: packages
+on: push
+jobs:
+  close:
+    uses: bcgov/actions-openshift/.github/workflows/.pr-close.yml@v0.6.0
+    permissions:
+      packages: write
+    with:
+      packages: |
+        api
+        frontend
+  build:
+    runs-on: ubuntu-26.04
+    strategy:
+      matrix:
+        package: [api, frontend]
+    steps:
+      - uses: bcgov/actions/builder@v0.11.0
+        with:
+          package: ${{ matrix.package }}
+      - uses: example/apt-install@v1
+        with:
+          packages: curl jq
+EOF
+lint_fixture pass "one package per line, matrix, expressions and other actions pass"
+
 rm -rf "$fixture"
 
 echo ""

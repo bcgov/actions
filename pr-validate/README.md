@@ -9,6 +9,7 @@ Validate Pull Request metadata and apply organizational guardrails to contributo
 - ✅ **PR description**: Optional `markdown` is appended to the PR description once (checkbox state is ignored when checking for it).
 - ✅ **Fork notice**: Emits a warning on fork pull requests with a link to fork CI configuration guidance. Validation continues (conventional commits, etc.).
 - ✅ **Workflow lint**: Runs `rhysd/actionlint` v1.7.12 on Linux x86_64 against every `.yml` and `.yaml` file in `.github/workflows`, hidden files (such as `.reusable.yml`) included. Other runners fail the step. The linux/amd64 tarball is checked against the SHA-256 in `actionlint_1.7.12_checksums.txt` before extraction. Checks the files out with `clean: false` when they are not already in the workspace. A failed download fails the step. The bundled config adds the `ubuntu-26.04` and `ubuntu-26.04-arm` runner labels. If the repo has `.github/actionlint.yaml` (or `.yml`), its `self-hosted-runner` labels are added too; its other settings are not used.
+- ✅ **Packages format**: Fails when a `bcgov/actions` or `bcgov/actions-openshift` caller passes `packages` or `package` as a space-separated list. Those inputs take one name per line (`packages: |`).
 
 ## Permissions
 

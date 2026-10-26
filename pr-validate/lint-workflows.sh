@@ -102,4 +102,27 @@ fi
 # Pass paths explicitly. With no arguments, actionlint walks up looking for a Git
 # checkout and exits before reading the files when the workspace is not a repo.
 out="${RUNNER_TEMP:-/tmp}/pr-validate-actionlint-out"
-"$bin" -config-file "$config" "${workflow_files[@]}" | tee "$out"
+status=0
+"$bin" -config-file "$config" "${workflow_files[@]}" | tee "$out" || status=$?
+
+# bcgov/actions and bcgov/actions-openshift read `packages`/`package` one name per
+# line and reject space-separated lists. actionlint cannot check input formats, so
+# flag plain or quoted scalars with spaces under a bcgov/actions* `uses:`.
+# Matrix lists ([a, b]), block scalars (|) and ${{ }} expressions are not checked.
+if ! awk '
+  FNR == 1 { bcgov = 0 }
+  /^[[:space:]]*(-[[:space:]]+)?uses:/ { bcgov = ($0 ~ /bcgov\/actions(-openshift)?[\/@]/); next }
+  bcgov && /^[[:space:]]+packages?:[[:space:]]/ {
+    v = $0; sub(/^[^:]*:[[:space:]]*/, "", v); sub(/[[:space:]]+#.*$/, "", v)
+    if (v ~ /^[[{|>$]/) next
+    gsub(/^["\047]|["\047]$/, "", v)
+    if (v ~ /[[:space:]]/) {
+      printf "::error file=%s,line=%d,title=space-separated packages::Use one package per line (packages: |)\n", FILENAME, FNR
+      bad = 1
+    }
+  }
+  END { exit bad }
+' "${workflow_files[@]}"; then
+  status=1
+fi
+exit "$status"
