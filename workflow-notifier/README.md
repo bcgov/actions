@@ -8,10 +8,13 @@ To run this action, the calling workflow job must have the following minimum per
 
 ```yaml
 permissions:
+  actions: read        # Optional: lets scheduled runs check whether the previous scheduled run succeeded
   contents: read       # Required to discover CODEOWNERS files in the repository
   issues: write        # Required to create issues, comment on an open match, and assign owners
   pull-requests: read  # Optional: required to resolve author from pull request metadata on merge commits
 ```
+
+On `schedule` events, when no matching issue is already open, the action checks the most recent completed scheduled run of the same workflow and skips creating an issue if that run succeeded (suppressing one-off network or runner-IP blips while still alerting on consecutive scheduled failures).
 
 The action reads `CODEOWNERS` from the **job workspace**, not from the action bundle. A full `actions/checkout` is the usual approach; a sparse checkout of `.github/CODEOWNERS` is enough when you only need owner discovery.
 

@@ -96,6 +96,16 @@ if [[ "$*" == *"commits/"*"/pulls"* ]]; then
   exit 0
 fi
 
+if [ "${1:-}" = "api" ] && [[ "${2:-}" == *"/actions/runs/"* ]]; then
+  echo "${MOCK_WORKFLOW_ID:-888}"
+  exit 0
+fi
+
+if [ "${1:-}" = "api" ] && [[ "${2:-}" == *"/actions/workflows/"*"/runs"* ]]; then
+  echo "${MOCK_PREV_SCHEDULE_CONCLUSION:-}"
+  exit 0
+fi
+
 if [ "${1:-}" = "issue" ] && [ "${2:-}" = "list" ]; then
   printf '%s\n' "$@" > "${TMP_DIR}/gh_issue_list_args"
   state=""
@@ -711,10 +721,48 @@ test_default_title() {
   assert_contains "$action_yml" 'default: "fix: failure in ${{ github.workflow }}"' "action.yml defaults title to workflow failure"
 }
 
+test_schedule_skips_when_prev_succeeded() {
+  reset_issue_fixtures
+  local out
+  out=$(run_action "$FIXTURE_DIR" \
+    INPUT_TOKEN="dummy-token" \
+    INPUT_EVENT_NAME="schedule" \
+    INPUT_DRY_RUN="false" \
+    GITHUB_WORKFLOW="Schedule Jobs" \
+    GITHUB_REPOSITORY="bcgov/pubcode" \
+    GITHUB_SERVER_URL="https://github.com" \
+    GITHUB_RUN_ID="1002" \
+    MOCK_PREV_SCHEDULE_CONCLUSION="success")
+
+  assert_contains "$out" "Skipping issue creation for one-off scheduled failure" "logs notice when previous scheduled run succeeded"
+  assert_contains "$out" "Action:    skipped (previous scheduled run succeeded)" "summary records skipped action"
+  assert_file_absent "${TMP_DIR}/gh_create_args" "does not create an issue when previous scheduled run succeeded"
+  assert_file_absent "${TMP_DIR}/gh_comment_args" "does not comment when no open issue exists"
+}
+
+test_schedule_creates_when_prev_failed() {
+  reset_issue_fixtures
+  local out
+  out=$(run_action "$FIXTURE_DIR" \
+    INPUT_TOKEN="dummy-token" \
+    INPUT_EVENT_NAME="schedule" \
+    INPUT_DRY_RUN="false" \
+    GITHUB_WORKFLOW="Schedule Jobs" \
+    GITHUB_REPOSITORY="bcgov/pubcode" \
+    GITHUB_SERVER_URL="https://github.com" \
+    GITHUB_RUN_ID="1003" \
+    MOCK_PREV_SCHEDULE_CONCLUSION="failure")
+
+  assert_contains "$out" "Action:    created" "creates issue when previous scheduled run also failed"
+  assert_contains "$out" "Issue:     #77" "returns created issue number on consecutive schedule failure"
+}
+
 test_create_when_no_open_match
 test_comment_on_exact_title
 test_rejects_old_codeowners_value
 test_default_title
+test_schedule_skips_when_prev_succeeded
+test_schedule_creates_when_prev_failed
 
 echo ""
 echo "Unit tests finished: ${passed} passed, ${failed} failed."

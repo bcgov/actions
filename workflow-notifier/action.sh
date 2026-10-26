@@ -220,12 +220,30 @@ if [ -n "${INPUT_TOKEN:-}" ]; then
     MATCHED_NUM="$num"
     break
   done <<< "$LIST_OUT"
+
+  # On schedule with no open issue, skip creating one when the previous completed
+  # scheduled run of this workflow succeeded (one-off transient / blocked runner).
+  if [ -z "$MATCHED_NUM" ] && [ "$EVENT_NAME" == "schedule" ] && [ -n "${GITHUB_RUN_ID:-}" ] && [ "${GITHUB_RUN_ID}" != "0" ]; then
+    WORKFLOW_ID="$(GH_TOKEN="${INPUT_TOKEN}" gh api "/repos/${REPO}/actions/runs/${GITHUB_RUN_ID}" --jq '.workflow_id // empty' 2>/dev/null || true)"
+    if [ -n "$WORKFLOW_ID" ]; then
+      PREV_CONCLUSION="$(GH_TOKEN="${INPUT_TOKEN}" gh api "/repos/${REPO}/actions/workflows/${WORKFLOW_ID}/runs?event=schedule&status=completed&per_page=5" \
+        --jq "[.workflow_runs[] | select(.id != ${GITHUB_RUN_ID})][0].conclusion // empty" 2>/dev/null || true)"
+      if [ "$PREV_CONCLUSION" == "success" ]; then
+        ISSUE_ACTION="skipped (previous scheduled run succeeded)"
+        ISSUE_NUM="0"
+        ISSUE_URL="none"
+        echo "::notice ::Skipping issue creation for one-off scheduled failure (previous scheduled run succeeded)."
+      fi
+    fi
+  fi
 elif [ "${INPUT_DRY_RUN:-}" != "true" ]; then
   echo "Missing required token (INPUT_TOKEN)" >&2
   exit 1
 fi
 
-if [ -n "$MATCHED_NUM" ]; then
+if [ "$ISSUE_ACTION" == "skipped (previous scheduled run succeeded)" ]; then
+  log_debug "Skipping issue creation because previous scheduled run succeeded"
+elif [ -n "$MATCHED_NUM" ]; then
   ISSUE_ACTION="commented"
   ISSUE_NUM="$MATCHED_NUM"
   ISSUE_URL="${GITHUB_SERVER_URL:-https://github.com}/${REPO}/issues/${MATCHED_NUM}"
