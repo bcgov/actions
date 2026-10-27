@@ -1462,10 +1462,10 @@ jobs:
         run: |
           ids=$(jq -r '[.runs[0].results[].ruleId | sub(".*bcgov-"; "bcgov-")] | sort | join(" ")' "$FINDINGS_SARIF")
           echo "bcgov findings: ${ids}"
-          expected="bcgov-django-mark-safe bcgov-django-template-safe-filter bcgov-env-secret-hardcoded-fallback bcgov-jwt-verify-missing-algorithms bcgov-jwt-verify-missing-audience-issuer bcgov-python-env-secret-hardcoded-fallback bcgov-react-dangerously-set-inner-html"
-          [ "$ids" = "$expected" ] || { echo "❌ Expected one finding per bcgov rule: ${expected}"; exit 1; }
+          expected="bcgov-django-mark-safe bcgov-django-template-safe-filter bcgov-env-secret-hardcoded-fallback bcgov-env-secret-hardcoded-fallback bcgov-env-secret-hardcoded-fallback bcgov-jwt-verify-missing-algorithms bcgov-jwt-verify-missing-algorithms bcgov-jwt-verify-missing-audience-issuer bcgov-jwt-verify-missing-audience-issuer bcgov-python-env-secret-hardcoded-fallback bcgov-react-dangerously-set-inner-html bcgov-react-dangerously-set-inner-html"
+          [ "$ids" = "$expected" ] || { echo "❌ Expected bcgov findings: ${expected}"; exit 1; }
           [ "$CLEAN_FINDINGS" = "0" ] || { echo "❌ bcgov clean fixture: expected 0 findings, got ${CLEAN_FINDINGS}"; exit 1; }
-          echo "✅ bcgov rules: one finding per rule, clean fixture passes"
+          echo "✅ bcgov rules: expected findings, clean fixture passes"
 
       - name: Verify Semgrep behaviour
         env:

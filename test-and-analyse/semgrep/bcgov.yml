@@ -17,8 +17,8 @@ rules:
       - pattern-either:
           - pattern: process.env.$X || "$S"
           - pattern: process.env.$X ?? "$S"
-          - pattern: process.env[$K] || "$S"
-          - pattern: process.env[$K] ?? "$S"
+          - pattern: process.env["$X"] || "$S"
+          - pattern: process.env["$X"] ?? "$S"
           - pattern: |
               const { $X = "$S" } = process.env
       - metavariable-regex:
@@ -85,6 +85,8 @@ rules:
       - pattern-either:
           - pattern: $JWT.verify($TOKEN, $KEY)
           - pattern: $JWT.verify($TOKEN, $KEY, {...}, ...)
+          - pattern: $JWT.verify($TOKEN, $KEY, function (...) {...})
+          - pattern: $JWT.verify($TOKEN, $KEY, (...) => {...})
       - pattern-not: |
           $JWT.verify($TOKEN, $KEY, {..., audience: $A, ...}, ...)
       - pattern-not: |
@@ -140,3 +142,7 @@ rules:
               {dangerouslySetInnerHTML: $X}
       - pattern-not: |
           <$EL dangerouslySetInnerHTML={{__html: $P.sanitize(...)}} />
+      - pattern-not: |
+          <$EL dangerouslySetInnerHTML={{__html: $P.sanitize(...)}}>...</$EL>
+      - pattern-not: |
+          {dangerouslySetInnerHTML: {__html: $P.sanitize(...)}}
