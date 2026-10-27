@@ -461,7 +461,7 @@ test('run: executes seamlessly when invoked purely via runner environment variab
 
     const outputContent = fs.readFileSync(outputPath, 'utf8')
     assert.ok(outputContent.includes('passed=true'))
-    } finally {
+  } finally {
     process.env = origEnv
     fs.rmSync(tmpDir, {recursive: true, force: true})
   }
@@ -511,4 +511,26 @@ test('run: emits ::debug:: logs when RUNNER_DEBUG is set', () => {
   } finally {
     process.env.RUNNER_DEBUG = origRunnerDebug
   }
+})
+
+test('resolveNotify: defaults to notify except on PR events', () => {
+  const {resolveNotify} = require('../index.js')
+  assert.equal(resolveNotify('', 'push'), true)
+  assert.equal(resolveNotify(undefined, 'schedule'), true)
+  assert.equal(resolveNotify('', 'release'), true)
+  assert.equal(resolveNotify('', 'workflow_dispatch'), true)
+  assert.equal(resolveNotify('', 'pull_request'), false)
+  assert.equal(resolveNotify('  ', 'pull_request_target'), false)
+})
+
+test('resolveNotify: explicit true/false overrides the default', () => {
+  const {resolveNotify} = require('../index.js')
+  assert.equal(resolveNotify('true', 'pull_request'), true)
+  assert.equal(resolveNotify('TRUE', 'pull_request_target'), true)
+  assert.equal(resolveNotify('false', 'push'), false)
+  assert.equal(resolveNotify('false', 'schedule'), false)
+  assert.throws(
+    () => resolveNotify('yes', 'push'),
+    /must be true, false or empty/
+  )
 })

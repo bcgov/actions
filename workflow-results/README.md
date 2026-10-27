@@ -2,7 +2,7 @@
 
 Consolidate upstream job results into a single merge gate or workflow rollup with a formatted summary table and error annotations.
 
-Often consumed as the final required status check in GitHub Actions workflows across BCGov repositories (e.g. `quickstart-openshift`), or to consolidate results before triggering alerts with [`workflow-notifier`](../workflow-notifier/).
+Often consumed as the final required status check in GitHub Actions workflows across BCGov repositories (e.g. `quickstart-openshift`), with built-in failure alerts via [`workflow-notifier`](../workflow-notifier/) on merge, release and scheduled runs.
 
 ## Features
 
@@ -12,15 +12,17 @@ Often consumed as the final required status check in GitHub Actions workflows ac
 - ✅ **Path-Filter Friendly**: Treats `skipped` jobs as passing by default, allowing workflows using [`diff-triggers`](../diff-triggers/) to merge smoothly.
 - ✅ **Zero Silent Merges**: Correctly flags `failure`, `cancelled` (double _l_), and unexpected statuses.
 - ✅ **Fail-Fast Safety**: Prevents hollow gates from passing if the `needs` context is empty or missing upstream job definitions.
-- ✅ **Zero Dependencies**: Pure Node 24 standard library execution (`runs: using: node24`).
+- ✅ **Built-in Notify**: On failure, opens or comments on a [`workflow-notifier`](../workflow-notifier/) issue. On by default except for `pull_request` / `pull_request_target`.
+- ✅ **Zero Dependencies**: Pure Node 24 standard library gate inside a thin composite wrapper.
 
 ## Permissions
 
-No elevated permissions are required:
+Depends on whether notify fires for the event:
 
-```yaml
-permissions: {}
-```
+| `notify`                                | Permissions                                                                        |
+| :-------------------------------------- | :--------------------------------------------------------------------------------- |
+| off (PR events by default, or `false`)  | none (`permissions: {}`)                                                           |
+| on (other events by default, or `true`) | `contents: read`, `issues: write` (+ `pull-requests: read` for merger attribution) |
 
 ## Usage
 
@@ -57,7 +59,9 @@ results:
         title: 'Analysis Results'
 ```
 
-### Scheduled / Nightly Workflows with `workflow-notifier`
+### Merge, Release or Scheduled Workflows (notify on failure)
+
+No extra steps: on non-PR events a failed gate checks out CODEOWNERS and notifies via [`workflow-notifier`](../workflow-notifier/).
 
 ```yaml
 results:
@@ -65,18 +69,18 @@ results:
   needs: [integration-tests, backup-verify, security-audit]
   if: always()
   runs-on: ubuntu-24.04
+  permissions:
+    contents: read
+    issues: write
+    pull-requests: read
   steps:
-    - id: gate
-      name: Evaluate Job Statuses
-      uses: bcgov/actions/workflow-results@vX.Y.Z
+    - uses: bcgov/actions/workflow-results@vX.Y.Z
       with:
         needs: ${{ toJson(needs) }}
         title: 'Nightly Suite Results'
-
-    - name: Notify on Failure
-      if: failure()
-      uses: bcgov/actions/workflow-notifier@vX.Y.Z
 ```
+
+The standalone [`workflow-notifier`](../workflow-notifier/) remains for workflows without a results rollup (e.g. cert-expiry checks).
 
 ### Full Configuration Options
 
@@ -89,10 +93,17 @@ results:
     # Optional: Header title for the step summary table and log group
     # Default: "Workflow Results"
     title: 'Workflow Results'
+
+    # Optional: notify on failure. Empty = notify unless pull_request/pull_request_target
+    # Default: ""
+    notify: ''
+
+    # Optional: token for notifications. Default: github.token
+    token: ${{ github.token }}
 ```
 
 ## Outputs
 
-| Output      | Description                                                                          |
-| :---------- | :----------------------------------------------------------------------------------- |
-| `passed`    | Boolean string indicating if all jobs passed or were skipped (`'true'` or `'false'`) |
+| Output   | Description                                                                          |
+| :------- | :----------------------------------------------------------------------------------- |
+| `passed` | Boolean string indicating if all jobs passed or were skipped (`'true'` or `'false'`) |

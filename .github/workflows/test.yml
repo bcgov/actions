@@ -970,9 +970,10 @@ jobs:
           assert isinstance(action, dict), 'action.yml must be a mapping'
           for key in ['name', 'description', 'inputs', 'outputs', 'runs']:
               assert key in action and action[key], f'Missing required action field: {key}'
-          assert action['runs'].get('using') == 'node24', 'runs.using must be node24'
-          assert action['runs'].get('main') == 'index.js', 'runs.main must be index.js'
+          assert action['runs'].get('using') == 'composite', 'runs.using must be composite'
           assert 'needs' in action['inputs'], 'inputs must declare needs'
+          assert 'notify' in action['inputs'], 'inputs must declare notify'
+          assert action['inputs']['notify'].get('default', '') == '', 'notify must default to empty (event-based)'
           assert action['inputs']['needs'].get('required') is True, 'needs must be required'
           assert 'passed' in action['outputs'], 'missing passed output'
           "
@@ -1002,6 +1003,7 @@ jobs:
         with:
           needs: '{"test":{"result":"failure"},"build":{"result":"success"}}'
           title: 'Failure Simulation Gate'
+          notify: 'false'
 
       - name: Verify Failure Gate Behaved Correctly
         run: |
@@ -1021,6 +1023,7 @@ jobs:
         with:
           needs: '{"deploy":{"result":"cancelled"},"build":{"result":"success"}}'
           title: 'Cancelled Simulation Gate'
+          notify: 'false'
 
       - name: Verify Cancelled Gate Behaved Correctly
         run: |

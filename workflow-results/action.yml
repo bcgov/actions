@@ -1,5 +1,5 @@
 name: Workflow Results
-description: Consolidate upstream job results into a single merge gate with summary table and annotations.
+description: Consolidate upstream job results into a single merge gate with summary table and annotations, and optionally notify on failure.
 branding:
   icon: check-square
   color: blue
@@ -12,11 +12,72 @@ inputs:
     description: Header title for step summary and log output
     required: false
     default: 'Workflow Results'
+  notify:
+    description: >-
+      Open or comment on a workflow-notifier issue when the gate fails.
+      Empty (default) notifies on every event except pull_request and pull_request_target.
+      Set true or false to override.
+    required: false
+    default: ''
+  token:
+    description: Token for notifications (defaults to github.token). Unused when notify is off.
+    required: false
+    default: ${{ github.token }}
 
 outputs:
   passed:
     description: Whether all upstream jobs passed or were skipped ('true' or 'false')
+    value: ${{ steps.gate.outputs.passed }}
 
 runs:
-  using: node24
-  main: index.js
+  using: composite
+  steps:
+    - name: Evaluate job results
+      id: gate
+      continue-on-error: true
+      shell: bash
+      env:
+        INPUT_NEEDS: ${{ inputs.needs }}
+        INPUT_TITLE: ${{ inputs.title }}
+      run: node "${{ github.action_path }}/index.js"
+
+    - name: Resolve notify
+      id: notify
+      shell: bash
+      env:
+        INPUT_NOTIFY: ${{ inputs.notify }}
+      run: node "${{ github.action_path }}/index.js" --resolve-notify
+
+    - name: Checkout CODEOWNERS
+      if: steps.notify.outputs.notify == 'true' && steps.gate.outcome == 'failure'
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        path: .workflow-results-notify
+        persist-credentials: false
+        sparse-checkout: |
+          CODEOWNERS
+          .github/CODEOWNERS
+          .github/codeowners
+          docs/CODEOWNERS
+        sparse-checkout-cone-mode: false
+
+    - name: Notify on failure
+      if: steps.notify.outputs.notify == 'true' && steps.gate.outcome == 'failure'
+      shell: bash
+      working-directory: .workflow-results-notify
+      env:
+        INPUT_TOKEN: ${{ inputs.token }}
+        INPUT_TITLE: 'fix: failure in ${{ github.workflow }}'
+        INPUT_BODY: ''
+        INPUT_NOTIFY_AUTHOR: 'true'
+        INPUT_NOTIFY_CODEOWNERS: fallback
+        INPUT_EVENT_NAME: ${{ github.event_name }}
+        INPUT_DRY_RUN: 'false'
+      run: '"${{ github.action_path }}/../workflow-notifier/action.sh"'
+
+    - name: Fail gate
+      if: steps.gate.outcome == 'failure'
+      shell: bash
+      run: |
+        echo "::error::Workflow results gate failed"
+        exit 1
