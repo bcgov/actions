@@ -2,6 +2,8 @@
 # Download a pinned actionlint binary and lint the workspace. Missing binary is fatal.
 set -euo pipefail
 
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 version="${ACTIONLINT_VERSION:-v1.7.12}"
 # SHA-256 of actionlint_1.7.12_linux_amd64.tar.gz from actionlint_1.7.12_checksums.txt.
 # Bump this with the version. The tag can move; the asset checksum cannot.
@@ -105,30 +107,10 @@ out="${RUNNER_TEMP:-/tmp}/pr-validate-actionlint-out"
 status=0
 "$bin" -config-file "$config" "${workflow_files[@]}" | tee "$out" || status=$?
 
-# bcgov/actions and bcgov/actions-openshift read `packages`/`package` one name per
-# line and reject space-separated lists. actionlint cannot check input formats, so
-# flag plain or quoted scalars with spaces under a bcgov/actions* `uses:`.
-# Matrix lists ([a, b]), block scalars (|) and ${{ }} expressions are not checked.
-if ! awk '
-  function indent(l) { match(l, /^[[:space:]]*/); return RLENGTH }
-  { sub(/[[:space:]]+$/, "") }
-  FNR == 1 { bcgov = 0; with = -1 }
-  /^[[:space:]]*$/ || /^[[:space:]]*#/ { next }
-  with >= 0 && indent($0) <= with { with = -1 }
-  /^[[:space:]]*(-[[:space:]]+)?uses:/ { bcgov = ($0 ~ /bcgov\/actions(-openshift)?[\/@]/); next }
-  /^[[:space:]]*-[[:space:]]/ { bcgov = 0 }
-  bcgov && /^[[:space:]]*with:$/ { with = indent($0); next }
-  with >= 0 && /^[[:space:]]+packages?:[[:space:]]/ {
-    v = $0; sub(/^[^:]*:[[:space:]]*/, "", v); sub(/[[:space:]]+#.*$/, "", v)
-    if (v ~ /^[[{|>]/ || index(v, "${{")) next
-    gsub(/^["\047]|["\047]$/, "", v)
-    if (v ~ /[[:space:]]/) {
-      printf "::error file=%s,line=%d,title=space-separated packages::Use one package per line (packages: |)\n", FILENAME, FNR
-      bad = 1
-    }
-  }
-  END { exit bad }
-' "${workflow_files[@]}"; then
+# Shared list inputs (triggers, packages, tags, keep_digests) take one item per
+# line or a single value. actionlint cannot check input formats, so flag other
+# formats passed to bcgov/actions* with the same parser the actions use.
+if ! node "${here}/list-inputs.js" "${workflow_files[@]}"; then
   status=1
 fi
 exit "$status"
