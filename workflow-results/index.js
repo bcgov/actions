@@ -192,16 +192,8 @@ function run(opts = {}) {
   const title =
     (opts.title ?? process.env.INPUT_TITLE ?? 'Workflow Results').trim() ||
     'Workflow Results'
-  const enableSummary = parseBool(
-    opts.summary,
-    'summary',
-    true
-  )
-  const enableAnnotations = parseBool(
-    opts.annotations,
-    'annotations',
-    true
-  )
+  const enableSummary = parseBool(opts.summary, 'summary', true)
+  const enableAnnotations = parseBool(opts.annotations, 'annotations', true)
   // Summary and annotations are always on for callers; the options are test seams.
   const debug = process.env.RUNNER_DEBUG === '1'
   const outputPath = opts.outputPath ?? process.env.GITHUB_OUTPUT
@@ -270,7 +262,43 @@ function run(opts = {}) {
   return {exitCode, evaluation, markdown}
 }
 
-if (require.main === module) {
+const QUIET_EVENTS = new Set(['pull_request', 'pull_request_target'])
+
+/**
+ * Resolve the notify input. Empty means notify unless the event is a PR.
+ * @param {string|undefined} input
+ * @param {string|undefined} eventName
+ * @returns {boolean}
+ */
+function resolveNotify(input, eventName) {
+  const value = String(input ?? '')
+    .trim()
+    .toLowerCase()
+  if (value === 'true') return true
+  if (value === 'false') return false
+  if (value !== '') {
+    throw new Error(
+      `Input 'notify' must be true, false or empty, got '${input}'`
+    )
+  }
+  return !QUIET_EVENTS.has(String(eventName ?? '').trim())
+}
+
+if (require.main === module && process.argv[2] === '--resolve-notify') {
+  try {
+    const notify = resolveNotify(
+      process.env.INPUT_NOTIFY,
+      process.env.GITHUB_EVENT_NAME
+    )
+    console.log(`notify=${notify}`)
+    if (process.env.GITHUB_OUTPUT) {
+      fs.appendFileSync(process.env.GITHUB_OUTPUT, `notify=${notify}\n`, 'utf8')
+    }
+  } catch (err) {
+    console.error(`::error::${err.message || err}`)
+    process.exit(1)
+  }
+} else if (require.main === module) {
   try {
     const {exitCode} = run()
     process.exit(exitCode)
@@ -284,5 +312,6 @@ module.exports = {
   parseNeeds,
   evaluateResults,
   buildSummary,
+  resolveNotify,
   run
 }

@@ -970,9 +970,10 @@ jobs:
           assert isinstance(action, dict), 'action.yml must be a mapping'
           for key in ['name', 'description', 'inputs', 'outputs', 'runs']:
               assert key in action and action[key], f'Missing required action field: {key}'
-          assert action['runs'].get('using') == 'node24', 'runs.using must be node24'
-          assert action['runs'].get('main') == 'index.js', 'runs.main must be index.js'
+          assert action['runs'].get('using') == 'composite', 'runs.using must be composite'
           assert 'needs' in action['inputs'], 'inputs must declare needs'
+          assert 'notify' in action['inputs'], 'inputs must declare notify'
+          assert action['inputs']['notify'].get('default', '') == '', 'notify must default to empty (event-based)'
           assert action['inputs']['needs'].get('required') is True, 'needs must be required'
           assert 'passed' in action['outputs'], 'missing passed output'
           "
@@ -1002,6 +1003,7 @@ jobs:
         with:
           needs: '{"test":{"result":"failure"},"build":{"result":"success"}}'
           title: 'Failure Simulation Gate'
+          notify: 'false'
 
       - name: Verify Failure Gate Behaved Correctly
         run: |
@@ -1021,6 +1023,7 @@ jobs:
         with:
           needs: '{"deploy":{"result":"cancelled"},"build":{"result":"success"}}'
           title: 'Cancelled Simulation Gate'
+          notify: 'false'
 
       - name: Verify Cancelled Gate Behaved Correctly
         run: |
@@ -1030,6 +1033,46 @@ jobs:
           fi
           if [ "${{ steps.self_check_cancel.outputs.passed }}" != "false" ]; then
             echo "::error::passed output should be false on cancellation"
+            exit 1
+          fi
+
+      - name: Mock gh for notify path
+        run: |
+          mock="${RUNNER_TEMP}/mock-gh-bin"
+          mkdir -p "$mock"
+          cat > "$mock/gh" <<'MOCK'
+          #!/usr/bin/env bash
+          echo "$*" >> "${RUNNER_TEMP}/mock-gh.log"
+          case "$1 $2" in
+            "issue create") echo "https://github.com/example/repo/issues/1" ;;
+          esac
+          exit 0
+          MOCK
+          chmod +x "$mock/gh"
+          echo "$mock" >> "$GITHUB_PATH"
+
+      - name: Test Workflow Results Self Action (Notify on Failure)
+        id: self_check_notify
+        continue-on-error: true
+        uses: $/workflow-results
+        with:
+          needs: '{"test":{"result":"failure"}}'
+          title: 'Notify Simulation Gate'
+          notify: 'true'
+
+      - name: Verify Notify Path Behaved Correctly
+        run: |
+          cat "${RUNNER_TEMP}/mock-gh.log" || true
+          if [ "${{ steps.self_check_notify.outcome }}" != "failure" ]; then
+            echo "::error::Notify simulation should still fail the step"
+            exit 1
+          fi
+          if [ "${{ steps.self_check_notify.outputs.passed }}" != "false" ]; then
+            echo "::error::passed output should be false on notify failure"
+            exit 1
+          fi
+          if ! grep -q "^issue create" "${RUNNER_TEMP}/mock-gh.log"; then
+            echo "::error::Notifier did not attempt to create an issue"
             exit 1
           fi
 
