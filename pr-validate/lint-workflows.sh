@@ -2,6 +2,8 @@
 # Download a pinned actionlint binary and lint the workspace. Missing binary is fatal.
 set -euo pipefail
 
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 version="${ACTIONLINT_VERSION:-v1.7.12}"
 # SHA-256 of actionlint_1.7.12_linux_amd64.tar.gz from actionlint_1.7.12_checksums.txt.
 # Bump this with the version. The tag can move; the asset checksum cannot.
@@ -102,4 +104,13 @@ fi
 # Pass paths explicitly. With no arguments, actionlint walks up looking for a Git
 # checkout and exits before reading the files when the workspace is not a repo.
 out="${RUNNER_TEMP:-/tmp}/pr-validate-actionlint-out"
-"$bin" -config-file "$config" "${workflow_files[@]}" | tee "$out"
+status=0
+"$bin" -config-file "$config" "${workflow_files[@]}" | tee "$out" || status=$?
+
+# Shared list inputs (triggers, packages, tags, keep_digests) take one item per
+# line or a single value. actionlint cannot check input formats, so flag other
+# formats passed to bcgov/actions* with the same parser the actions use.
+if ! node "${here}/list-inputs.js" "${workflow_files[@]}"; then
+  status=1
+fi
+exit "$status"

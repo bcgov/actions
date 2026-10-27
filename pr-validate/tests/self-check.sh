@@ -192,6 +192,116 @@ printf 'self-hosted-runner:\n  labels:\n    - other-runner\n' > "$fixture/.githu
 lint_fixture fail "caller config without the label still fails"
 rm "$fixture/.github/actionlint.yml"
 
+# Shared list inputs for bcgov/actions* callers: old formats fail, one per line passes.
+list_fail() { # label input-line(s)
+  local label="$1" body="$2" status
+  printf 'name: lists\non: push\njobs:\n  build:\n    runs-on: ubuntu-26.04\n    steps:\n      - uses: bcgov/actions/image-tracker@v0.11.0\n        with:\n%s\n' "$body" > "$fixture/.github/workflows/ok.yml"
+  set +e
+  ACTIONLINT_CONFIG="$config" ACTIONLINT_WORKSPACE="$fixture" RUNNER_TEMP="$fixture" bash "$lint" >/tmp/pr-validate-lists.txt 2>&1
+  status=$?
+  set -e
+  if [[ "$status" -ne 0 ]] && grep -q 'list format' /tmp/pr-validate-lists.txt; then
+    echo "ok  $label"
+    passed=$((passed + 1))
+  else
+    echo "FAIL  $label"
+    cat /tmp/pr-validate-lists.txt
+    failed=$((failed + 1))
+  fi
+}
+list_fail "comma-separated triggers fail" "          triggers: backend/, frontend/"
+list_fail "space-separated triggers fail" "          triggers: 'backend/ frontend/'"
+list_fail "bash-array triggers fail" "          triggers: ('backend/' 'frontend/')"
+list_fail "JSON triggers fail" '          triggers: "[\"backend/\", \"frontend/\"]"'
+list_fail "bracket list in a block fails" "          triggers: |
+            [backend/, frontend/]"
+list_fail "folded block (>) triggers fail" "          triggers: >
+            backend/
+            frontend/"
+list_fail "space-separated packages fail" "          packages: api frontend # comment"
+list_fail "space-separated package fails" '          package: "api frontend"'
+list_fail "comma-separated tags fail" "          tags: latest,prod"
+list_fail "space-separated keep_digests fail" "          keep_digests: sha256:aaa sha256:bbb"
+
+# Reusable workflow with `with:` written before `uses:`.
+cat > "$fixture/.github/workflows/ok.yml" <<'EOF'
+name: lists
+on: push
+jobs:
+  close:
+    with:
+      packages: api frontend
+    permissions:
+      packages: write
+    uses: bcgov/actions-openshift/.github/workflows/.pr-close.yml@v0.6.0
+EOF
+set +e
+ACTIONLINT_CONFIG="$config" ACTIONLINT_WORKSPACE="$fixture" RUNNER_TEMP="$fixture" bash "$lint" >/tmp/pr-validate-lists.txt 2>&1
+status=$?
+set -e
+if [[ "$status" -ne 0 ]] && grep -q 'packages: list format' /tmp/pr-validate-lists.txt; then
+  echo "ok  with: before uses: is checked"
+  passed=$((passed + 1))
+else
+  echo "FAIL  with: before uses: is checked"
+  cat /tmp/pr-validate-lists.txt
+  failed=$((failed + 1))
+fi
+
+cat > "$fixture/.github/workflows/ok.yml" <<'EOF'
+name: lists
+on: push
+jobs:
+  close:
+    uses: bcgov/actions-openshift/.github/workflows/.pr-close.yml@v0.6.0
+    permissions:
+      packages: write
+    with:
+      packages: |
+        api
+        frontend
+  build:
+    runs-on: ubuntu-26.04
+    strategy:
+      matrix:
+        package: [api, frontend]
+    steps:
+      - uses: bcgov/actions/diff-triggers@v0.11.0
+        with:
+          triggers: |
+            backend/
+            'my path/'
+            src/{a,b}/**
+            ${{ vars.EXTRA_TRIGGER }}
+      - uses: bcgov/actions/builder@v0.11.0
+        with:
+          package: ${{ matrix.package }}
+          triggers: ${{ toJSON(fromJSON('["a/", "b/"]')) }}
+          tags: latest
+      - uses: bcgov/actions/image-tracker@v0.11.0
+        with:
+          package: "${{ matrix.package }}"
+      - uses: bcgov/actions/image-tracker@v0.11.0
+        with:
+          package: app-${{ matrix.package }}
+      - with:
+          keep_digests: |
+            sha256:aaa
+            sha256:bbb
+        uses: bcgov/actions/ghcr-cleanup@v0.11.0
+      - uses: bcgov/actions/image-tracker@v0.11.0
+        with:
+          package: backend   
+      - run: echo ok
+        env:
+          packages: curl jq
+      - uses: example/apt-install@v1
+        with:
+          packages: curl jq
+          tags: a, b
+EOF
+lint_fixture pass "one item per line, single values, expressions and other actions pass"
+
 rm -rf "$fixture"
 
 echo ""
