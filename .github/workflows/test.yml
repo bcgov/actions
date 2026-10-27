@@ -1429,6 +1429,44 @@ jobs:
           knip: off
           supply_scan: 'false'
 
+      - name: Bundled bcgov rules, findings
+        id: bcgov_findings
+        uses: $/test-and-analyse
+        with:
+          commands: echo "Semgrep test"
+          working_directory: test-and-analyse/fixtures/semgrep/bcgov/findings
+          node_version: '24'
+          cache: none
+          knip: off
+          supply_scan: 'false'
+          semgrep: 'true'
+          semgrep_config: bcgov
+
+      - name: Bundled bcgov rules, clean
+        id: bcgov_clean
+        uses: $/test-and-analyse
+        with:
+          commands: echo "Semgrep test"
+          working_directory: test-and-analyse/fixtures/semgrep/bcgov/clean
+          node_version: '24'
+          cache: none
+          knip: off
+          supply_scan: 'false'
+          semgrep: 'true'
+          semgrep_config: bcgov
+
+      - name: Verify bcgov rules
+        env:
+          FINDINGS_SARIF: ${{ steps.bcgov_findings.outputs.semgrep_sarif }}
+          CLEAN_FINDINGS: ${{ steps.bcgov_clean.outputs.semgrep_findings }}
+        run: |
+          ids=$(jq -r '[.runs[0].results[].ruleId | sub(".*bcgov-"; "bcgov-")] | sort | join(" ")' "$FINDINGS_SARIF")
+          echo "bcgov findings: ${ids}"
+          expected="bcgov-django-mark-safe bcgov-django-template-safe-filter bcgov-env-secret-hardcoded-fallback bcgov-jwt-verify-missing-algorithms bcgov-jwt-verify-missing-audience-issuer bcgov-python-env-secret-hardcoded-fallback bcgov-react-dangerously-set-inner-html"
+          [ "$ids" = "$expected" ] || { echo "❌ Expected one finding per bcgov rule: ${expected}"; exit 1; }
+          [ "$CLEAN_FINDINGS" = "0" ] || { echo "❌ bcgov clean fixture: expected 0 findings, got ${CLEAN_FINDINGS}"; exit 1; }
+          echo "✅ bcgov rules: one finding per rule, clean fixture passes"
+
       - name: Verify Semgrep behaviour
         env:
           CLEAN_FINDINGS: ${{ steps.clean.outputs.semgrep_findings }}

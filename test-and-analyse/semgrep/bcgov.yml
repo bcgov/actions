@@ -1,0 +1,142 @@
+# bcgov rules for test-and-analyse (`semgrep_config: bcgov`). Defect types that
+# assessments kept finding across the fleet (bcgov/actions#327):
+#   1. secrets read from the environment with a hardcoded fallback
+#   2. JWT verification without pinned algorithms or audience/issuer
+#   3. HTML escaping turned off (Django |safe, mark_safe, dangerouslySetInnerHTML)
+rules:
+  - id: bcgov-env-secret-hardcoded-fallback
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      Secret-like environment variable $X falls back to a hardcoded string. A
+      missing variable silently uses a known value; fail fast instead.
+    metadata:
+      category: security
+      cwe: "CWE-798: Use of Hard-coded Credentials"
+    patterns:
+      - pattern-either:
+          - pattern: process.env.$X || "$S"
+          - pattern: process.env.$X ?? "$S"
+          - pattern: process.env[$K] || "$S"
+          - pattern: process.env[$K] ?? "$S"
+          - pattern: |
+              const { $X = "$S" } = process.env
+      - metavariable-regex:
+          metavariable: $X
+          regex: (?i).*(secret|key|token|passw|pwd|credential|salt|private).*
+      - metavariable-regex:
+          metavariable: $S
+          regex: .+
+
+  - id: bcgov-python-env-secret-hardcoded-fallback
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Secret-like environment variable $X falls back to a hardcoded string. A
+      missing variable silently uses a known value; fail fast instead.
+    metadata:
+      category: security
+      cwe: "CWE-798: Use of Hard-coded Credentials"
+    patterns:
+      - pattern-either:
+          - pattern: os.environ.get("$X", "$S")
+          - pattern: os.getenv("$X", "$S")
+          - pattern: os.environ.get("$X") or "$S"
+          - pattern: os.getenv("$X") or "$S"
+      - metavariable-regex:
+          metavariable: $X
+          regex: (?i).*(secret|key|token|passw|pwd|credential|salt|private).*
+      - metavariable-regex:
+          metavariable: $S
+          regex: .+
+
+  - id: bcgov-jwt-verify-missing-algorithms
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      jwt.verify() without an `algorithms` allow-list accepts whatever algorithm
+      the token header names. Pin it, e.g. { algorithms: ['RS256'] }.
+    metadata:
+      category: security
+      cwe: "CWE-347: Improper Verification of Cryptographic Signature"
+    patterns:
+      - pattern-either:
+          - pattern: $JWT.verify($TOKEN, $KEY)
+          - pattern: $JWT.verify($TOKEN, $KEY, {...}, ...)
+          - pattern: $JWT.verify($TOKEN, $KEY, function (...) {...})
+          - pattern: $JWT.verify($TOKEN, $KEY, (...) => {...})
+      # An options variable (not a literal) is not checked
+      - pattern-not: |
+          $JWT.verify($TOKEN, $KEY, {..., algorithms: $A, ...}, ...)
+      - metavariable-regex:
+          metavariable: $JWT
+          regex: ^(jwt|jsonwebtoken|jsonWebToken)$
+  - id: bcgov-jwt-verify-missing-audience-issuer
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      jwt.verify() checks neither `audience` nor `issuer`, so a validly signed
+      token minted for another client or issuer is accepted. Set both where the
+      identity provider issues them (Cognito: also check token_use).
+    metadata:
+      category: security
+      cwe: "CWE-287: Improper Authentication"
+    patterns:
+      - pattern-either:
+          - pattern: $JWT.verify($TOKEN, $KEY)
+          - pattern: $JWT.verify($TOKEN, $KEY, {...}, ...)
+      - pattern-not: |
+          $JWT.verify($TOKEN, $KEY, {..., audience: $A, ...}, ...)
+      - pattern-not: |
+          $JWT.verify($TOKEN, $KEY, {..., issuer: $I, ...}, ...)
+      - metavariable-regex:
+          metavariable: $JWT
+          regex: ^(jwt|jsonwebtoken|jsonWebToken)$
+
+  - id: bcgov-django-mark-safe
+    languages: [python]
+    severity: WARNING
+    message: >-
+      mark_safe() turns off HTML escaping. If any part of the value can come from
+      a user (names, filenames, query strings), this is XSS; use format_html().
+    metadata:
+      category: security
+      cwe: "CWE-79: Improper Neutralization of Input During Web Page Generation"
+    patterns:
+      - pattern-either:
+          - pattern: django.utils.safestring.mark_safe(...)
+          - pattern: mark_safe(...)
+      - pattern-not: mark_safe("...")
+
+  - id: bcgov-django-template-safe-filter
+    languages: [generic]
+    severity: WARNING
+    message: >-
+      The |safe filter / autoescape off turns off HTML escaping. If the value can
+      come from a user (names, filenames, query strings), this is XSS.
+    metadata:
+      category: security
+      cwe: "CWE-79: Improper Neutralization of Input During Web Page Generation"
+    paths:
+      include: ["*.html", "*.htm", "*.djhtml", "*.jinja", "*.j2", "*.txt"]
+    pattern-either:
+      - pattern-regex: \{\{[^}]*\|\s*safe\b[^}]*\}\}
+      - pattern-regex: \{%\s*autoescape\s+off\s*%\}
+
+  - id: bcgov-react-dangerously-set-inner-html
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      dangerouslySetInnerHTML renders raw HTML. Sanitize it (e.g. DOMPurify) or
+      render text instead.
+    metadata:
+      category: security
+      cwe: "CWE-79: Improper Neutralization of Input During Web Page Generation"
+    patterns:
+      - pattern-either:
+          - pattern: <$EL dangerouslySetInnerHTML={$X} />
+          - pattern: <$EL dangerouslySetInnerHTML={$X}>...</$EL>
+          - pattern: |
+              {dangerouslySetInnerHTML: $X}
+      - pattern-not: |
+          <$EL dangerouslySetInnerHTML={{__html: $P.sanitize(...)}} />

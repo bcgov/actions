@@ -84,8 +84,10 @@ inputs:
     default: "false"
 
   semgrep_config:
-    description: "Semgrep rules, one per line: registry rulesets (e.g. p/default) or rule files relative to the workspace root"
-    default: "p/default"
+    description: "Semgrep rules, one per line: registry rulesets (e.g. p/default), bcgov (rules bundled with this action) or rule files relative to the workspace root"
+    default: |
+      p/default
+      bcgov
 
   semgrep_fail:
     description: "Fail the action when Semgrep reports findings (true/false). Default false: findings are warnings"
@@ -419,6 +421,7 @@ runs:
         SEMGREP_IMAGE: semgrep/semgrep:1.179.0@sha256:93963d9295a366f59e4850127b1550400ee7b388f04fe144e4a1f6325d96e01b
         INPUT_SEMGREP_CONFIG: ${{ inputs.semgrep_config }}
         INPUT_SEMGREP_FAIL: ${{ steps.inputs.outputs.semgrep_fail }}
+        SEMGREP_RULES_DIR: ${{ github.action_path }}/semgrep
       run: |
         "${{ github.action_path }}/semgrep.sh"
 

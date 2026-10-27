@@ -45,7 +45,7 @@ permissions:
 | `supply_scan` | `true` | Node only (`@aikidosec/safe-chain`) |
 | `knip` | `warn` | Node only (Knip); options: `off`, `warn`, `error` |
 | `semgrep` | `false` | |
-| `semgrep_config` | `p/default` | |
+| `semgrep_config` | `p/default` + `bcgov` | |
 | `semgrep_fail` | `false` | Findings warn unless `true` |
 | `sonar_token` | _(empty)_ | Empty skips Sonar with a warning (fork PRs get no secrets) |
 | `triggers` | _(omitted)_ | When omitted, tests always run |
@@ -110,8 +110,10 @@ permissions:
 
     # Semgrep scan of working_directory (any language). Off by default; see Semgrep below.
     semgrep: false
-    # Rules: registry rulesets or files relative to the workspace root, one per line
-    semgrep_config: p/default
+    # Rules, one per line: registry rulesets, bcgov (bundled) or files relative to the workspace root
+    semgrep_config: |
+      p/default
+      bcgov
     # Fail on findings. Default false: findings are warnings
     semgrep_fail: false
 
@@ -454,10 +456,26 @@ Optional, language-agnostic static analysis (Node, Java, Python and more) of `wo
 | Input | Default | Meaning |
 | ----- | ------- | ------- |
 | `semgrep` | `false` | Run the scan |
-| `semgrep_config` | `p/default` | Rules, one per line: registry rulesets (`p/...`, `r/...`) or rule files relative to the workspace root |
+| `semgrep_config` | `p/default`, `bcgov` | Rules, one per line: registry rulesets (`p/...`, `r/...`), `bcgov` (rules bundled with this action, below) or rule files relative to the workspace root |
 | `semgrep_fail` | `false` | `false`: findings are warnings and the action continues. `true`: any finding fails the action |
 
 Findings appear as warning annotations (first 50) and in the `semgrep_findings` and `semgrep_sarif` outputs. Each scan writes its own report, with paths relative to the workspace root. A scan error (bad rules, network failure fetching a registry ruleset) always fails the action; files Semgrep could only partly parse are reported as a warning.
+
+## Bundled `bcgov` rules
+
+[`semgrep/bcgov.yml`](semgrep/bcgov.yml) targets defects that assessments kept finding across bcgov repos. It is part of the default `semgrep_config`; list it explicitly when you set your own rules.
+
+| Rule | Catches |
+| ---- | ------- |
+| `bcgov-env-secret-hardcoded-fallback` | `process.env.X_KEY \|\| 'defaultkey'` (also `??`, destructuring defaults) for secret-like names |
+| `bcgov-python-env-secret-hardcoded-fallback` | `os.environ.get("SECRET_KEY", "...")`, `os.getenv(...)` with a default |
+| `bcgov-jwt-verify-missing-algorithms` | `jwt.verify()` (jsonwebtoken) without an `algorithms` allow-list |
+| `bcgov-jwt-verify-missing-audience-issuer` | `jwt.verify()` without `audience` or `issuer` (Cognito: also check `token_use`) |
+| `bcgov-django-mark-safe` | `mark_safe()` on a non-literal value |
+| `bcgov-django-template-safe-filter` | `{{ value\|safe }}` and `{% autoescape off %}` in templates |
+| `bcgov-react-dangerously-set-inner-html` | `dangerouslySetInnerHTML` not wrapped in a `.sanitize()` call |
+
+Silence a reviewed false positive with a `// nosemgrep: <rule-id>` (or `# nosemgrep: <rule-id>`) comment on the line.
 
 Semgrep's default ignore list applies (e.g. `node_modules/`, `dist/`, `test/`, `tests/`); add a `.semgrepignore` to change it.
 

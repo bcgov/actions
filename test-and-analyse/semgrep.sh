@@ -3,7 +3,8 @@
 # Semgrep container. Findings are warnings unless INPUT_SEMGREP_FAIL is true.
 #
 # Env: SEMGREP_IMAGE, INPUT_SEMGREP_CONFIG (one config per line),
-#      INPUT_SEMGREP_FAIL (true/false), GITHUB_WORKSPACE, RUNNER_TEMP, GITHUB_OUTPUT
+#      INPUT_SEMGREP_FAIL (true/false), SEMGREP_RULES_DIR (bundled rules),
+#      GITHUB_WORKSPACE, RUNNER_TEMP, GITHUB_OUTPUT
 set -euo pipefail
 
 : "${SEMGREP_IMAGE:?SEMGREP_IMAGE is required}"
@@ -24,23 +25,30 @@ esac
 rel="${target#"${workspace}"}"
 rel="${rel#/}"
 
-# Registry rulesets (p/..., r/...) pass through; other entries are files
-# relative to the workspace root.
+# Unique per run, so several scans in one job keep their own reports
+out="$(mktemp -d "${RUNNER_TEMP}/semgrep.XXXXXX")"
+
+# Registry rulesets (p/..., r/...) pass through; `bcgov` is the rule set
+# bundled with this action (copied into the mounted report dir, since the
+# action path is outside the workspace); other entries are files relative to
+# the workspace root.
 configs=()
 while IFS= read -r c; do
   c="${c#"${c%%[![:space:]]*}"}"
   c="${c%"${c##*[![:space:]]}"}"
   [[ -n "$c" ]] || continue
-  if [[ "$c" != p/* && "$c" != r/* ]]; then
+  if [[ "$c" == "bcgov" ]]; then
+    : "${SEMGREP_RULES_DIR:?SEMGREP_RULES_DIR is required for the bcgov rules}"
+    cp "${SEMGREP_RULES_DIR}/bcgov.yml" "${out}/bcgov.yml"
+    c="${out}/bcgov.yml"
+  elif [[ "$c" != p/* && "$c" != r/* ]]; then
     [[ -e "${workspace}/${c}" ]] || { echo "::error::Semgrep config not found: ${c} (relative to the workspace root)"; exit 1; }
     c="${workspace}/${c}"
   fi
   configs+=(--config "$c")
-done <<< "${INPUT_SEMGREP_CONFIG:-p/default}"
+done <<< "${INPUT_SEMGREP_CONFIG:-$'p/default\nbcgov'}"
 [[ ${#configs[@]} -gt 0 ]] || { echo "::error::semgrep_config is empty"; exit 1; }
 
-# Unique per run, so several scans in one job keep their own reports
-out="$(mktemp -d "${RUNNER_TEMP}/semgrep.XXXXXX")"
 json="${out}/semgrep.json"
 sarif="${out}/semgrep.sarif"
 
