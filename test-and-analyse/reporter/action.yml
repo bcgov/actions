@@ -4,7 +4,7 @@ inputs:
   dir:
     description: App/package directory, relative to the workspace unless absolute
     required: true
-  dep_analysis:
+  unused_deps:
     description: "Dependency analysis mode: off, warn, or error"
     default: "warn"
   knip_output:
