@@ -495,7 +495,7 @@ if (
     GITHUB_OUTPUT="$REPORTER_OUT" \
     GITHUB_STEP_SUMMARY="$REPORTER_SUMMARY" \
     INPUT_DIR="app" \
-    INPUT_KNIP="warn" \
+    INPUT_UNUSED_DEPS="warn" \
     INPUT_KNIP_OUTPUT="knip-output.json" \
     INPUT_LANGUAGE="node" \
     node "${ACTION_ROOT}/reporter/index.mjs"

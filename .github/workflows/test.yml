@@ -1218,14 +1218,14 @@ jobs:
           - name: frontend-no-triggers
             working_directory: frontend
             expected_triggered: true
-            knip: off
+            unused_deps: off
             test_command: npm install --no-package-lock && npm run test:cov
             repository: bcgov/quickstart-openshift
           - name: waste-frontend
             working_directory: frontend
             expected_triggered: true
-            knip: warn
-            test_command: echo "Good enough for testing knip!"
+            unused_deps: warn
+            test_command: echo "Good enough for testing unused_deps!"
             repository: bcgov/nr-waste-plus
           - name: java-basic
             working_directory: backend
@@ -1280,6 +1280,7 @@ jobs:
           triggers: ${{ matrix.triggers }}
           sonar_token: ${{ matrix.exercise_sonar == true && secrets.SONAR_TOKEN || '' }}
           cache: ${{ matrix.cache }}
+          unused_deps: ${{ matrix.unused_deps }}
 
       - name: Verify trigger behavior
         run: |
@@ -1339,7 +1340,7 @@ jobs:
           commands: echo "Nothing to run; this cell is about the checkout."
           working_directory: .
           cache: none
-          knip: off
+          unused_deps: off
 
       - name: Verify history deepened in place
         run: |
@@ -1385,7 +1386,7 @@ jobs:
           working_directory: test-and-analyse/fixtures/semgrep/clean
           node_version: '24'
           cache: none
-          knip: off
+          unused_deps: off
           supply_scan: 'false'
           semgrep: 'true'
           semgrep_config: test-and-analyse/fixtures/semgrep/rules.yml
@@ -1398,7 +1399,7 @@ jobs:
           working_directory: test-and-analyse/fixtures/semgrep/findings
           node_version: '24'
           cache: none
-          knip: off
+          unused_deps: off
           supply_scan: 'false'
           semgrep: 'true'
           semgrep_config: test-and-analyse/fixtures/semgrep/rules.yml
@@ -1412,7 +1413,7 @@ jobs:
           working_directory: test-and-analyse/fixtures/semgrep/findings
           node_version: '24'
           cache: none
-          knip: off
+          unused_deps: off
           supply_scan: 'false'
           semgrep: 'true'
           semgrep_config: test-and-analyse/fixtures/semgrep/rules.yml
@@ -1426,7 +1427,7 @@ jobs:
           working_directory: test-and-analyse/fixtures/semgrep/findings
           node_version: '24'
           cache: none
-          knip: off
+          unused_deps: off
           supply_scan: 'false'
 
       - name: Verify Semgrep behaviour

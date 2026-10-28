@@ -43,7 +43,7 @@ permissions:
 | `cache` | _(auto)_ | Detected from lockfiles; set `none` to disable |
 | `sonar_args` | bcgov-sonarcloud org + `bcgov_${{ github.repository }}` project key | |
 | `supply_scan` | `true` | Node only (`@aikidosec/safe-chain`) |
-| `knip` | `warn` | Node only (Knip); options: `off`, `warn`, `error` |
+| `unused_deps` | `warn` | Dependency analysis: Knip (node), deptry (python), Maven `dependency:analyze` (java); options: `off`, `warn`, `error` |
 | `semgrep` | `false` | |
 | `semgrep_config` | `p/default` | |
 | `semgrep_fail` | `false` | Findings warn unless `true` |
@@ -105,8 +105,8 @@ permissions:
     # Enable supply chain attack detection (Node only). Default: true
     supply_scan: true
 
-    # Knip dependency analysis (Node only). Options: off, warn (default), error
-    knip: warn
+    # Dependency analysis (Knip/deptry/Maven by language). Options: off, warn (default), error
+    unused_deps: warn
 
     # Semgrep scan of working_directory (any language). Off by default; see Semgrep below.
     semgrep: false
@@ -133,7 +133,7 @@ Run tests and provide results to SonarCloud.  This is a full workflow that runs 
 
 The specified triggers will be used to decide whether this job runs tests and analysis or just exits successfully.
 
-This example demonstrates the default behavior with supply chain scanning enabled (scans packages before installation) and Knip analysis set to error mode (detects unused dependencies and exports).
+This example demonstrates the default behavior with supply chain scanning enabled (scans packages before installation) and dependency analysis set to error mode (detects unused dependencies and exports).
 
 Create or modify a GitHub workflow, like below.  E.g. `./github/workflows/tests.yml`
 
@@ -205,7 +205,7 @@ jobs:
           working_directory: frontend
           node_version: "20"
           # supply_scan defaults to true (enabled) - strongly discouraged to disable
-          knip: off  # Disable dependency analysis
+          unused_deps: off  # Disable dependency analysis
 ```
 
 # Example, Matrix / Multiple Directories with Sonar Cloud and Triggers
@@ -284,7 +284,7 @@ SonarCloud project tokens are free, available from [SonarCloud] or your organiza
 
 The [`test-test-and-analyse` workflow](../.github/workflows/test-test-and-analyse.yml) exercises this action against external sample repos. **`sonar_token` is optional** in every matrix cell. Only **`backend-triggered`** receives a token when configured, to optionally exercise the Sonar scan path.
 
-Set repository Actions secret **`SONAR_TOKEN`**: a SonarCloud token for the **`bcgov-sonarcloud`** organization that can analyze project **`bcgov_bcgov/actions`**. Without it, CI still validates triggers, tests, and Knip.
+Set repository Actions secret **`SONAR_TOKEN`**: a SonarCloud token for the **`bcgov-sonarcloud`** organization that can analyze project **`bcgov_bcgov/actions`**. Without it, CI still validates triggers, tests, and dependency analysis.
 
 An empty `sonar_token` skips Sonar with a warning annotation, so fork PRs (which never get secrets) still pass.
 
@@ -324,15 +324,61 @@ When enabled, safe-chain will:
 
 No additional configuration or API tokens are required. The scanning happens automatically during `npm ci` and other package manager commands.
 
-# Knip - Dependency and Export Analysis
+# Dependency Analysis (`unused_deps`)
+
+> **Breaking (pre-v1.0.0):** the Node-only `knip` input is replaced by `unused_deps`. Rename `knip: <mode>` to `unused_deps: <mode>` when you move to this release. `knip_config` is unchanged.
+
+`unused_deps` (`off`, `warn` default, `error`) picks a tool by `language`:
+
+| Language | Tool | Notes |
+|----------|------|-------|
+| `node` | [Knip](https://knip.dev/) | Unused files, dependencies, devDependencies and exports. See below. |
+| `python` | [deptry](https://deptry.com/) | Uses the project's deptry if installed, else installs `deptry==0.25.1`. Run after your `commands`, so install your deps there for best results. |
+| `java` | Maven `dependency:analyze` | Uses `./mvnw` if present, else `mvn`. Skipped with a notice when there is no `pom.xml` (Gradle is not analyzed). |
+
+- `off` skips the tool. `warn` annotates and summarizes findings without failing. `error` fails the step on findings.
+
+### Python suppressions (deptry)
+
+Configure in `pyproject.toml`:
+
+```toml
+[tool.deptry]
+known_first_party = ["app"]
+[tool.deptry.per_rule_ignores]
+DEP002 = ["uvicorn", "gunicorn", "psycopg2-binary"]  # used at runtime, not imported
+```
+
+### Java suppressions (Maven)
+
+`dependency:analyze` reads bytecode, so it misses anything loaded by reflection or classpath scanning. Expect "unused declared" for Spring Boot starters, JDBC drivers, Lombok/annotation processors, `runtime`-scoped deps and test engines. Start in `warn`, then silence the known ones in `pom.xml`:
+
+```xml
+<plugin>
+  <groupId>org.apache.maven.plugins</groupId>
+  <artifactId>maven-dependency-plugin</artifactId>
+  <configuration>
+    <ignoreNonCompile>true</ignoreNonCompile>           <!-- skip runtime/provided/test scopes -->
+    <ignoredUnusedDeclaredDependencies>
+      <ignoredUnusedDeclaredDependency>org.springframework.boot:spring-boot-starter-*</ignoredUnusedDeclaredDependency>
+      <ignoredUnusedDeclaredDependency>org.projectlombok:lombok</ignoredUnusedDeclaredDependency>
+    </ignoredUnusedDeclaredDependencies>
+    <usedDependencies>
+      <usedDependency>org.postgresql:postgresql</usedDependency>
+    </usedDependencies>
+  </configuration>
+</plugin>
+```
+
+## Knip (Node)
 
 This action supports dependency and export analysis using [Knip](https://knip.dev/). When enabled, Knip scans JavaScript/TypeScript projects to identify unused dependencies, devDependencies, and exports, helping keep your codebase clean and maintainable.
 
-**Default behavior**: Runs in `warn` mode (shows issues without failing) to encourage adoption without blocking builds. You can disable with `knip: off` or enforce with `knip: error`.
+**Default behavior**: Runs in `warn` mode (shows issues without failing) to encourage adoption without blocking builds. You can disable with `unused_deps: off` or enforce with `unused_deps: error`.
 
 ## How to Use
 
-The `knip` parameter supports three modes:
+For Node, `unused_deps` runs Knip and supports three modes:
 
 - **`off`** - Skip Knip analysis entirely
 - **`warn`** - Run Knip and show issues, but don't fail the workflow (default)
@@ -348,7 +394,7 @@ The `knip` parameter supports three modes:
       npm run test:cov
     working_directory: frontend
     node_version: "20"
-    knip: warn
+    unused_deps: warn
 ```
 
 ### Example: Error Mode (Enforce Cleanup)
@@ -361,7 +407,7 @@ The `knip` parameter supports three modes:
       npm run test:cov
     working_directory: frontend
     node_version: "20"
-    knip: error
+    unused_deps: error
 ```
 
 When enabled, Knip will:
@@ -395,7 +441,7 @@ When `knip_config` is not provided, the action uses its default configuration. I
 ```yaml
 - uses: bcgov/actions/test-and-analyse@vX.Y.Z
   with:
-    knip: error
+    unused_deps: error
     knip_config: "configs/custom.knip.json"  # Path is relative to the GitHub workspace root, not to the `working_directory` input
 ```
 
