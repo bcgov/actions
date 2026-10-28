@@ -589,7 +589,7 @@ jobs:
       - name: Set up Node.js 24
         uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: 26
 
       - name: Run Unit Tests
         run: node --test ghcr-cleanup/tests/unit.test.js
@@ -671,7 +671,7 @@ jobs:
       - name: Set up Node.js 24
         uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: 26
 
       - name: Run Unit Tests
         run: node --test image-tracker/tests/unit.test.js
