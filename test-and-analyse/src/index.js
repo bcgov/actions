@@ -92,7 +92,7 @@ export function summarizeJUnitXmlFiles(xmlFiles) {
 async function run() {
   try {
     const dir = core.getInput('dir') || '.'
-    const depScan = core.getInput('unused_deps') || 'off'
+    const depScan = core.getInput('unused_deps')
     const knipOutputFile = core.getInput('knip_output') || 'knip-output.json'
     const deptryOutputFile = 'deptry-output.json'
     const mavenOutputFile = 'dependency-analyze.log'

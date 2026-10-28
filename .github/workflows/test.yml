@@ -1280,7 +1280,7 @@ jobs:
           triggers: ${{ matrix.triggers }}
           sonar_token: ${{ matrix.exercise_sonar == true && secrets.SONAR_TOKEN || '' }}
           cache: ${{ matrix.cache }}
-          unused_deps: ${{ matrix.unused_deps || 'warn' }}
+          unused_deps: ${{ matrix.unused_deps }}
 
       - name: Verify trigger behavior
         run: |
