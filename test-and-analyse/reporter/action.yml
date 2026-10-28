@@ -1,11 +1,11 @@
 name: Process reports and analysis
-description: Summarize test and Knip results on the Actions Node 24 runtime
+description: Summarize test and dependency analysis results on the Actions Node 24 runtime
 inputs:
   dir:
     description: App/package directory, relative to the workspace unless absolute
     required: true
-  knip:
-    description: "Knip mode: off, warn, or error"
+  dep_analysis:
+    description: "Dependency analysis mode: off, warn, or error"
     default: "warn"
   knip_output:
     description: Knip JSON path, relative to dir

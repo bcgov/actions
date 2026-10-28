@@ -71,12 +71,12 @@ inputs:
     description: Enable supply chain attack detection using @aikidosec/safe-chain
     default: "true"
 
-  knip:
-    description: "Knip dependency and export analysis for JS/TS projects. Options: off (skip), warn (run but don't fail, default), error (run and fail on issues)"
+  dep_analysis:
+    description: "Dependency analysis: Knip (node), deptry (python), Maven dependency:analyze (java). Options: off (skip), warn (run but don't fail, default), error (run and fail on issues)"
     default: "warn"
 
   knip_config:
-    description: "Path to custom Knip configuration file (relative to workspace root). If not provided, uses action's default configuration"
+    description: "Path to custom Knip configuration file, node only (relative to workspace root). If not provided, uses action's default configuration"
     default: ""
 
   semgrep:
@@ -129,7 +129,7 @@ runs:
         INPUT_SUPPLY_SCAN: ${{ inputs.supply_scan }}
         INPUT_SEMGREP: ${{ inputs.semgrep }}
         INPUT_SEMGREP_FAIL: ${{ inputs.semgrep_fail }}
-        INPUT_KNIP: ${{ inputs.knip }}
+        INPUT_DEP_ANALYSIS: ${{ inputs.dep_analysis }}
         INPUT_LANGUAGE: ${{ inputs.language }}
         SHARED_INPUTS: ${{ github.action_path }}/../shared/inputs.js
         HAS_SONAR_TOKEN: ${{ inputs.sonar_token != '' }}
@@ -138,12 +138,12 @@ runs:
         supply_scan=$(node "$SHARED_INPUTS" bool supply_scan true)
         semgrep=$(node "$SHARED_INPUTS" bool semgrep false)
         semgrep_fail=$(node "$SHARED_INPUTS" bool semgrep_fail false)
-        knip=$(node "$SHARED_INPUTS" enum knip off,warn,error warn)
+        dep_analysis=$(node "$SHARED_INPUTS" enum dep_analysis off,warn,error warn)
         language=$(node "$SHARED_INPUTS" enum language node,java,python node)
         parsed="supply_scan=$supply_scan
         semgrep=$semgrep
         semgrep_fail=$semgrep_fail
-        knip=$knip
+        dep_analysis=$dep_analysis
         language=$language"
         echo "$parsed" | sed 's/^ *//' >> "$GITHUB_OUTPUT"
         if [ "${RUNNER_DEBUG:-}" = "1" ]; then
@@ -320,10 +320,10 @@ runs:
         args: >
           ${{ inputs.sonar_args }}
 
-    # Run Analysis Tools (Knip for Node, Test Reports for others)
+    # Dependency analysis: Knip (node), deptry (python), Maven dependency:analyze (java)
     - name: Knip Dependency Analysis
       id: knip_analysis
-      if: steps.final_triggered.outputs.triggered == 'true' && steps.inputs.outputs.knip != 'off' && steps.inputs.outputs.language == 'node'
+      if: steps.final_triggered.outputs.triggered == 'true' && steps.inputs.outputs.dep_analysis != 'off' && steps.inputs.outputs.language == 'node'
       working-directory: ${{ inputs.working_directory }}
       shell: bash
       run: |
@@ -410,6 +410,34 @@ runs:
         npx -y knip --dependencies --exports ${KNIP_CONFIG} | sed 's/\u001b\[[0-9;]*[a-zA-Z]//g' > knip-summary.txt 2>&1
         set -e
 
+    - name: Python Dependency Analysis (deptry)
+      if: steps.final_triggered.outputs.triggered == 'true' && steps.inputs.outputs.dep_analysis != 'off' && steps.inputs.outputs.language == 'python'
+      working-directory: ${{ inputs.working_directory }}
+      shell: bash
+      run: |
+        # Prefer the project's own deptry; else install a pinned one into the active Python
+        if ! python -m deptry --version >/dev/null 2>&1; then
+          python -m pip install -q deptry==0.25.1
+        fi
+        set +e
+        python -m deptry . --json-output deptry-output.json
+        set -e
+
+    - name: Java Dependency Analysis (Maven)
+      if: steps.final_triggered.outputs.triggered == 'true' && steps.inputs.outputs.dep_analysis != 'off' && steps.inputs.outputs.language == 'java'
+      working-directory: ${{ inputs.working_directory }}
+      shell: bash
+      run: |
+        if [ ! -f pom.xml ]; then
+          echo "::notice title=dep_analysis::No pom.xml in ${{ inputs.working_directory }}; Maven dependency:analyze skipped."
+          exit 0
+        fi
+        MVN=mvn
+        [ -x ./mvnw ] && MVN=./mvnw
+        set +e
+        $MVN -B org.apache.maven.plugins:maven-dependency-plugin:3.11.0:analyze -DfailOnWarning=false 2>&1 | tee dependency-analyze.log
+        set -e
+
     - name: Semgrep Scan
       id: semgrep
       if: steps.final_triggered.outputs.triggered == 'true' && steps.inputs.outputs.semgrep == 'true' && (success() || failure())
@@ -423,7 +451,7 @@ runs:
         "${{ github.action_path }}/semgrep.sh"
 
     # Composite stays: this action installs the caller's toolchain and runs their
-    # commands, Sonar and Knip. The reporter is a node24 action, so it uses the
+    # commands, Sonar and dependency analysis. The reporter is a node24 action, so it uses the
     # Actions runtime instead of the project's node_version. Node is installed
     # once, for the caller's code.
     - name: Process Reports and Analysis
@@ -432,6 +460,6 @@ runs:
       uses: $/test-and-analyse/reporter
       with:
         dir: ${{ inputs.working_directory }}
-        knip: ${{ steps.inputs.outputs.knip }}
+        dep_analysis: ${{ steps.inputs.outputs.dep_analysis }}
         knip_output: knip-output.json
         language: ${{ steps.inputs.outputs.language }}

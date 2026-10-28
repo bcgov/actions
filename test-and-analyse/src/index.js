@@ -5,6 +5,7 @@ import {XMLParser} from 'fast-xml-parser'
 import * as core from '@actions/core'
 import {glob} from 'glob'
 import {analyzeKnip} from './knip.js'
+import {analyzeDeptry, analyzeMaven} from './deps.js'
 
 export function findJUnitXmlFiles(dir) {
   const reports = []
@@ -91,8 +92,10 @@ export function summarizeJUnitXmlFiles(xmlFiles) {
 async function run() {
   try {
     const dir = core.getInput('dir') || '.'
-    const depScan = core.getInput('knip') || 'off'
+    const depScan = core.getInput('dep_analysis') || 'off'
     const knipOutputFile = core.getInput('knip_output') || 'knip-output.json'
+    const deptryOutputFile = 'deptry-output.json'
+    const mavenOutputFile = 'dependency-analyze.log'
     const language = core.getInput('language') || 'node'
     const knipSummaryFile = 'knip-summary.txt'
 
@@ -106,11 +109,32 @@ async function run() {
       totalIssues: 0
     }
 
-    if (language === 'node' && fs.existsSync(knipOutputFile)) {
+    if (
+      depScan !== 'off' &&
+      language === 'node' &&
+      fs.existsSync(knipOutputFile)
+    ) {
       try {
         stats = analyzeKnip(knipOutputFile, dir)
       } catch (error) {
         core.warning(`Failed to analyze Knip output: ${error.message}`)
+      }
+    }
+
+    // Python (deptry) and Java (Maven dependency:analyze)
+    const depTool = {python: 'deptry', java: 'Maven dependency:analyze'}[
+      language
+    ]
+    const depFile = {python: deptryOutputFile, java: mavenOutputFile}[language]
+    let depStats = null
+    if (depScan !== 'off' && depTool && fs.existsSync(depFile)) {
+      try {
+        depStats =
+          language === 'python'
+            ? analyzeDeptry(depFile, dir)
+            : analyzeMaven(depFile, dir)
+      } catch (error) {
+        core.warning(`Failed to analyze ${depTool} output: ${error.message}`)
       }
     }
 
@@ -125,6 +149,7 @@ async function run() {
     }
 
     const hasKnipIssues = language === 'node' && stats.totalIssues > 0
+    const hasDepIssues = hasKnipIssues || (depStats?.totalIssues || 0) > 0
     const testFailSignal = process.env.TEST_FAIL_SIGNAL === 'true'
     const hasTestFailures = testResults.failed > 0 || testFailSignal
 
@@ -133,7 +158,21 @@ async function run() {
         `🔍 ${language.toUpperCase()} Analysis Results`
       )
 
-      if (language === 'node') {
+      if (depStats) {
+        const rows = Object.entries(depStats.byCode).map(([k, v]) => [
+          k,
+          v.toString()
+        ])
+        summary
+          .addHeading(`📦 Dependency Analysis (${depTool})`, 3)
+          .addTable([
+            ['Category', 'Count'],
+            ...rows,
+            ['Total', depStats.totalIssues.toString()]
+          ])
+      }
+
+      if (language === 'node' && depScan !== 'off') {
         summary.addTable([
           ['Category', 'Count'],
           ['Unused files', stats.unusedFiles.toString()],
@@ -161,7 +200,7 @@ async function run() {
         ])
       }
 
-      if (hasKnipIssues || hasTestFailures) {
+      if (hasDepIssues || hasTestFailures) {
         summary.addRaw(
           `\n⚠️ **Issues found** - See annotations or check workflow logs for details`
         )
@@ -174,6 +213,10 @@ async function run() {
       const title = `🔍 ${language.toUpperCase()} Analysis Results`
       console.log(`\n${title}`)
       console.log('='.repeat(title.length))
+
+      if (depStats) {
+        console.log(`${depTool}: ${depStats.totalIssues} issues found`)
+      }
 
       if (language === 'node') {
         console.log(`Knip: ${stats.totalIssues} issues found`)
@@ -190,8 +233,13 @@ async function run() {
     }
 
     const failures = []
-    if (language === 'node' && hasKnipIssues && depScan === 'error') {
+    if (hasKnipIssues && depScan === 'error') {
       failures.push(`Knip found ${stats.totalIssues} unused items.`)
+    }
+    if (depStats?.totalIssues > 0 && depScan === 'error') {
+      failures.push(
+        `${depTool} found ${depStats.totalIssues} dependency issues.`
+      )
     }
 
     if (hasTestFailures) {
