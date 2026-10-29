@@ -222,6 +222,10 @@ list_fail "space-separated packages fail" "          packages: api frontend # co
 list_fail "space-separated package fails" '          package: "api frontend"'
 list_fail "comma-separated tags fail" "          tags: latest,prod"
 list_fail "space-separated keep_digests fail" "          keep_digests: sha256:aaa sha256:bbb"
+list_fail "space-separated components fail" "          components: backend frontend"
+list_fail "comma-separated hosts fail" "          hosts: a.example.com,b.example.com"
+list_fail "space-separated cleanup_name fails" "          cleanup_name: app db"
+list_fail "comma-separated remove_pvc fails" "          remove_pvc: data,logs"
 
 # Reusable workflow with `with:` written before `uses:`.
 cat > "$fixture/.github/workflows/ok.yml" <<'EOF'
