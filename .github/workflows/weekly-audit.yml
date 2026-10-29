@@ -1,0 +1,79 @@
+name: Weekly Baseline Audit
+
+# Baseline tracking: findings and low coverage are reported, not failed.
+# Tool or setup errors still fail the run.
+on:
+  workflow_call:
+    inputs:
+      semgrep_config:
+        description: Semgrep config (registry ruleset or path)
+        default: p/default
+        type: string
+      python_working_directory:
+        description: Python project directory; empty skips the Python report
+        default: ""
+        type: string
+      python_version:
+        default: "3.12"
+        type: string
+      node_working_directory:
+        description: Node project directory; empty skips the Node report
+        default: ""
+        type: string
+      node_version:
+        default: "22"
+        type: string
+
+permissions: {}
+
+jobs:
+  audit:
+    name: Audit
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ inputs.python_version }}
+
+      - name: Semgrep report
+        env:
+          SEMGREP_CONFIG: ${{ inputs.semgrep_config }}
+        run: |
+          pip install semgrep
+          mkdir -p audit/semgrep
+          semgrep scan --config="${SEMGREP_CONFIG}" --metrics=off \
+            --text --text-output=audit/semgrep/semgrep.txt \
+            --sarif-output=audit/semgrep/semgrep.sarif \
+            --json-output=audit/semgrep/semgrep.json
+
+      - name: Python coverage report
+        if: inputs.python_working_directory != ''
+        working-directory: ${{ inputs.python_working_directory }}
+        run: |
+          pip install pytest pytest-cov
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+          pytest --cov=. --cov-report=html:"${GITHUB_WORKSPACE}/audit/python-coverage"
+
+      - uses: actions/setup-node@v7
+        if: inputs.node_working_directory != ''
+        with:
+          node-version: ${{ inputs.node_version }}
+
+      - name: Node coverage report
+        if: inputs.node_working_directory != ''
+        working-directory: ${{ inputs.node_working_directory }}
+        run: |
+          npm ci
+          npm run test:coverage
+          cp -r coverage "${GITHUB_WORKSPACE}/audit/node-coverage"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: weekly-audit
+          path: audit/

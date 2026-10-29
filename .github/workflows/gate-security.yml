@@ -1,0 +1,32 @@
+name: Security Gate
+
+on:
+  workflow_call:
+    inputs:
+      semgrep_config:
+        description: Semgrep config (registry ruleset or path)
+        default: p/default
+        type: string
+
+permissions: {}
+
+jobs:
+  semgrep:
+    name: Semgrep
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install Semgrep
+        run: pip install semgrep
+
+      - name: Scan (findings fail the gate)
+        env:
+          SEMGREP_CONFIG: ${{ inputs.semgrep_config }}
+        run: semgrep scan --config="${SEMGREP_CONFIG}" --error --metrics=off

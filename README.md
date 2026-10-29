@@ -106,6 +106,71 @@ Consolidate upstream job results into a single merge gate or workflow rollup wit
     needs: ${{ toJson(needs) }}
 ```
 
+## Quality Gate Workflows
+
+Reusable workflows (`on: workflow_call`) for PR quality gates. Call only the gates a repo needs; a failing gate exits 1 and blocks the PR.
+
+| Workflow | Fails when | Inputs |
+|---|---|---|
+| [gate-security.yml](./.github/workflows/gate-security.yml) | Semgrep reports any finding | `semgrep_config` (default `p/default`) |
+| [gate-python.yml](./.github/workflows/gate-python.yml) | pytest fails or coverage < `min_coverage` | `working_directory` (required), `python_version` (`3.12`), `min_coverage` (`85`) |
+| [gate-node.yml](./.github/workflows/gate-node.yml) | `npm run test:coverage` fails or line coverage < `min_coverage` | `working_directory` (required), `node_version` (`22`), `min_coverage` (`80`) |
+| [weekly-audit.yml](./.github/workflows/weekly-audit.yml) | Tool errors only (findings and coverage are reported, not failed) | `semgrep_config`, `python_working_directory`, `python_version`, `node_working_directory`, `node_version` |
+
+`gate-python.yml` installs `requirements.txt` when present. `gate-node.yml` needs a `test:coverage` script that writes Istanbul's `json-summary` report to `coverage/coverage-summary.json` (Jest: `coverageReporters: ["json-summary", ...]`; Vitest: `coverage.reporter: ["json-summary", ...]`). Each gate needs `contents: read`.
+
+PR gates for a Python backend and Node frontend:
+
+```yaml
+name: PR Checks
+
+on:
+  pull_request:
+
+permissions: {}
+
+jobs:
+  security:
+    uses: bcgov/actions/.github/workflows/gate-security.yml@vX.Y.Z # Replace with latest release tag
+    permissions:
+      contents: read
+
+  backend:
+    uses: bcgov/actions/.github/workflows/gate-python.yml@vX.Y.Z # Replace with latest release tag
+    permissions:
+      contents: read
+    with:
+      working_directory: backend
+      min_coverage: 85
+
+  frontend:
+    uses: bcgov/actions/.github/workflows/gate-node.yml@vX.Y.Z # Replace with latest release tag
+    permissions:
+      contents: read
+    with:
+      working_directory: frontend
+      min_coverage: 80
+```
+
+Weekly baseline audit (Semgrep text/SARIF/JSON and HTML coverage reports, uploaded as the `weekly-audit` artifact):
+
+```yaml
+on:
+  schedule:
+    - cron: "0 8 * * 1"
+
+permissions: {}
+
+jobs:
+  audit:
+    uses: bcgov/actions/.github/workflows/weekly-audit.yml@vX.Y.Z # Replace with latest release tag
+    permissions:
+      contents: read
+    with:
+      python_working_directory: backend
+      node_working_directory: frontend
+```
+
 ## Security & Token Permissions
 
 In alignment with security best practices, you should always declare minimum explicit permissions for the `GITHUB_TOKEN` in your workflows rather than granting wildcard/admin permissions. 

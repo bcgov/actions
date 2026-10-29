@@ -1,0 +1,45 @@
+name: Python Quality Gate
+
+on:
+  workflow_call:
+    inputs:
+      working_directory:
+        description: Python project directory, relative to the workspace
+        required: true
+        type: string
+      python_version:
+        description: Python version for actions/setup-python
+        default: "3.12"
+        type: string
+      min_coverage:
+        description: Minimum total coverage percent; below fails the gate
+        default: 85
+        type: number
+
+permissions: {}
+
+jobs:
+  test:
+    name: Python Coverage
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ inputs.python_version }}
+
+      - name: Install dependencies
+        run: |
+          pip install pytest pytest-cov
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+
+      - name: Test with coverage
+        run: pytest --cov=. --cov-fail-under=${{ inputs.min_coverage }}

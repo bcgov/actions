@@ -1,0 +1,58 @@
+name: Node Quality Gate
+
+on:
+  workflow_call:
+    inputs:
+      working_directory:
+        description: Node project directory, relative to the workspace
+        required: true
+        type: string
+      node_version:
+        description: Node version for actions/setup-node
+        default: "22"
+        type: string
+      min_coverage:
+        description: Minimum line coverage percent; below fails the gate
+        default: 80
+        type: number
+
+permissions: {}
+
+jobs:
+  test:
+    name: Node Coverage
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ inputs.node_version }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test with coverage
+        run: npm run test:coverage
+
+      # Jest and Vitest both write Istanbul's json-summary reporter output here
+      - name: Enforce coverage threshold
+        env:
+          MIN_COVERAGE: ${{ inputs.min_coverage }}
+        run: |
+          summary=coverage/coverage-summary.json
+          if [ ! -f "${summary}" ]; then
+            echo "::error::${summary} not found; enable the json-summary coverage reporter"
+            exit 1
+          fi
+          node -e '
+            const pct = require(process.argv[1]).total.lines.pct;
+            const min = Number(process.env.MIN_COVERAGE);
+            console.log(`Line coverage ${pct}% (minimum ${min}%)`);
+            if (pct < min) { console.log(`::error::Line coverage ${pct}% is below ${min}%`); process.exit(1); }
+          ' "$(pwd)/${summary}"
