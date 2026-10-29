@@ -222,6 +222,37 @@ list_fail "space-separated packages fail" "          packages: api frontend # co
 list_fail "space-separated package fails" '          package: "api frontend"'
 list_fail "comma-separated tags fail" "          tags: latest,prod"
 list_fail "space-separated keep_digests fail" "          keep_digests: sha256:aaa sha256:bbb"
+list_fail "space-separated components fail" "          components: backend frontend"
+list_fail "comma-separated hosts fail" "          hosts: a.example.com,b.example.com"
+list_fail "space-separated cleanup_name fails" "          cleanup_name: app db"
+list_fail "comma-separated remove_pvc fails" "          remove_pvc: data,logs"
+
+# cert-expiry strips '# comments' from each hosts line before reading the list.
+cat > "$fixture/.github/workflows/ok.yml" <<'EOF'
+name: lists
+on: push
+jobs:
+  certs:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: bcgov/actions-openshift/cert-expiry@v1
+        with:
+          hosts: |
+            a.example.com # production endpoint
+            b.example.com
+EOF
+set +e
+ACTIONLINT_CONFIG="$config" ACTIONLINT_WORKSPACE="$fixture" RUNNER_TEMP="$fixture" bash "$lint" >/tmp/pr-validate-lists.txt 2>&1
+status=$?
+set -e
+if [[ "$status" -eq 0 ]]; then
+  echo "ok  commented hosts block passes"
+  passed=$((passed + 1))
+else
+  echo "FAIL  commented hosts block passes"
+  cat /tmp/pr-validate-lists.txt
+  failed=$((failed + 1))
+fi
 
 # Reusable workflow with `with:` written before `uses:`.
 cat > "$fixture/.github/workflows/ok.yml" <<'EOF'

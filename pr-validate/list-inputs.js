@@ -11,8 +11,13 @@ const path = require('path');
 const { InputError, parseList } = require(path.join(__dirname, '..', 'shared', 'inputs.js'));
 
 // Every shared input read with parseList (diff-triggers, ghcr-cleanup,
-// image-tracker, and the builder/test-and-analyse/actions-openshift callers).
-const LIST_INPUTS = new Set(['triggers', 'packages', 'package', 'tags', 'keep_digests']);
+// image-tracker, and the builder/test-and-analyse callers) or with
+// actions-openshift's shared/inputs.sh input_list (cert-expiry, cleanup-pr,
+// sysdig-monitor).
+const LIST_INPUTS = new Set([
+  'triggers', 'packages', 'package', 'tags', 'keep_digests',
+  'components', 'hosts', 'cleanup_name', 'remove_pvc',
+]);
 const BCGOV = /bcgov\/actions(-openshift)?[/@]/;
 
 const indentOf = l => l.match(/^ */)[0].length;
@@ -77,6 +82,8 @@ function checkFile(file) {
         else raw = raw.replace(/(['"])\s+#.*$/, '$1');
         value = unquote(raw.trim());
       }
+      // cert-expiry drops each line's '# comment' before reading hosts.
+      if (name === 'hosts') value = value.split('\n').map(v => v.replace(/#.*$/, '').trim()).join('\n');
       // ${{ }} expressions are resolved at runtime; check the other lines only.
       value = value.split('\n').filter(v => !v.includes('${{')).join('\n');
       try {
