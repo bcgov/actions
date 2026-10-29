@@ -47,6 +47,8 @@ permissions:
 | `semgrep` | `false` | |
 | `semgrep_config` | `p/default` | |
 | `semgrep_fail` | `false` | Findings warn unless `true` |
+| `min_coverage` | _(empty)_ | Off. Line coverage floor, 0-100; see [Quality gates](#quality-gates) |
+| `audit_artifacts` | `false` | Upload Semgrep and coverage reports as an artifact |
 | `sonar_token` | _(empty)_ | Empty skips Sonar with a warning (fork PRs get no secrets) |
 | `triggers` | _(omitted)_ | When omitted, tests always run |
 | `base` | PR base branch, or `HEAD^` on push | Base to diff triggers against |
@@ -115,6 +117,11 @@ permissions:
     # Fail on findings. Default false: findings are warnings
     semgrep_fail: false
 
+    # Fail below this line coverage percent (0-100). Empty (default) is off; see Quality gates below.
+    min_coverage: ""
+    # Upload Semgrep and coverage reports as a workflow artifact. Default: false
+    audit_artifacts: false
+
     # Package manager caching. Optional; auto-detected from project lockfiles
     # (npm/yarn/pnpm for Node, maven/gradle/sbt for Java, pip/poetry/pipenv for Python).
     # Set to 'none' to manually disable caching.
@@ -147,7 +154,7 @@ For Java projects, it is recommended to use the native Maven Sonar plugin. The a
 jobs:
   tests:
     name: Java Tests
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - uses: bcgov/actions/test-and-analyse@vX.Y.Z
         with:
@@ -172,7 +179,7 @@ The action automatically parses JUnit XML files found in your project to generat
 jobs:
   tests:
     name: Python Tests
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - uses: bcgov/actions/test-and-analyse@vX.Y.Z
         with:
@@ -195,7 +202,7 @@ No triggers are provided so tests will always run.  SonarCloud is skipped, and d
 jobs:
   tests:
     name: Test and Analyze
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - uses: bcgov/actions/test-and-analyse@vX.Y.Z
         with:
@@ -216,7 +223,7 @@ Test and analyze projects in multiple directories in parallel.  This time `repos
 jobs:
   tests:
     name: Test and Analyze
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         working_directory: [backend, frontend]
@@ -255,6 +262,7 @@ jobs:
 | triggered | Whether the action was triggered based on path changes (true/false) |
 | semgrep_findings | Number of Semgrep findings (empty when the scan did not run) |
 | semgrep_sarif | Path to the Semgrep SARIF report (empty when the scan did not run) |
+| coverage | Line coverage percent read for `min_coverage` (empty when it is off) |
 
 Has the action been triggered by path changes? \[true|false\]
 
@@ -526,6 +534,63 @@ The SARIF report is not uploaded by this action, so no extra permission is neede
     sarif_file: ${{ steps.test.outputs.semgrep_sarif }}
     category: semgrep
 ```
+
+# Quality gates
+
+PR quality gates are separate jobs that each call this action: one Semgrep job for the repository and one coverage job per package. Each job is its own required check, so a team turns gates on one at a time. This replaces the standalone `gate-security.yml`, `gate-python.yml`, `gate-node.yml` and `weekly-audit.yml` reusable workflows proposed in [#334](https://github.com/bcgov/actions/pull/334), which was closed unmerged.
+
+## Coverage floor (`min_coverage`)
+
+Empty (default) is off. When set, after `commands` pass the action reads the line coverage total from the report they wrote in `working_directory` and fails with an error when the report is missing or the total is below the floor. Your `commands` must write the report:
+
+| `language` | Report read | Write it with |
+| --- | --- | --- |
+| `node` | `coverage/coverage-summary.json` (`total.lines.pct`) | Jest `--coverage --coverageReporters=json-summary`, Vitest `--coverage.reporter=json-summary` |
+| `python` | `coverage.xml` (Cobertura `line-rate`) | `pytest --cov --cov-report=xml` |
+| `java` | `target/site/jacoco/jacoco.xml`, else `build/reports/jacoco/test/jacocoTestReport.xml` | Maven `jacoco:report`, Gradle `jacocoTestReport` |
+
+A tool's own threshold (`--cov-fail-under`, Jest `coverageThreshold`) still works inside `commands`; `min_coverage` gives every language the same gate and the `coverage` output.
+
+## Example
+
+```yaml
+jobs:
+  semgrep:
+    name: Semgrep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: bcgov/actions/test-and-analyse@vX.Y.Z
+        with:
+          commands: echo "Semgrep only"
+          working_directory: .
+          supply_scan: false
+          unused_deps: off
+          semgrep: true
+          semgrep_fail: true
+
+  tests:
+    name: Tests (${{ matrix.dir }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dir: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: bcgov/actions/test-and-analyse@vX.Y.Z
+        with:
+          commands: |
+            npm ci
+            npm run test:cov -- --coverage.reporter=json-summary
+          working_directory: ${{ matrix.dir }}
+          min_coverage: 80
+          sonar_token: ${{ secrets.SONAR_TOKEN }}
+          triggers: ${{ matrix.dir }}/
+```
+
+## Scheduled audits (`audit_artifacts`)
+
+`audit_artifacts: true` uploads the Semgrep SARIF/JSON and any coverage reports (`coverage/`, `coverage.xml`, `htmlcov/`, JaCoCo) from `working_directory` as an artifact named `audit-<job>-<working_directory>`. Missing files are skipped. Use it from a `schedule:` workflow with the same jobs, usually with `semgrep_fail: false` and no `min_coverage` so the audit reports instead of failing.
 
 # Feedback
 

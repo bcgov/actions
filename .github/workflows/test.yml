@@ -1403,6 +1403,7 @@ jobs:
           supply_scan: 'false'
           semgrep: 'true'
           semgrep_config: test-and-analyse/fixtures/semgrep/rules.yml
+          audit_artifacts: 'true'
 
       - name: Findings fail with semgrep_fail
         id: fail
@@ -1450,6 +1451,40 @@ jobs:
           [ "$FAIL_OUTCOME" = "failure" ] || { echo "❌ semgrep_fail: true should fail on findings"; exit 1; }
           [ -z "$OFF_FINDINGS" ] || { echo "❌ Scan should not run when semgrep is off"; exit 1; }
           echo "✅ Semgrep: clean passes, findings warn, semgrep_fail fails, off by default"
+
+      - name: Coverage meets min_coverage
+        id: cov_pass
+        uses: $/test-and-analyse
+        with:
+          commands: echo "Coverage test"
+          working_directory: test-and-analyse/fixtures/min-coverage/node
+          node_version: '24'
+          cache: none
+          unused_deps: off
+          supply_scan: 'false'
+          min_coverage: '80'
+
+      - name: Coverage below min_coverage fails
+        id: cov_fail
+        continue-on-error: true
+        uses: $/test-and-analyse
+        with:
+          commands: echo "Coverage test"
+          working_directory: test-and-analyse/fixtures/min-coverage/node
+          node_version: '24'
+          cache: none
+          unused_deps: off
+          supply_scan: 'false'
+          min_coverage: '81'
+
+      - name: Verify min_coverage behaviour
+        env:
+          PASS_COVERAGE: ${{ steps.cov_pass.outputs.coverage }}
+          FAIL_OUTCOME: ${{ steps.cov_fail.outcome }}
+        run: |
+          [ "$PASS_COVERAGE" = "80" ] || { echo "❌ coverage output should be 80, got '$PASS_COVERAGE'"; exit 1; }
+          [ "$FAIL_OUTCOME" = "failure" ] || { echo "❌ coverage below min_coverage should fail"; exit 1; }
+          echo "✅ min_coverage: floor met passes, below fails"
 
   # ─── GET PR ────────────────────────────────────────────────────────────────
 

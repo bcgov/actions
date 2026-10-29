@@ -91,6 +91,17 @@ inputs:
     description: "Fail the action when Semgrep reports findings (true/false). Default false: findings are warnings"
     default: "false"
 
+  min_coverage:
+    description: >-
+      Minimum line coverage percent (0-100). Empty (default) is off. When set, the
+      action fails unless commands wrote a coverage report at or above it:
+      node coverage/coverage-summary.json, python coverage.xml, java JaCoCo XML
+    default: ""
+
+  audit_artifacts:
+    description: "Upload Semgrep SARIF/JSON and coverage reports as a workflow artifact (true/false), e.g. for scheduled audits"
+    default: "false"
+
   ### Usually a bad idea / not recommended
   base:
     description: Base to diff triggers against (branch, tag, or commit SHA). Empty uses the diff-triggers default (PR base branch, or HEAD^ on push).
@@ -117,6 +128,9 @@ outputs:
   semgrep_sarif:
     description: Path to the Semgrep SARIF report (empty when the scan did not run)
     value: ${{ steps.semgrep.outputs.semgrep_sarif }}
+  coverage:
+    description: Line coverage percent read for min_coverage (empty when min_coverage is off)
+    value: ${{ steps.coverage.outputs.coverage }}
 
 runs:
   using: composite
@@ -131,6 +145,7 @@ runs:
         INPUT_SEMGREP_FAIL: ${{ inputs.semgrep_fail }}
         INPUT_UNUSED_DEPS: ${{ inputs.unused_deps }}
         INPUT_LANGUAGE: ${{ inputs.language }}
+        INPUT_AUDIT_ARTIFACTS: ${{ inputs.audit_artifacts }}
         SHARED_INPUTS: ${{ github.action_path }}/../shared/inputs.js
         HAS_SONAR_TOKEN: ${{ inputs.sonar_token != '' }}
       run: |
@@ -140,11 +155,13 @@ runs:
         semgrep_fail=$(node "$SHARED_INPUTS" bool semgrep_fail false)
         unused_deps=$(node "$SHARED_INPUTS" enum unused_deps off,warn,error warn)
         language=$(node "$SHARED_INPUTS" enum language node,java,python node)
+        audit_artifacts=$(node "$SHARED_INPUTS" bool audit_artifacts false)
         parsed="supply_scan=$supply_scan
         semgrep=$semgrep
         semgrep_fail=$semgrep_fail
         unused_deps=$unused_deps
-        language=$language"
+        language=$language
+        audit_artifacts=$audit_artifacts"
         echo "$parsed" | sed 's/^ *//' >> "$GITHUB_OUTPUT"
         if [ "${RUNNER_DEBUG:-}" = "1" ]; then
           echo "Parsed inputs:"; echo "$parsed" | sed 's/^ */  /'
@@ -438,6 +455,18 @@ runs:
         $MVN -B org.apache.maven.plugins:maven-dependency-plugin:3.11.0:analyze -DfailOnWarning=false 2>&1 | tee dependency-analyze.log
         set -e
 
+    # Coverage floor, only when the tests passed (a failed run already fails)
+    - name: Coverage Gate
+      id: coverage
+      if: steps.final_triggered.outputs.triggered == 'true' && inputs.min_coverage != '' && env.TEST_FAIL_SIGNAL != 'true'
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      env:
+        INPUT_MIN_COVERAGE: ${{ inputs.min_coverage }}
+        INPUT_LANGUAGE: ${{ steps.inputs.outputs.language }}
+      run: |
+        "${{ github.action_path }}/coverage.sh"
+
     - name: Semgrep Scan
       id: semgrep
       if: steps.final_triggered.outputs.triggered == 'true' && steps.inputs.outputs.semgrep == 'true' && (success() || failure())
@@ -463,3 +492,31 @@ runs:
         unused_deps: ${{ steps.inputs.outputs.unused_deps }}
         knip_output: knip-output.json
         language: ${{ steps.inputs.outputs.language }}
+
+    # Reports for scheduled audits; missing files are skipped
+    - name: Collect Audit Artifact
+      id: audit
+      if: steps.final_triggered.outputs.triggered == 'true' && steps.inputs.outputs.audit_artifacts == 'true' && (success() || failure())
+      shell: bash
+      env:
+        WD: ${{ inputs.working_directory }}
+        SEMGREP_SARIF: ${{ steps.semgrep.outputs.semgrep_sarif }}
+      run: |
+        slug="$(printf '%s' "$WD" | tr -c 'A-Za-z0-9._-' '-' | sed 's/^-*//; s/-*$//')"
+        echo "name=audit-${GITHUB_JOB}-${slug:-root}" >> "$GITHUB_OUTPUT"
+        {
+          echo "path<<AUDIT_EOF"
+          [ -z "$SEMGREP_SARIF" ] || echo "${SEMGREP_SARIF%/*}/semgrep.*"
+          for p in coverage/ coverage.xml htmlcov/ target/site/jacoco/ build/reports/jacoco/; do
+            echo "${WD}/${p}"
+          done
+          echo "AUDIT_EOF"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Upload Audit Artifact
+      if: steps.audit.outcome == 'success'
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ steps.audit.outputs.name }}
+        path: ${{ steps.audit.outputs.path }}
+        if-no-files-found: ignore

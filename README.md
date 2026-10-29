@@ -82,6 +82,7 @@ Universal Test and Analyze with Triggers, SonarCloud, and Multi-Language Support
 - **Node.js**: Testing, dependency analysis with Knip, and safe-chain supply scanning (default).
 - **Java**: Maven/Gradle tests and SonarCloud analysis (using input `language: java`).
 - **Python**: Pytest runs and JUnit XML parsing (using input `language: python`).
+- **Quality gates**: Semgrep (`semgrep_fail`) and a line coverage floor (`min_coverage`) make it a hard PR gate; run one job per package. See [Quality gates](./test-and-analyse/README.md#quality-gates).
 
 ```yaml
 - name: Test and Analyze

@@ -450,6 +450,37 @@ assert_java_version "" "" "$TMP_DIR/jv-pom-prop" "$TMP_DIR/jv-pom-prop" "17|" "a
 assert_java_version "" "" "$TMP_DIR/jv-gradle-import" "$TMP_DIR/jv-gradle-import" "17|" "auto-discover: skips JavaVersion import then finds VERSION_17"
 assert_java_version "" "" "$TMP_DIR/jv-docker-multistage" "$TMP_DIR/jv-docker-multistage" "17|" "auto-discover: skips non-Java FROM then finds temurin:17"
 
+# ==============================================================================
+# min_coverage (coverage.sh)
+# ==============================================================================
+COVERAGE_SCRIPT="${SCRIPT_DIR}/../coverage.sh"
+COVERAGE_FIXTURES="${SCRIPT_DIR}/../fixtures/min-coverage"
+
+assert_coverage() {
+    local lang="$1" dir="$2" min="$3" expect="$4" name="$5"
+    local rc=0
+    (cd "${COVERAGE_FIXTURES}/${dir}" && INPUT_LANGUAGE="$lang" INPUT_MIN_COVERAGE="$min" GITHUB_OUTPUT=/dev/null bash "$COVERAGE_SCRIPT" >/dev/null 2>&1) || rc=$?
+    if { [[ "$expect" == pass ]] && [[ "$rc" -eq 0 ]]; } || { [[ "$expect" == fail ]] && [[ "$rc" -ne 0 ]]; }; then
+        echo "✓ $name"
+        passed=$((passed + 1))
+    else
+        echo "✗ $name (exit ${rc}, expected ${expect})"
+        failed=$((failed + 1))
+    fi
+}
+
+echo ""
+echo "Running min_coverage unit tests..."
+assert_coverage node node 80 pass "node: 80% meets 80"
+assert_coverage node node 80.5 fail "node: 80% below 80.5"
+assert_coverage python python 75 pass "python: Cobertura line-rate 0.75 meets 75"
+assert_coverage python python 76 fail "python: 75% below 76"
+assert_coverage java java 90 pass "java: report-level JaCoCo LINE counter (90%) meets 90"
+assert_coverage java java 91 fail "java: 90% below 91"
+assert_coverage node missing 1 fail "missing report fails"
+assert_coverage node node abc fail "non-numeric min_coverage fails"
+assert_coverage node node 101 fail "min_coverage above 100 fails"
+
 # Reporter is a node24 action and reads Knip output from dir, not the workspace root.
 ACTION_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 if ! grep -q 'uses: \$/test-and-analyse/reporter' "${ACTION_ROOT}/action.yml"; then
