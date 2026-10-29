@@ -82,6 +82,8 @@ function checkFile(file) {
         else raw = raw.replace(/(['"])\s+#.*$/, '$1');
         value = unquote(raw.trim());
       }
+      // cert-expiry drops each line's '# comment' before reading hosts.
+      if (name === 'hosts') value = value.split('\n').map(v => v.replace(/#.*$/, '').trim()).join('\n');
       // ${{ }} expressions are resolved at runtime; check the other lines only.
       value = value.split('\n').filter(v => !v.includes('${{')).join('\n');
       try {
