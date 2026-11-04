@@ -38,6 +38,17 @@ Removed inputs: delete the key.
 
 List inputs take one item per line, or a single value (see [shared/README.md](../shared/README.md)).
 
-## Downstream
+## bcgov/actions-openshift
 
-[bcgov/actions-openshift](https://github.com/bcgov/actions-openshift) runs a copy of the same check and links to this guide.
+[bcgov/actions-openshift](https://github.com/bcgov/actions-openshift) runs a copy of the same check (`shared/assert-known.sh`) and links here; there is no second guide.
+
+### v0.6
+
+| Action | Old input | New input |
+|---|---|---|
+| crunchy | `diff_branch` | `base` |
+| deployer | `ref` | `base` |
+| oc-runner | `diff_branch` | `base` |
+| oc-runner | `verbose` | `debug` |
+
+Removed: `login_attempts` (deployer, oc-runner).
