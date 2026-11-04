@@ -1,7 +1,7 @@
 const { execFileSync } = require('child_process');
 const fs = require('fs');
 
-const { InputError, getInput, getToken, isDebug, parseList, stripQuotes } = require('../shared/inputs.js');
+const { InputError, getInput, getToken, isDebug, parseList, stripQuotes, assertKnownActionInputs } = require('../shared/inputs.js');
 
 /**
  * Parse trigger paths with the shared list parser (one path per line, or a
@@ -350,6 +350,13 @@ async function main() {
 }
 
 if (require.main === module) {
+  // Unknown or renamed inputs fail here; GitHub only warns (shared/README.md)
+  try {
+    assertKnownActionInputs(__dirname);
+  } catch (e) {
+    console.log(e instanceof InputError ? e.message : `::error::${e.message}`);
+    process.exit(1);
+  }
   main().catch(err => {
     console.error(`::error::${err.message || err}`);
     process.exit(1);

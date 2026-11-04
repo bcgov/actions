@@ -168,7 +168,153 @@ function getToken(env = process.env) {
   return getInput('token', env) || String(env.GITHUB_TOKEN ?? '').trim();
 }
 
+
+/** Migration guide for renamed and removed inputs. */
+const MIGRATION_DOCS = 'https://github.com/bcgov/actions/blob/main/docs/MIGRATION.md';
+
+/**
+ * Inputs renamed or removed in v0.11, per action: old name -> new name, or
+ * null when the input was removed with no replacement. Bridge for one major:
+ * the map only improves the error text (old names are never accepted).
+ * Estimated removal: v2.
+ */
+const RENAMED = {
+  builder: {
+    build_file: 'file',
+    build_context: 'context',
+    ref: 'base',
+    debug: null,
+    sbom: null,
+    repository: null,
+    username: null,
+  },
+  'diff-triggers': { ref: 'base', debug: null, annotations: null },
+  'image-tracker': { package: 'packages', dir: 'working_directory', registry: null, debug: null },
+  'pr-description-add': { add_markdown: 'markdown', debug: null },
+  'pr-validate': { add_markdown: 'markdown', conventional_commits: null },
+  'test-and-analyse': {
+    dir: 'working_directory',
+    ref: 'base',
+    dep_scan: 'unused_deps',
+    debug: null,
+    node_version_file: null,
+    java_version_file: null,
+    python_version_file: null,
+    repository: null,
+    branch: null,
+    checkout_path: null,
+    require_sonar: null,
+  },
+  'workflow-notifier': { debug: null, labels: null, assign: null },
+  'workflow-results': { summary: null, annotations: null, debug: null },
+};
+
+/** Runner env form of an input name: INPUT_<NAME>, spaces as `_`. */
+const envKey = name => name.replace(/ /g, '_').toUpperCase();
+
+/**
+ * Declared input names from an action.yml (top-level `inputs:` block).
+ * A small line parser so actions need no YAML dependency.
+ * @param {string} yml
+ * @returns {string[]}
+ */
+function declaredInputs(yml) {
+  const names = [];
+  let inBlock = false;
+  let indent = -1;
+  for (const line of String(yml).split(/\r?\n/)) {
+    if (/^inputs:\s*(#.*)?$/.test(line)) {
+      inBlock = true;
+      continue;
+    }
+    if (!inBlock || /^\s*(#.*)?$/.test(line)) continue;
+    if (/^\S/.test(line)) break;
+    const m = line.match(/^(\s+)(['"]?)([^'":#\s][^'":#]*?)\2:\s*(#.*)?$/) || line.match(/^(\s+)(['"]?)([^'":#\s][^'":#]*?)\2:\s/);
+    if (!m) continue;
+    if (indent < 0) indent = m[1].length;
+    if (m[1].length === indent) names.push(m[3].trim());
+  }
+  return names;
+}
+
+/**
+ * Error text for inputs the action does not declare. Names each bad key, the
+ * replacement when known, and links the action README and MIGRATION.md.
+ * @param {string} action - action directory name, e.g. builder
+ * @param {string[]} unknown - bad keys as the caller wrote them
+ * @param {string[]} declared
+ * @param {{repo?: string, renamed?: Record<string, Record<string, string|null>>}} [opts]
+ * @returns {string}
+ */
+function unknownInputsMessage(action, unknown, declared, opts = {}) {
+  const repo = opts.repo || 'bcgov/actions';
+  const renamed = (opts.renamed || RENAMED)[action] || {};
+  const lines = [`::error title=${action}: unknown input::Unknown input(s) for ${action}: ${unknown.join(', ')}`];
+  for (const key of unknown) {
+    const hit = Object.keys(renamed).find(k => k.toLowerCase() === key.toLowerCase());
+    if (hit && renamed[hit]) lines.push(`  ${key}: renamed to ${renamed[hit]}`);
+    else if (hit) lines.push(`  ${key}: removed (no replacement)`);
+    else lines.push(`  ${key}: not an input of ${action}`);
+  }
+  lines.push(`Inputs: ${declared.join(', ')}`);
+  lines.push(`Docs: https://github.com/${repo}/blob/main/${action}/README.md`);
+  lines.push(`Migration: ${MIGRATION_DOCS}`);
+  return lines.join('%0A');
+}
+
+/**
+ * Throw InputError when the caller passed inputs the action does not declare.
+ * GitHub only warns ("Unexpected input(s)") and keeps going, so a renamed
+ * input is silently ignored without this check.
+ * @param {string} action
+ * @param {string[]} given - input names the caller passed
+ * @param {string[]} declared - names from action.yml
+ * @param {object} [opts] - see unknownInputsMessage
+ */
+function assertKnownInputs(action, given, declared, opts) {
+  const known = new Set(declared.map(envKey));
+  const unknown = [...new Set(given)].filter(g => !known.has(envKey(g)));
+  if (unknown.length) throw new InputError(unknownInputsMessage(action, unknown, declared, opts));
+}
+
+/**
+ * Input names the caller passed. Composite actions set INPUTS_JSON to
+ * `${{ toJSON(inputs) }}` (their own steps set INPUT_* vars, so the env is
+ * not a reliable source); node actions read INPUT_* from the env, which the
+ * runner sets for every `with:` key, declared or not.
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {string[]}
+ */
+function givenInputs(env = process.env) {
+  if (env.INPUTS_JSON) return Object.keys(JSON.parse(env.INPUTS_JSON) || {});
+  return Object.keys(env)
+    .filter(k => k.startsWith('INPUT_'))
+    .map(k => k.slice(6).toLowerCase());
+}
+
+/**
+ * Check this action's inputs against its action.yml. Node actions call this
+ * first: `assertKnownActionInputs(__dirname)`.
+ * @param {string} actionDir - directory holding action.yml
+ * @param {NodeJS.ProcessEnv} [env]
+ */
+function assertKnownActionInputs(actionDir, env = process.env) {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const file = ['action.yml', 'action.yaml'].map(f => path.join(actionDir, f)).find(f => fs.existsSync(f));
+  if (!file) throw new Error(`no action.yml in ${actionDir}`);
+  const action = path.basename(path.resolve(actionDir));
+  assertKnownInputs(action, givenInputs(env), declaredInputs(fs.readFileSync(file, 'utf8')));
+}
+
 module.exports = {
+  MIGRATION_DOCS,
+  RENAMED,
+  assertKnownActionInputs,
+  assertKnownInputs,
+  declaredInputs,
+  givenInputs,
+  unknownInputsMessage,
   InputError,
   getInput,
   getToken,
@@ -188,6 +334,8 @@ module.exports = {
  *   enum <name> <a,b,c> <dflt>  the chosen value
  *   debug                       true or false
  *   token                       the token input, else GITHUB_TOKEN
+ *   assert-known <action_dir>   fail on inputs action.yml does not declare
+ *                               (composite: set INPUTS_JSON: ${{ toJSON(inputs) }})
  */
 if (require.main === module) {
   const [cmd, name, a, b] = process.argv.slice(2);
@@ -198,6 +346,7 @@ if (require.main === module) {
     else if (cmd === 'enum') out = parseEnum(getInput(name), name, a.split(','), b);
     else if (cmd === 'debug') out = String(isDebug());
     else if (cmd === 'token') out = getToken();
+    else if (cmd === 'assert-known') assertKnownActionInputs(name);
     else throw new Error(`unknown command: ${cmd}`);
     if (out) process.stdout.write(`${out}\n`);
   } catch (e) {

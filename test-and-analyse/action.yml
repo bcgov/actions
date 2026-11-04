@@ -121,6 +121,13 @@ outputs:
 runs:
   using: composite
   steps:
+    # Unknown or renamed inputs fail here; GitHub only warns (shared/README.md)
+    - name: Check inputs
+      shell: bash
+      env:
+        INPUTS_JSON: ${{ toJSON(inputs) }}
+      run: node "$GITHUB_ACTION_PATH/../shared/inputs.js" assert-known "$GITHUB_ACTION_PATH"
+
     # Shared input rules (shared/README.md): bad values fail here with an annotation
     - name: Parse Inputs
       id: inputs

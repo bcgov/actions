@@ -466,7 +466,7 @@ jobs:
         run: node diff-triggers/self-check.js
 
       - name: Run Shared Input Tests
-        run: node --test shared/tests/inputs.test.js
+        run: node --test shared/tests/inputs.test.js shared/tests/assert-known.test.js
 
       # Local commit with a known change, so results do not depend on what the PR touched
       - name: Commit Fixture Change
@@ -1453,6 +1453,57 @@ jobs:
 
   # ─── GET PR ────────────────────────────────────────────────────────────────
 
+  # ─── UNKNOWN INPUTS ────────────────────────────────────────────────────────
+  # GitHub only warns on undeclared `with:` keys. These steps pass renamed or
+  # unknown inputs and require the action to fail at its input check.
+  test-unknown-inputs:
+    name: Test Unknown Inputs Fail Loud
+    needs: [filter]
+    if: contains(fromJSON(needs.filter.outputs.changes), 'builder') || contains(fromJSON(needs.filter.outputs.changes), 'image-tracker') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Shared check unit tests
+        run: node --test shared/tests/assert-known.test.js
+
+      - name: Builder with renamed build_file (composite)
+        id: builder
+        continue-on-error: true
+        uses: $/builder
+        with:
+          package: builder-selftest
+          build_file: builder/tests/Dockerfile
+          build_context: builder/tests
+          tags: ${{ github.event.number }}-unknown-input
+
+      - name: Image tracker with renamed package (node)
+        id: tracker
+        continue-on-error: true
+        uses: $/image-tracker
+        with:
+          package: builder-selftest
+
+      - name: Scan URL with unknown key (composite)
+        id: scan
+        continue-on-error: true
+        uses: $/scan-url
+        with:
+          url: https://example.com
+          not_an_input: x
+
+      - name: Require failures
+        env:
+          BUILDER: ${{ steps.builder.outcome }}
+          TRACKER: ${{ steps.tracker.outcome }}
+          SCAN: ${{ steps.scan.outcome }}
+        run: |
+          echo "builder=$BUILDER image-tracker=$TRACKER scan-url=$SCAN"
+          [ "$BUILDER" = failure ] && [ "$TRACKER" = failure ] && [ "$SCAN" = failure ] || {
+            echo "::error::An action accepted an unknown or renamed input"; exit 1; }
+
   results:
     name: PR Results
     needs:
@@ -1475,6 +1526,7 @@ jobs:
       - test-test-and-analyse
       - test-test-and-analyse-shallow
       - test-test-and-analyse-semgrep
+      - test-unknown-inputs
     if: always()
     runs-on: ubuntu-26.04
     steps:

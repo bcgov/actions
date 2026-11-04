@@ -79,6 +79,13 @@ outputs:
 runs:
   using: composite
   steps:
+    # Unknown or renamed inputs fail here; GitHub only warns (shared/README.md)
+    - name: Check inputs
+      shell: bash
+      env:
+        INPUTS_JSON: ${{ toJSON(inputs) }}
+      run: node "$GITHUB_ACTION_PATH/../shared/inputs.js" assert-known "$GITHUB_ACTION_PATH"
+
     # Publish target follows the workflow context: fork push → fork GHCR;
     # fork pull_request → head-repo GHCR (read-only here; push on fork push).
     - id: vars

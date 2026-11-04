@@ -12,7 +12,7 @@ const MANIFEST_ACCEPT = [
   'application/vnd.docker.distribution.manifest.v2+json'
 ].join(', ')
 
-const {InputError, getToken, parseBool, parseList} = require('../shared/inputs.js')
+const {InputError, getToken, parseBool, parseList, assertKnownActionInputs} = require('../shared/inputs.js')
 
 function parseInputs(env) {
   const packages = parseList(env.INPUT_PACKAGES, 'packages')
@@ -383,6 +383,13 @@ async function main(env = process.env) {
 }
 
 if (require.main === module) {
+  // Unknown or renamed inputs fail here; GitHub only warns (shared/README.md)
+  try {
+    assertKnownActionInputs(__dirname)
+  } catch (e) {
+    console.log(e instanceof InputError ? e.message : `::error::${e.message}`)
+    process.exit(1)
+  }
   main().catch(err => {
     console.log(err instanceof InputError ? err.message : `::error::${err.message}`)
     process.exit(1)
