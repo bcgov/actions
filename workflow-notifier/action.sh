@@ -139,7 +139,7 @@ workflow_file() {
 # Changed files of the PR behind this run: the event's PR, else the merged PR for GITHUB_SHA
 pr_changed_files() {
   local num="$PR_NUM"
-  if [ -z "$num" ] && [ -n "${GITHUB_EVENT_PATH:-}" ] && [ -f "${GITHUB_EVENT_PATH}" ]; then
+  if [ -z "$num" ] && [[ "$EVENT_NAME" == pull_request* ]] && [ -n "${GITHUB_EVENT_PATH:-}" ] && [ -f "${GITHUB_EVENT_PATH}" ]; then
     num="$(jq -r '.pull_request.number // empty' "$GITHUB_EVENT_PATH" 2>/dev/null || true)"
   fi
   if [ -z "$num" ] && [ "$EVENT_NAME" == "push" ] && [ -n "${GITHUB_REPOSITORY:-}" ] && [ -n "${GITHUB_SHA:-}" ] && [ -n "${INPUT_TOKEN:-}" ]; then

@@ -181,6 +181,8 @@ run_action() {
       TMP_DIR="${TMP_DIR}" \
       GITHUB_OUTPUT="$out_file" \
       GITHUB_EVENT_NAME="push" \
+      GITHUB_EVENT_PATH="" \
+      GITHUB_STEP_SUMMARY="" \
       "$@" \
       bash "$ACTION_SH" 2>&1
   )
@@ -771,6 +773,14 @@ test_match_changed_workflow_files() {
   assert_not_contains "$out" "app1" "changed: last match wins over *"
 }
 
+test_match_changed_pull_request_event() {
+  echo '{"pull_request":{"number":88}}' > "${TMP_DIR}/event.json"
+  local out
+  out=$(run_match INPUT_CODEOWNERS_MATCH="changed" GITHUB_EVENT_NAME="pull_request" GITHUB_EVENT_PATH="${TMP_DIR}/event.json" MOCK_PR_FILES='src/a.js\n')
+  assert_contains "$out" "mode=changed (PR #88, 1 files)" "changed: pull_request event uses its PR"
+  assert_contains "$out" "Assignees: app1,app2" "changed: pull_request event picks owners"
+}
+
 test_match_changed_falls_back_to_workflow() {
   local out
   out=$(run_match INPUT_CODEOWNERS_MATCH="changed" GITHUB_EVENT_NAME="schedule")
@@ -832,6 +842,7 @@ test_node_matcher() {
 test_match_all_default
 test_match_changed_app_files
 test_match_changed_workflow_files
+test_match_changed_pull_request_event
 test_match_changed_falls_back_to_workflow
 test_match_workflow
 test_match_rejects_bad_value
