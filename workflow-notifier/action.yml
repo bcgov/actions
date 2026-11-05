@@ -22,6 +22,9 @@ inputs:
   notify_codeowners:
     description: "When to notify repository CODEOWNERS on failure: always, fallback (only when no author or merger was found) or never"
     default: "fallback"
+  codeowners_match:
+    description: "Which CODEOWNERS rules pick owners: all (every handle in the file), changed (last matching rule for the PR's changed files; falls back to workflow without a PR) or workflow (last matching rule for the failing workflow file)"
+    default: "all"
   dry_run:
     description: "If true, logs the issue create or comment without calling it"
     default: "false"
@@ -46,6 +49,7 @@ runs:
         INPUT_BODY: "${{ inputs.body }}"
         INPUT_NOTIFY_AUTHOR: "${{ inputs.notify_author }}"
         INPUT_NOTIFY_CODEOWNERS: "${{ inputs.notify_codeowners }}"
+        INPUT_CODEOWNERS_MATCH: "${{ inputs.codeowners_match }}"
         INPUT_EVENT_NAME: "${{ github.event_name }}"
         INPUT_DRY_RUN: "${{ inputs.dry_run }}"
       run: |

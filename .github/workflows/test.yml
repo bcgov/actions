@@ -1143,6 +1143,7 @@ jobs:
           assert action['inputs']['notify_author'].get('default') == 'true', 'notify_author default must be true'
           assert 'notify_codeowners' in action['inputs'], 'inputs must declare notify_codeowners'
           assert action['inputs']['notify_codeowners'].get('default') == 'fallback', 'notify_codeowners default must be fallback'
+          assert action['inputs']['codeowners_match'].get('default') == 'all', 'codeowners_match default must be all'
           assert 'outputs' not in action, 'workflow-notifier has no outputs'
           "
 

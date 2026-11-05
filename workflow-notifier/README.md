@@ -24,9 +24,31 @@ The action reads `CODEOWNERS` from the **job workspace**, not from the action bu
 | `body` | Issue body (pre-filled with workflow run URL if omitted) | | No |
 | `notify_author` | Whether to notify the triggering author/merger on failure | `"true"` | No |
 | `notify_codeowners` | When to notify repository CODEOWNERS on failure: `always`, `fallback` or `never`. By default (`fallback`), CODEOWNERS are only alerted if no human author/operator was resolved (e.g. scheduled cron runs). `always` always includes CODEOWNERS; `never` never does. | `"fallback"` | No |
+| `codeowners_match` | Which CODEOWNERS rules pick owners: `all`, `changed` or `workflow` (see [CODEOWNERS matching](#codeowners-matching)). | `"all"` | No |
 | `dry_run` | If true, logs the issue create or comment without calling it | `"false"` | No |
 
 Everyone `notify_author` and `notify_codeowners` select is assigned on create (up to 10); set `notify_author: false` and `notify_codeowners: never` to assign nobody. The action has no outputs.
+
+## CODEOWNERS matching
+
+The action reads the first CODEOWNERS file it finds, in GitHub's order: `.github/CODEOWNERS`, `CODEOWNERS`, `docs/CODEOWNERS`. `#` starts a comment anywhere on a line. Patterns follow GitHub's gitignore-style rules (`*`, `**`, `?`, trailing `/`, last match wins, a rule with no owners unsets ownership); `!` negation and `[ ]` ranges are not supported by GitHub CODEOWNERS and are matched literally.
+
+| `codeowners_match` | Owners picked |
+|---|---|
+| `all` (default) | Every `@user` in the file, ignoring paths. |
+| `changed` | For each file changed by the run's pull request (the event's PR, or the PR merged as `GITHUB_SHA` on push), the owners of the last matching rule, as GitHub does. With no PR (e.g. `schedule`, `workflow_dispatch`), falls back to `workflow`. Needs `pull-requests: read`. |
+| `workflow` | Owners of the last rule matching the failing workflow file (e.g. `.github/workflows/merge.yml`). |
+
+Team owners (`@org/team`) cannot be issue assignees, so they are skipped and logged; no team member or org is assigned in their place. Email owners are ignored. The log and job summary show the CODEOWNERS file, the mode, the users selected and any team or email owners skipped.
+
+```yaml
+- name: Notify on Failure
+  if: failure()
+  uses: bcgov/actions/workflow-notifier@vX.Y.Z
+  with:
+    notify_codeowners: always
+    codeowners_match: changed
+```
 
 ## Usage
 

@@ -1,0 +1,26 @@
+[
+  {
+    "sha": "bbcd538c8e72b8c175046e27cc8f907076331401",
+    "filename": ".github/workflows/pr.yml",
+    "status": "modified",
+    "additions": 3,
+    "deletions": 1,
+    "changes": 4,
+    "blob_url": "https://github.com/bcgov/actions/blob/abc123/.github/workflows/pr.yml",
+    "raw_url": "https://github.com/bcgov/actions/raw/abc123/.github/workflows/pr.yml",
+    "contents_url": "https://api.github.com/repos/bcgov/actions/contents/.github/workflows/pr.yml?ref=abc123",
+    "patch": "@@ -1,1 +1,1 @@\n-old\n+new"
+  },
+  {
+    "sha": "bbcd538c8e72b8c175046e27cc8f907076331401",
+    "filename": "src/removed.js",
+    "status": "removed",
+    "additions": 3,
+    "deletions": 1,
+    "changes": 4,
+    "blob_url": "https://github.com/bcgov/actions/blob/abc123/src/removed.js",
+    "raw_url": "https://github.com/bcgov/actions/raw/abc123/src/removed.js",
+    "contents_url": "https://api.github.com/repos/bcgov/actions/contents/src/removed.js?ref=abc123",
+    "patch": "@@ -1,1 +1,1 @@\n-old\n+new"
+  }
+]

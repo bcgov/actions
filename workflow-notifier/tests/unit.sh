@@ -151,6 +151,46 @@ if [ "${1:-}" = "issue" ] && [ "${2:-}" = "create" ]; then
   exit 0
 fi
 
+if [[ "$*" == *"/pulls/"*"/files"* ]]; then
+  printf '%s\n' "$*" > "${TMP_DIR}/gh_files_args"
+  if [ -n "${MOCK_FILES_FAIL:-}" ]; then
+    echo "HTTP 403: Resource not accessible by integration" >&2
+    printf 'partial.js\n'
+    exit 1
+  fi
+  if [ -n "${MOCK_PR_FILES_FIXTURE:-}" ]; then
+    # Replay recorded GitHub list-files pages the way real gh does: the
+    # endpoint must be exact, --paginate walks every page and --jq runs
+    # per page, so a dropped flag or a wrong filter shows up as wrong output
+    endpoint="" jq_filter="" paginate=""
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        api) ;;
+        --paginate) paginate=1 ;;
+        --jq) shift; jq_filter="$1" ;;
+        -*) echo "mock-gh: unexpected files flag $1" >&2; exit 1 ;;
+        *) endpoint="$1" ;;
+      esac
+      shift
+    done
+    if ! [[ "$endpoint" =~ ^/repos/[^/]+/[^/]+/pulls/[0-9]+/files$ ]]; then
+      echo "mock-gh: bad files endpoint '${endpoint}'" >&2
+      exit 1
+    fi
+    for page in "${MOCK_PR_FILES_FIXTURE}"/page-*.json; do
+      if [ -n "$jq_filter" ]; then
+        jq -r "$jq_filter" "$page" || exit 1
+      else
+        cat "$page"
+      fi
+      [ -n "$paginate" ] || break
+    done
+    exit 0
+  fi
+  printf '%b' "${MOCK_PR_FILES:-}"
+  exit 0
+fi
+
 # Fallback for unexpected calls
 echo "mock-gh: $*" >&2
 exit 1
@@ -175,6 +215,8 @@ run_action() {
       TMP_DIR="${TMP_DIR}" \
       GITHUB_OUTPUT="$out_file" \
       GITHUB_EVENT_NAME="push" \
+      GITHUB_EVENT_PATH="" \
+      GITHUB_STEP_SUMMARY="" \
       "$@" \
       bash "$ACTION_SH" 2>&1
   )
@@ -715,6 +757,183 @@ test_create_when_no_open_match
 test_comment_on_exact_title
 test_rejects_old_codeowners_value
 test_default_title
+
+# CODEOWNERS matching (#343) and team owners (#344)
+MATCH_FIXTURE="${TMP_DIR}/match"
+mkdir -p "${MATCH_FIXTURE}/.github"
+cat << 'EOF' > "${MATCH_FIXTURE}/.github/CODEOWNERS"
+# app owners
+* @app1 @app2 # trailing comment @ghost
+/.github/workflows/ @wf1 @bcgov/devops ops@example.com
+EOF
+
+run_match() {
+  run_action "$MATCH_FIXTURE" \
+    INPUT_TITLE="Match" \
+    INPUT_DRY_RUN="true" \
+    INPUT_TOKEN="dummy-token" \
+    INPUT_NOTIFY_AUTHOR="false" \
+    GITHUB_REPOSITORY="bcgov/actions" \
+    GITHUB_SHA="abc123" \
+    GITHUB_WORKFLOW_REF="bcgov/actions/.github/workflows/merge.yml@refs/heads/main" \
+    "$@"
+}
+
+test_match_all_default() {
+  local out
+  out=$(run_match GITHUB_STEP_SUMMARY="${TMP_DIR}/summary.md")
+  assert_contains "$out" "Assignees: app1,app2,wf1" "all (default) unions every user handle"
+  assert_not_contains "$out" "ghost" "mid-line comment owner is ignored"
+  assert_not_contains "$out" "Assignees: app1,app2,wf1,bcgov" "team org is never an assignee"
+  assert_contains "$out" "CODEOWNERS teams skipped (teams cannot be assigned): @bcgov/devops" "team owner skipped with log"
+  assert_contains "$out" "CODEOWNERS email owners ignored: 1" "email owner ignored with log"
+  assert_contains "$(cat "${TMP_DIR}/summary.md")" "CODEOWNERS: .github/CODEOWNERS, mode=all" "step summary names file and mode"
+  rm -f "${TMP_DIR}/summary.md"
+}
+
+test_match_changed_app_files() {
+  local out
+  out=$(run_match INPUT_CODEOWNERS_MATCH="changed" MOCK_PR_USER="dev" MOCK_PR_NUM="55" MOCK_PR_FILES='src/a.js\nREADME.md\n')
+  assert_contains "$out" "Assignees: app1,app2" "changed: app files pick * owners"
+  assert_not_contains "$out" "wf1" "changed: workflow owners not picked for app files"
+  assert_contains "$out" "mode=changed (PR #55, 2 file(s))" "changed: logs PR and file count"
+  assert_contains "$(cat "${TMP_DIR}/gh_files_args")" "/repos/bcgov/actions/pulls/55/files" "changed: reads PR files"
+}
+
+test_match_changed_workflow_files() {
+  local out
+  out=$(run_match INPUT_CODEOWNERS_MATCH="changed" MOCK_PR_USER="dev" MOCK_PR_FILES='.github/workflows/pr.yml\n')
+  assert_contains "$out" "Assignees: wf1" "changed: workflows-only PR picks workflow owners"
+  assert_not_contains "$out" "app1" "changed: last match wins over *"
+}
+
+test_match_changed_pull_request_event() {
+  echo '{"pull_request":{"number":88}}' > "${TMP_DIR}/event.json"
+  local out
+  out=$(run_match INPUT_CODEOWNERS_MATCH="changed" GITHUB_EVENT_NAME="pull_request" GITHUB_EVENT_PATH="${TMP_DIR}/event.json" MOCK_PR_FILES='src/a.js\n')
+  assert_contains "$out" "mode=changed (PR #88, 1 file(s))" "changed: pull_request event uses its PR"
+  assert_contains "$out" "Assignees: app1,app2" "changed: pull_request event picks owners"
+}
+
+test_match_changed_falls_back_to_workflow() {
+  local out
+  out=$(run_match INPUT_CODEOWNERS_MATCH="changed" GITHUB_EVENT_NAME="schedule")
+  assert_contains "$out" "Assignees: wf1" "changed without PR falls back to workflow file"
+  assert_contains "$out" "fell back to workflow (.github/workflows/merge.yml)" "changed: fallback is logged"
+}
+
+test_match_changed_files_error() {
+  local out
+  out=$(run_match INPUT_CODEOWNERS_MATCH="changed" MOCK_PR_USER="dev" MOCK_FILES_FAIL="1")
+  assert_contains "$out" "could not list files for PR #123: HTTP 403" "changed: files API error is reported"
+  assert_contains "$out" "files lookup failed; fell back to workflow" "changed: failed lookup falls back, never partial"
+  assert_contains "$out" "Assignees: wf1" "changed: failed lookup uses workflow owners"
+}
+
+test_match_changed_retry_without_author() {
+  rm -f "${TMP_DIR}/gh_attempts"
+  local out
+  out=$(run_match INPUT_CODEOWNERS_MATCH="changed" MOCK_PR_USER="dev" MOCK_PR_NUM="66" MOCK_FAIL_ATTEMPTS="2" MOCK_PR_FILES='src/a.js\n')
+  assert_contains "$out" "mode=changed (PR #66, 1 file(s))" "changed: retries PR lookup when notify_author is false"
+  rm -f "${TMP_DIR}/gh_attempts"
+}
+
+# Replays a recorded two-page pulls/{n}/files payload through the real
+# gh arguments built by pr_changed_files (endpoint, --paginate, --jq)
+test_match_changed_recorded_pages() {
+  local fixture="${SCRIPT_DIR}/fixtures/pr-files"
+  local out
+  out=$(run_match INPUT_CODEOWNERS_MATCH="changed" MOCK_PR_USER="dev" MOCK_PR_NUM="77" MOCK_PR_FILES_FIXTURE="$fixture" GITHUB_STEP_SUMMARY="${TMP_DIR}/summary.md")
+  assert_contains "$out" "mode=changed (PR #77, 5 file(s))" "recorded pages: every page is read"
+  assert_contains "$out" "Assignees: app1,app2,wf1" "recorded pages: page-2 workflow file adds its owners"
+  assert_not_contains "$out" "mock-gh:" "recorded pages: gh args accepted by replay"
+  assert_not_contains "$out" "could not list files" "recorded pages: no files lookup error"
+  rm -f "${TMP_DIR}/summary.md"
+}
+
+# Guards the replay itself: dropping --paginate or the filename filter
+# must change the result, or the test above proves nothing
+test_recorded_pages_replay_guards() {
+  local fixture="${SCRIPT_DIR}/fixtures/pr-files" got
+  got=$(env TMP_DIR="$TMP_DIR" MOCK_PR_FILES_FIXTURE="$fixture" "${MOCK_BIN}/gh" api --paginate "/repos/bcgov/actions/pulls/77/files" --jq '.[].filename')
+  assert_eq "$got" "$(printf 'src/a.js\nsrc/My Folder/b.js\ndocs/guide.md\n.github/workflows/pr.yml\nsrc/removed.js')" "replay: filenames in page order, spaces kept"
+  got=$(env TMP_DIR="$TMP_DIR" MOCK_PR_FILES_FIXTURE="$fixture" "${MOCK_BIN}/gh" api "/repos/bcgov/actions/pulls/77/files" --jq '.[].filename' | wc -l | tr -d ' ')
+  assert_eq "$got" "3" "replay: without --paginate only page 1 is returned"
+  if env TMP_DIR="$TMP_DIR" MOCK_PR_FILES_FIXTURE="$fixture" "${MOCK_BIN}/gh" api --paginate "/repos/bcgov/actions/pulls/77" --jq '.[].filename' > /dev/null 2>&1; then
+    assert_eq "accepted" "rejected" "replay: wrong endpoint is rejected"
+  else
+    assert_eq "rejected" "rejected" "replay: wrong endpoint is rejected"
+  fi
+  assert_not_contains "$(sed -n '/pulls\/\${num}\/files/p' "$ACTION_SH")" "per_page=1" "action: files query not page-limited"
+  assert_contains "$(sed -n '/pulls\/\${num}\/files/p' "$ACTION_SH")" "--paginate" "action: files query paginates"
+  assert_contains "$(sed -n '/pulls\/\${num}\/files/p' "$ACTION_SH")" "--jq '.[].filename'" "action: files query extracts filenames"
+}
+
+test_match_workflow() {
+  local out
+  out=$(run_match INPUT_CODEOWNERS_MATCH="workflow" MOCK_PR_USER="dev" MOCK_PR_FILES='src/a.js\n')
+  assert_contains "$out" "Assignees: wf1" "workflow: matches failing workflow file only"
+  assert_contains "$out" "mode=workflow (.github/workflows/merge.yml)" "workflow: logs path"
+}
+
+test_match_rejects_bad_value() {
+  local out
+  out=$(run_match INPUT_CODEOWNERS_MATCH="paths" || true)
+  assert_contains "$out" "codeowners_match" "rejects unknown codeowners_match"
+}
+
+test_codeowners_search_order() {
+  local dir="${TMP_DIR}/order"
+  mkdir -p "${dir}/.github" "${dir}/docs"
+  echo "* @root" > "${dir}/CODEOWNERS"
+  echo "* @docs" > "${dir}/docs/CODEOWNERS"
+  echo "* @gh" > "${dir}/.github/CODEOWNERS"
+  local out
+  out=$(run_action "$dir" INPUT_TITLE="Order" INPUT_DRY_RUN="true" INPUT_NOTIFY_AUTHOR="false")
+  assert_contains "$out" "Assignees: gh" ".github/CODEOWNERS wins over root and docs"
+  rm "${dir}/.github/CODEOWNERS"
+  out=$(run_action "$dir" INPUT_TITLE="Order" INPUT_DRY_RUN="true" INPUT_NOTIFY_AUTHOR="false")
+  assert_contains "$out" "Assignees: root" "root CODEOWNERS wins over docs"
+  rm "${dir}/CODEOWNERS"
+  out=$(run_action "$dir" INPUT_TITLE="Order" INPUT_DRY_RUN="true" INPUT_NOTIFY_AUTHOR="false")
+  assert_contains "$out" "Assignees: docs" "docs/CODEOWNERS used last"
+}
+
+test_team_only_codeowners() {
+  local dir="${TMP_DIR}/teams"
+  mkdir -p "$dir"
+  echo "* @bcgov/team-a dev@example.com" > "${dir}/CODEOWNERS"
+  local out
+  out=$(run_action "$dir" INPUT_TITLE="Teams" INPUT_DRY_RUN="true" INPUT_NOTIFY_AUTHOR="false")
+  assert_eq "$(tail -n1 <<< "$out" | xargs)" "Assignees:" "team-only CODEOWNERS assigns nobody"
+  assert_not_contains "$out" "--assignee" "no assignee flag for team-only CODEOWNERS"
+}
+
+test_node_matcher() {
+  if node --test "${SCRIPT_DIR}/codeowners.test.js" > "${TMP_DIR}/node-test.log" 2>&1; then
+    echo "✓ codeowners.js pattern tests"
+    passed=$((passed + 1))
+  else
+    cat "${TMP_DIR}/node-test.log"
+    echo "✗ codeowners.js pattern tests"
+    failed=$((failed + 1))
+  fi
+}
+
+test_match_all_default
+test_match_changed_app_files
+test_match_changed_workflow_files
+test_match_changed_pull_request_event
+test_match_changed_falls_back_to_workflow
+test_match_changed_files_error
+test_match_changed_retry_without_author
+test_match_changed_recorded_pages
+test_recorded_pages_replay_guards
+test_match_workflow
+test_match_rejects_bad_value
+test_codeowners_search_order
+test_team_only_codeowners
+test_node_matcher
 
 echo ""
 echo "Unit tests finished: ${passed} passed, ${failed} failed."
