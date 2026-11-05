@@ -168,115 +168,7 @@ function getToken(env = process.env) {
   return getInput('token', env) || String(env.GITHUB_TOKEN ?? '').trim();
 }
 
-
-/** Where the unknown-input check is documented. */
-const INPUTS_DOCS = 'https://github.com/bcgov/actions/blob/main/shared/README.md#unknown-inputs';
-
-/** Runner env form of an input name: INPUT_<NAME>, spaces as `_`. */
-const envKey = name => name.replace(/ /g, '_').toUpperCase();
-
-/**
- * Declared input names from an action.yml (top-level `inputs:` block).
- * A small line parser so actions need no YAML dependency.
- * @param {string} yml
- * @returns {string[]}
- */
-function declaredInputs(yml) {
-  const names = [];
-  let inBlock = false;
-  let indent = -1;
-  for (const line of String(yml).split(/\r?\n/)) {
-    if (/^inputs:\s*(#.*)?$/.test(line)) {
-      inBlock = true;
-      continue;
-    }
-    if (!inBlock || /^\s*(#.*)?$/.test(line)) continue;
-    if (/^\S/.test(line)) break;
-    const m = line.match(/^(\s+)(['"]?)([^'":#\s][^'":#]*?)\2:\s*(#.*)?$/) || line.match(/^(\s+)(['"]?)([^'":#\s][^'":#]*?)\2:\s/);
-    if (!m) continue;
-    if (indent < 0) indent = m[1].length;
-    if (m[1].length === indent) names.push(m[3].trim());
-  }
-  return names;
-}
-
-/**
- * Error text for inputs the action does not declare. Names each bad key,
- * lists the declared inputs and links the action README.
- * @param {string} action - action directory name, e.g. builder
- * @param {string[]} unknown - bad keys as the caller wrote them
- * @param {string[]} declared
- * @param {{repo?: string}} [opts]
- * @returns {string}
- */
-function unknownInputsMessage(action, unknown, declared, opts = {}) {
-  const repo = opts.repo || 'bcgov/actions';
-  return [
-    `::error title=${action}: unknown input::Unknown input(s) for ${action}: ${unknown.join(', ')}`,
-    ...unknown.map(key => `  ${key}: not an input of ${action}`),
-    `Inputs: ${declared.join(', ')}`,
-    `Docs: https://github.com/${repo}/blob/main/${action}/README.md`,
-    `Check: ${INPUTS_DOCS}`,
-  ].join('%0A');
-}
-
-/**
- * Throw InputError when the caller passed inputs the action does not declare.
- * GitHub only warns ("Unexpected input(s)") and keeps going, so a mistyped
- * input is silently ignored without this check.
- * @param {string} action
- * @param {string[]} given - input names the caller passed
- * @param {string[]} declared - names from action.yml
- * @param {object} [opts] - see unknownInputsMessage; `raw: true` compares
- *   composite key names case-insensitively, without space -> `_`
- */
-function assertKnownInputs(action, given, declared, opts = {}) {
-  // Composite (INPUTS_JSON) keys are raw names: `${{ inputs.build_args }}`
-  // never sees `build args`, so only case is folded. Node INPUT_* env names
-  // already have spaces as `_`, so envKey normalization applies there only.
-  const norm = opts.raw ? k => k.toLowerCase() : envKey;
-  const known = new Set(declared.map(norm));
-  const unknown = [...new Set(given)].filter(g => !known.has(norm(g)));
-  if (unknown.length) throw new InputError(unknownInputsMessage(action, unknown, declared, opts));
-}
-
-/**
- * Input names the caller passed. Composite actions set INPUTS_JSON to
- * `${{ toJSON(inputs) }}` (their own steps set INPUT_* vars, so the env is
- * not a reliable source); node actions read INPUT_* from the env, which the
- * runner sets for every `with:` key, declared or not.
- * @param {NodeJS.ProcessEnv} [env]
- * @returns {string[]}
- */
-function givenInputs(env = process.env) {
-  if (env.INPUTS_JSON) return Object.keys(JSON.parse(env.INPUTS_JSON) || {});
-  return Object.keys(env)
-    .filter(k => k.startsWith('INPUT_'))
-    .map(k => k.slice(6).toLowerCase());
-}
-
-/**
- * Check this action's inputs against its action.yml. Node actions call this
- * first: `assertKnownActionInputs(__dirname)`.
- * @param {string} actionDir - directory holding action.yml
- * @param {NodeJS.ProcessEnv} [env]
- */
-function assertKnownActionInputs(actionDir, env = process.env) {
-  const fs = require('node:fs');
-  const path = require('node:path');
-  const file = ['action.yml', 'action.yaml'].map(f => path.join(actionDir, f)).find(f => fs.existsSync(f));
-  if (!file) throw new Error(`no action.yml in ${actionDir}`);
-  const action = path.basename(path.resolve(actionDir));
-  assertKnownInputs(action, givenInputs(env), declaredInputs(fs.readFileSync(file, 'utf8')), { raw: Boolean(env.INPUTS_JSON) });
-}
-
 module.exports = {
-  INPUTS_DOCS,
-  assertKnownActionInputs,
-  assertKnownInputs,
-  declaredInputs,
-  givenInputs,
-  unknownInputsMessage,
   InputError,
   getInput,
   getToken,
@@ -296,8 +188,6 @@ module.exports = {
  *   enum <name> <a,b,c> <dflt>  the chosen value
  *   debug                       true or false
  *   token                       the token input, else GITHUB_TOKEN
- *   assert-known <action_dir>   fail on inputs action.yml does not declare
- *                               (composite: set INPUTS_JSON: ${{ toJSON(inputs) }})
  */
 if (require.main === module) {
   const [cmd, name, a, b] = process.argv.slice(2);
@@ -308,7 +198,6 @@ if (require.main === module) {
     else if (cmd === 'enum') out = parseEnum(getInput(name), name, a.split(','), b);
     else if (cmd === 'debug') out = String(isDebug());
     else if (cmd === 'token') out = getToken();
-    else if (cmd === 'assert-known') assertKnownActionInputs(name);
     else throw new Error(`unknown command: ${cmd}`);
     if (out) process.stdout.write(`${out}\n`);
   } catch (e) {

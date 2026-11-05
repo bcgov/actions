@@ -12,7 +12,7 @@ const MANIFEST_ACCEPT = [
   'application/vnd.docker.distribution.manifest.v2+json'
 ].join(', ')
 
-const {InputError, getToken, parseBool, parseList, assertKnownActionInputs} = require('../shared/inputs.js')
+const {InputError, getToken, parseBool, parseList} = require('../shared/inputs.js')
 
 function parseInputs(env) {
   const packages = parseList(env.INPUT_PACKAGES, 'packages')
@@ -383,13 +383,8 @@ async function main(env = process.env) {
 }
 
 if (require.main === module) {
-  // Undeclared inputs fail here; GitHub only warns (shared/README.md)
-  try {
-    assertKnownActionInputs(__dirname)
-  } catch (e) {
-    console.log(e instanceof InputError ? e.message : `::error::${e.message}`)
-    process.exit(1)
-  }
+  // Undeclared inputs fail here; GitHub only warns (input-enforcer/README.md)
+  require('../input-enforcer/enforce.js').enforceNode(__dirname)
   main().catch(err => {
     console.log(err instanceof InputError ? err.message : `::error::${err.message}`)
     process.exit(1)

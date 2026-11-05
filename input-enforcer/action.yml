@@ -1,0 +1,19 @@
+name: Input Enforcer
+description: >-
+  Fail when a caller passes an input the action does not declare. GitHub only
+  warns on undeclared `with:` keys. Run it as the first step of a composite action.
+branding:
+  icon: shield
+  color: blue
+
+inputs:
+  inputs:
+    description: 'The calling action''s inputs: always `${{ toJSON(inputs) }}`.'
+    required: true
+  action_path:
+    description: 'Directory holding the calling action''s action.yml: always `${{ github.action_path }}`.'
+    required: true
+
+runs:
+  using: node24
+  main: index.js

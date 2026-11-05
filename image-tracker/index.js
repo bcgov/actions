@@ -4,7 +4,7 @@ const { execSync, execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const process = require('node:process');
-const { InputError, getInput, isDebug, parseBool, parseList, assertKnownActionInputs } = require('../shared/inputs.js');
+const { InputError, getInput, isDebug, parseBool, parseList } = require('../shared/inputs.js');
 
 // ---- Logging Helpers -------------------------------------------------------
 function logError(msg) {
@@ -1960,13 +1960,8 @@ async function runMain() {
 }
 
 if (require.main === module) {
-  // Undeclared inputs fail here; GitHub only warns (shared/README.md)
-  try {
-    assertKnownActionInputs(__dirname);
-  } catch (e) {
-    console.log(e instanceof InputError ? e.message : `::error::${e.message}`);
-    process.exit(1);
-  }
+  // Undeclared inputs fail here; GitHub only warns (input-enforcer/README.md)
+  require('../input-enforcer/enforce.js').enforceNode(__dirname);
   runMain().catch((err) => {
     if (err instanceof InputError) {
       console.log(err.message);

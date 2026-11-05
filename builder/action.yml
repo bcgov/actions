@@ -79,12 +79,12 @@ outputs:
 runs:
   using: composite
   steps:
-    # Undeclared inputs fail here; GitHub only warns (shared/README.md)
+    # Undeclared inputs fail here; GitHub only warns (input-enforcer/README.md)
     - name: Check inputs
-      shell: bash
-      env:
-        INPUTS_JSON: ${{ toJSON(inputs) }}
-      run: node "$GITHUB_ACTION_PATH/../shared/inputs.js" assert-known "$GITHUB_ACTION_PATH"
+      uses: $/input-enforcer
+      with:
+        inputs: ${{ toJSON(inputs) }}
+        action_path: ${{ github.action_path }}
 
     # Publish target follows the workflow context: fork push → fork GHCR;
     # fork pull_request → head-repo GHCR (read-only here; push on fork push).
