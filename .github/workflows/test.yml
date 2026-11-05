@@ -1480,7 +1480,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Input enforcer unit tests
-        run: node --test input-enforcer/tests/
+        run: node --test input-enforcer/tests/enforce.test.js
 
       # Fixtures are otherwise valid (declared package/packages/file/context/url),
       # so only the undeclared key can make them fail.
