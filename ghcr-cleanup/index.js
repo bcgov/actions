@@ -383,6 +383,8 @@ async function main(env = process.env) {
 }
 
 if (require.main === module) {
+  // Undeclared inputs fail here; GitHub only warns (input-enforcer/README.md)
+  require('../input-enforcer/enforce.js').enforceNode(__dirname)
   main().catch(err => {
     console.log(err instanceof InputError ? err.message : `::error::${err.message}`)
     process.exit(1)

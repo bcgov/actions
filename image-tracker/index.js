@@ -1960,6 +1960,8 @@ async function runMain() {
 }
 
 if (require.main === module) {
+  // Undeclared inputs fail here; GitHub only warns (input-enforcer/README.md)
+  require('../input-enforcer/enforce.js').enforceNode(__dirname);
   runMain().catch((err) => {
     if (err instanceof InputError) {
       console.log(err.message);

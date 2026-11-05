@@ -32,44 +32,57 @@ jobs:
             builder:
               - 'builder/**'
               - 'shared/**'
+              - 'input-enforcer/**'
               - '!*.md'
             scan-url:
               - 'scan-url/**'
               - 'shared/**'
+              - 'input-enforcer/**'
               - '!*.md'
             diff-triggers:
               - 'diff-triggers/**'
               - 'shared/**'
+              - 'input-enforcer/**'
               - '!*.md'
             ghcr-cleanup:
               - 'ghcr-cleanup/**'
               - 'shared/**'
+              - 'input-enforcer/**'
               - '!*.md'
             image-tracker:
               - 'image-tracker/**'
               - 'shared/**'
+              - 'input-enforcer/**'
               - '!*.md'
             pr-description-add:
               - 'pr-description-add/**'
               - 'shared/**'
+              - 'input-enforcer/**'
               - '!*.md'
             pr-validate:
               - 'pr-validate/**'
               - 'shared/**'
+              - 'input-enforcer/**'
               - '.github/workflows/pr-validate.yml'
               - '.github/scripts/stage-dist.sh'
               - '!*.md'
             workflow-notifier:
               - 'workflow-notifier/**'
               - 'shared/**'
+              - 'input-enforcer/**'
               - '!*.md'
             workflow-results:
               - 'workflow-results/**'
               - 'shared/**'
+              - 'input-enforcer/**'
+              - '!*.md'
+            input-enforcer:
+              - 'input-enforcer/**'
               - '!*.md'
             test-and-analyse:
               - 'test-and-analyse/**'
               - 'shared/**'
+              - 'input-enforcer/**'
               - '.github/scripts/stage-dist.sh'
               - '!*.md'
             # Shared runner infrastructure and test harness changes trigger the full suite
@@ -1453,6 +1466,80 @@ jobs:
 
   # ─── GET PR ────────────────────────────────────────────────────────────────
 
+  # ─── UNKNOWN INPUTS ────────────────────────────────────────────────────────
+  # GitHub only warns on undeclared `with:` keys. These steps pass undeclared
+  # inputs and require the action to fail at its input check.
+  test-unknown-inputs:
+    name: Test Unknown Inputs Fail Loud
+    needs: [filter]
+    if: contains(fromJSON(needs.filter.outputs.changes), 'builder') || contains(fromJSON(needs.filter.outputs.changes), 'image-tracker') || contains(fromJSON(needs.filter.outputs.changes), 'scan-url') || contains(fromJSON(needs.filter.outputs.changes), 'input-enforcer') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Input enforcer unit tests
+        run: node --test input-enforcer/tests/enforce.test.js
+
+      # Fixtures are otherwise valid (declared package/packages/file/context/url),
+      # so only the undeclared key can make them fail.
+      - name: Builder with undeclared build_file (composite)
+        id: builder
+        continue-on-error: true
+        uses: $/builder
+        with:
+          package: builder-selftest
+          file: builder/tests/Dockerfile
+          context: builder/tests
+          build_file: builder/tests/Dockerfile
+          build_context: builder/tests
+          tags: ${{ github.event.number }}-unknown-input
+
+      - name: Image tracker with undeclared package (node)
+        id: tracker
+        continue-on-error: true
+        uses: $/image-tracker
+        with:
+          packages: builder-selftest
+          package: builder-selftest
+
+      - name: Scan URL with unknown key (composite)
+        id: scan
+        continue-on-error: true
+        uses: $/scan-url
+        with:
+          url: https://example.com
+          not_an_input: x
+
+      - name: Require failures
+        env:
+          BUILDER: ${{ steps.builder.outcome }}
+          TRACKER: ${{ steps.tracker.outcome }}
+          SCAN: ${{ steps.scan.outcome }}
+        run: |
+          echo "builder=$BUILDER image-tracker=$TRACKER scan-url=$SCAN"
+          [ "$BUILDER" = failure ] && [ "$TRACKER" = failure ] && [ "$SCAN" = failure ] || {
+            echo "::error::An action accepted an undeclared input"; exit 1; }
+
+      # The failures above must be the unknown-input diagnostic: run the same
+      # check for every action, with its declared inputs plus one extra key.
+      - name: Require unknown-input diagnostic (every action)
+        run: |
+          fail=0
+          for yml in */action.yml; do
+            dir=${yml%/action.yml}
+            json=$(node -e 'const {declaredInputs}=require("./input-enforcer/enforce.js");const o={};for(const k of declaredInputs(require("fs").readFileSync(process.argv[1],"utf8")))o[k]="x";o.not_an_input="x";console.log(JSON.stringify(o))' "$yml")
+            if out=$(node input-enforcer/enforce.js "$dir" "$json" 2>&1); then
+              echo "::error::$dir accepted not_an_input"; fail=1; continue
+            fi
+            case "$out" in
+              "::error title=$dir: unknown input::Unknown input(s) for $dir: not_an_input%0A"*"not_an_input: not an input of $dir"*) echo "ok $dir" ;;
+              *) echo "::error::$dir: wrong diagnostic"; printf '%s\n' "$out" | sed 's/::/: :/g'; fail=1 ;;
+            esac
+          done
+          exit $fail
+
   results:
     name: PR Results
     needs:
@@ -1475,6 +1562,7 @@ jobs:
       - test-test-and-analyse
       - test-test-and-analyse-shallow
       - test-test-and-analyse-semgrep
+      - test-unknown-inputs
     if: always()
     runs-on: ubuntu-26.04
     steps:

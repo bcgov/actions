@@ -17,6 +17,13 @@ inputs:
 runs:
   using: "composite"
   steps:
+    # Undeclared inputs fail here; GitHub only warns (input-enforcer/README.md)
+    - name: Check inputs
+      uses: $/input-enforcer
+      with:
+        inputs: ${{ toJSON(inputs) }}
+        action_path: ${{ github.action_path }}
+
     - name: Fork notice
       if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork
       shell: bash
