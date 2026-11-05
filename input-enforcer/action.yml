@@ -8,10 +8,10 @@ branding:
 
 inputs:
   inputs:
-    description: 'The calling action''s inputs: always `${{ toJSON(inputs) }}`.'
+    description: 'The calling action''s inputs: always toJSON(inputs) in an expression.'
     required: true
   action_path:
-    description: 'Directory holding the calling action''s action.yml: always `${{ github.action_path }}`.'
+    description: 'Directory holding the calling action''s action.yml: always github.action_path in an expression.'
     required: true
 
 runs:
