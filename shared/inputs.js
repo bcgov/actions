@@ -169,14 +169,13 @@ function getToken(env = process.env) {
 }
 
 
-/** Migration guide for renamed and removed inputs. */
-const MIGRATION_DOCS = 'https://github.com/bcgov/actions/blob/main/docs/MIGRATION.md';
+/** Inputs reference for renamed and removed inputs. */
+const INPUTS_DOCS = 'https://github.com/bcgov/actions/blob/main/docs/INPUTS.md';
 
 /**
  * Inputs renamed or removed in v0.11, per action: old name -> new name, or
- * null when the input was removed with no replacement. Bridge for one major:
- * the map only improves the error text (old names are never accepted).
- * Estimated removal: v2.
+ * null when the input was removed with no replacement. Error text only: old
+ * names are never accepted. Dropped at v2.
  */
 const RENAMED = {
   builder: {
@@ -239,7 +238,7 @@ function declaredInputs(yml) {
 
 /**
  * Error text for inputs the action does not declare. Names each bad key, the
- * replacement when known, and links the action README and MIGRATION.md.
+ * replacement when known, and links the action README and INPUTS.md.
  * @param {string} action - action directory name, e.g. builder
  * @param {string[]} unknown - bad keys as the caller wrote them
  * @param {string[]} declared
@@ -258,7 +257,7 @@ function unknownInputsMessage(action, unknown, declared, opts = {}) {
   }
   lines.push(`Inputs: ${declared.join(', ')}`);
   lines.push(`Docs: https://github.com/${repo}/blob/main/${action}/README.md`);
-  lines.push(`Migration: ${MIGRATION_DOCS}`);
+  lines.push(`Reference: ${INPUTS_DOCS}`);
   return lines.join('%0A');
 }
 
@@ -269,11 +268,16 @@ function unknownInputsMessage(action, unknown, declared, opts = {}) {
  * @param {string} action
  * @param {string[]} given - input names the caller passed
  * @param {string[]} declared - names from action.yml
- * @param {object} [opts] - see unknownInputsMessage
+ * @param {object} [opts] - see unknownInputsMessage; `raw: true` compares
+ *   composite key names case-insensitively, without space -> `_`
  */
-function assertKnownInputs(action, given, declared, opts) {
-  const known = new Set(declared.map(envKey));
-  const unknown = [...new Set(given)].filter(g => !known.has(envKey(g)));
+function assertKnownInputs(action, given, declared, opts = {}) {
+  // Composite (INPUTS_JSON) keys are raw names: `${{ inputs.build_args }}`
+  // never sees `build args`, so only case is folded. Node INPUT_* env names
+  // already have spaces as `_`, so envKey normalization applies there only.
+  const norm = opts.raw ? k => k.toLowerCase() : envKey;
+  const known = new Set(declared.map(norm));
+  const unknown = [...new Set(given)].filter(g => !known.has(norm(g)));
   if (unknown.length) throw new InputError(unknownInputsMessage(action, unknown, declared, opts));
 }
 
@@ -304,11 +308,11 @@ function assertKnownActionInputs(actionDir, env = process.env) {
   const file = ['action.yml', 'action.yaml'].map(f => path.join(actionDir, f)).find(f => fs.existsSync(f));
   if (!file) throw new Error(`no action.yml in ${actionDir}`);
   const action = path.basename(path.resolve(actionDir));
-  assertKnownInputs(action, givenInputs(env), declaredInputs(fs.readFileSync(file, 'utf8')));
+  assertKnownInputs(action, givenInputs(env), declaredInputs(fs.readFileSync(file, 'utf8')), { raw: Boolean(env.INPUTS_JSON) });
 }
 
 module.exports = {
-  MIGRATION_DOCS,
+  INPUTS_DOCS,
   RENAMED,
   assertKnownActionInputs,
   assertKnownInputs,

@@ -31,7 +31,7 @@ test('assertKnownInputs: renamed input fails and names the replacement', () => {
       && e.message.startsWith('::error title=builder: unknown input::')
       && e.message.includes('build_file: renamed to file')
       && e.message.includes('build_context: renamed to context')
-      && e.message.includes('docs/MIGRATION.md')
+      && e.message.includes('docs/INPUTS.md')
       && e.message.includes('builder/README.md'),
   );
   assert.throws(
@@ -46,6 +46,26 @@ test('assertKnownInputs: unknown input fails and names the key', () => {
     e => e instanceof InputError && e.message.includes('not_a_thing: not an input of builder'),
   );
   assert.throws(() => assertKnownInputs('builder', ['sbom'], declaredInputs(builderYml)), /sbom: removed/);
+});
+
+test('assertKnownInputs: composite (raw) keys fold case but not spaces', () => {
+  const declared = declaredInputs(builderYml);
+  assert.doesNotThrow(() => assertKnownInputs('builder', ['BUILD_ARGS', 'package'], declared, { raw: true }));
+  assert.throws(
+    () => assertKnownInputs('builder', ['build args'], declared, { raw: true }),
+    /build args: not an input of builder/,
+  );
+  // Node INPUT_* env form keeps space -> _ normalization
+  assert.doesNotThrow(() => assertKnownInputs('builder', ['build args'], declared));
+});
+
+test('CLI assert-known: composite INPUTS_JSON rejects a spaced key', () => {
+  const r = spawnSync('node', [cli, 'assert-known', path.join(root, 'builder')], {
+    env: { PATH: process.env.PATH, INPUTS_JSON: JSON.stringify({ package: 'x', 'build args': 'A=1' }) },
+    encoding: 'utf8',
+  });
+  assert.strictEqual(r.status, 1);
+  assert.match(r.stderr, /build args: not an input of builder/);
 });
 
 test('rename map: every replacement is a declared input of that action', () => {

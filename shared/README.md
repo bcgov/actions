@@ -27,7 +27,7 @@ CLI commands: `list <name>`, `bool <name> [default]`, `enum <name> <a,b,c> <defa
 
 ## Unknown and renamed inputs
 
-GitHub only warns on a `with:` key the action does not declare and keeps going. Every action fails instead, naming the key, its replacement when known, the action README and [docs/MIGRATION.md](../docs/MIGRATION.md).
+GitHub only warns on a `with:` key the action does not declare and keeps going. Every action fails instead, naming the key, its replacement when known, the action README and [docs/INPUTS.md](../docs/INPUTS.md).
 
 - Node actions call `assertKnownActionInputs(__dirname)` first. The runner sets `INPUT_<NAME>` for every `with:` key, declared or not, and the check compares those against `action.yml`.
 - Composite actions run it as their first step. Their own steps set `INPUT_*` vars, so they pass `${{ toJSON(inputs) }}`, which also holds undeclared keys:

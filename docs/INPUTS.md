@@ -1,10 +1,10 @@
-# Migration guide
+# Inputs
 
-Actions fail when a caller passes an input they do not declare. GitHub on its own only warns ("Unexpected input(s)") and carries on, so a renamed input was silently ignored and the job failed later, somewhere else. The check (`shared/inputs.js` `assert-known`) names the bad key, its replacement when there is one, and links here.
+Actions accept only the inputs they declare in `action.yml`. An unknown or renamed key fails the job loudly instead of GitHub's default warning ("Unexpected input(s)"), which silently ignores it. The check (`shared/inputs.js` `assert-known`) names the bad key, the current name when there is one, and links here.
 
-Old names are never accepted. The rename map in `shared/inputs.js` only improves the error text; estimated removal is v2.
+Old names are never accepted. The tables below are a reference for that error text, listing current names and old -> new; the rename map in `shared/inputs.js` exists only to improve the message and is dropped at v2.
 
-## v0.11
+## Renamed and removed in v0.11
 
 Renamed inputs: change the key, keep the value.
 
@@ -32,7 +32,7 @@ Removed inputs: delete the key.
 | diff-triggers | `annotations` |
 | image-tracker | `registry` |
 | pr-validate | `conventional_commits` |
-| test-and-analyse | `node_version_file`, `java_version_file`, `python_version_file`, `repository`, `branch`, `checkout_path`, `require_sonar` |
+| test-and-analyse | `node_version_file`, `java_version_file`, `python_version_file`, `repository`, `branch`, `checkout_path`, `require_sonar` (the action no longer checks out code: run `actions/checkout` yourself and point `working_directory` at it) |
 | workflow-notifier | `labels`, `assign` |
 | workflow-results | `summary`, `annotations` |
 

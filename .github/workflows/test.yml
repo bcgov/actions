@@ -1459,7 +1459,7 @@ jobs:
   test-unknown-inputs:
     name: Test Unknown Inputs Fail Loud
     needs: [filter]
-    if: contains(fromJSON(needs.filter.outputs.changes), 'builder') || contains(fromJSON(needs.filter.outputs.changes), 'image-tracker') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
+    if: contains(fromJSON(needs.filter.outputs.changes), 'builder') || contains(fromJSON(needs.filter.outputs.changes), 'image-tracker') || contains(fromJSON(needs.filter.outputs.changes), 'scan-url') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
     runs-on: ubuntu-26.04
     permissions:
       contents: read
@@ -1469,12 +1469,16 @@ jobs:
       - name: Shared check unit tests
         run: node --test shared/tests/assert-known.test.js
 
+      # Fixtures are otherwise valid (declared package/packages/file/context/url),
+      # so only the unknown or renamed key can make them fail.
       - name: Builder with renamed build_file (composite)
         id: builder
         continue-on-error: true
         uses: $/builder
         with:
           package: builder-selftest
+          file: builder/tests/Dockerfile
+          context: builder/tests
           build_file: builder/tests/Dockerfile
           build_context: builder/tests
           tags: ${{ github.event.number }}-unknown-input
@@ -1484,6 +1488,7 @@ jobs:
         continue-on-error: true
         uses: $/image-tracker
         with:
+          packages: builder-selftest
           package: builder-selftest
 
       - name: Scan URL with unknown key (composite)
@@ -1503,6 +1508,28 @@ jobs:
           echo "builder=$BUILDER image-tracker=$TRACKER scan-url=$SCAN"
           [ "$BUILDER" = failure ] && [ "$TRACKER" = failure ] && [ "$SCAN" = failure ] || {
             echo "::error::An action accepted an unknown or renamed input"; exit 1; }
+
+      # Same keys through the check each action runs first: the failure above
+      # must be the unknown-input diagnostic, naming each offending key.
+      - name: Require unknown-input diagnostic
+        run: |
+          set -u
+          expect() { # <action_dir> <pattern>...
+            dir=$1; shift
+            if out=$(node shared/inputs.js assert-known "$dir" 2>&1); then
+              echo "::error::$dir accepted: ${INPUTS_JSON:-env INPUT_*}"; exit 1
+            fi
+            echo "$out"
+            echo "$out" | grep -q "::error title=$dir: unknown input::Unknown input" || { echo "::error::$dir: no unknown-input diagnostic"; exit 1; }
+            for p in "$@"; do
+              echo "$out" | grep -qF "$p" || { echo "::error::$dir: missing '$p'"; exit 1; }
+            done
+          }
+          INPUTS_JSON='{"package":"builder-selftest","file":"builder/tests/Dockerfile","context":"builder/tests","build_file":"x","build_context":"x","tags":"x"}' \
+            expect builder 'build_file: renamed to file' 'build_context: renamed to context'
+          env INPUT_PACKAGES=builder-selftest INPUT_PACKAGE=builder-selftest bash -c "$(declare -f expect); expect image-tracker 'package: renamed to packages'"
+          INPUTS_JSON='{"url":"https://example.com","not_an_input":"x"}' \
+            expect scan-url 'not_an_input: not an input of scan-url'
 
   results:
     name: PR Results
