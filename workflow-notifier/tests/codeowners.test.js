@@ -63,3 +63,14 @@ test('team and email owners are separated, never users', () => {
   assert.deepStrictEqual(s.teams, ['bcgov/devops-team']);
   assert.strictEqual(s.emails, 1);
 });
+
+test('escaped spaces stay in the pattern', () => {
+  const r = rules('* @a\n/My\\ Folder/ @b\n');
+  assert.strictEqual(r[1].pattern, '/My Folder/');
+  assert.deepStrictEqual(ownersFor(r, 'My Folder/app.js'), ['@b']);
+});
+
+test('escaped leading hash is a literal pattern', () => {
+  const r = rules('\\#notes @a\n');
+  assert.deepStrictEqual(ownersFor(r, '#notes'), ['@a']);
+});

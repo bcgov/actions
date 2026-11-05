@@ -153,6 +153,11 @@ fi
 
 if [[ "$*" == *"/pulls/"*"/files"* ]]; then
   printf '%s\n' "$*" > "${TMP_DIR}/gh_files_args"
+  if [ -n "${MOCK_FILES_FAIL:-}" ]; then
+    echo "HTTP 403: Resource not accessible by integration" >&2
+    printf 'partial.js\n'
+    exit 1
+  fi
   printf '%b' "${MOCK_PR_FILES:-}"
   exit 0
 fi
@@ -762,7 +767,7 @@ test_match_changed_app_files() {
   out=$(run_match INPUT_CODEOWNERS_MATCH="changed" MOCK_PR_USER="dev" MOCK_PR_NUM="55" MOCK_PR_FILES='src/a.js\nREADME.md\n')
   assert_contains "$out" "Assignees: app1,app2" "changed: app files pick * owners"
   assert_not_contains "$out" "wf1" "changed: workflow owners not picked for app files"
-  assert_contains "$out" "mode=changed (PR #55, 2 files)" "changed: logs PR and file count"
+  assert_contains "$out" "mode=changed (PR #55, 2 file(s))" "changed: logs PR and file count"
   assert_contains "$(cat "${TMP_DIR}/gh_files_args")" "/repos/bcgov/actions/pulls/55/files" "changed: reads PR files"
 }
 
@@ -777,7 +782,7 @@ test_match_changed_pull_request_event() {
   echo '{"pull_request":{"number":88}}' > "${TMP_DIR}/event.json"
   local out
   out=$(run_match INPUT_CODEOWNERS_MATCH="changed" GITHUB_EVENT_NAME="pull_request" GITHUB_EVENT_PATH="${TMP_DIR}/event.json" MOCK_PR_FILES='src/a.js\n')
-  assert_contains "$out" "mode=changed (PR #88, 1 files)" "changed: pull_request event uses its PR"
+  assert_contains "$out" "mode=changed (PR #88, 1 file(s))" "changed: pull_request event uses its PR"
   assert_contains "$out" "Assignees: app1,app2" "changed: pull_request event picks owners"
 }
 
@@ -786,6 +791,22 @@ test_match_changed_falls_back_to_workflow() {
   out=$(run_match INPUT_CODEOWNERS_MATCH="changed" GITHUB_EVENT_NAME="schedule")
   assert_contains "$out" "Assignees: wf1" "changed without PR falls back to workflow file"
   assert_contains "$out" "fell back to workflow (.github/workflows/merge.yml)" "changed: fallback is logged"
+}
+
+test_match_changed_files_error() {
+  local out
+  out=$(run_match INPUT_CODEOWNERS_MATCH="changed" MOCK_PR_USER="dev" MOCK_FILES_FAIL="1")
+  assert_contains "$out" "could not list files for PR #123: HTTP 403" "changed: files API error is reported"
+  assert_contains "$out" "files lookup failed; fell back to workflow" "changed: failed lookup falls back, never partial"
+  assert_contains "$out" "Assignees: wf1" "changed: failed lookup uses workflow owners"
+}
+
+test_match_changed_retry_without_author() {
+  rm -f "${TMP_DIR}/gh_attempts"
+  local out
+  out=$(run_match INPUT_CODEOWNERS_MATCH="changed" MOCK_PR_USER="dev" MOCK_PR_NUM="66" MOCK_FAIL_ATTEMPTS="2" MOCK_PR_FILES='src/a.js\n')
+  assert_contains "$out" "mode=changed (PR #66, 1 file(s))" "changed: retries PR lookup when notify_author is false"
+  rm -f "${TMP_DIR}/gh_attempts"
 }
 
 test_match_workflow() {
@@ -844,6 +865,8 @@ test_match_changed_app_files
 test_match_changed_workflow_files
 test_match_changed_pull_request_event
 test_match_changed_falls_back_to_workflow
+test_match_changed_files_error
+test_match_changed_retry_without_author
 test_match_workflow
 test_match_rejects_bad_value
 test_codeowners_search_order

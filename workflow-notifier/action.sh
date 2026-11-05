@@ -143,14 +143,25 @@ pr_changed_files() {
     num="$(jq -r '.pull_request.number // empty' "$GITHUB_EVENT_PATH" 2>/dev/null || true)"
   fi
   if [ -z "$num" ] && [ "$EVENT_NAME" == "push" ] && [ -n "${GITHUB_REPOSITORY:-}" ] && [ -n "${GITHUB_SHA:-}" ] && [ -n "${INPUT_TOKEN:-}" ]; then
-    local info
-    info=$(GH_TOKEN="${INPUT_TOKEN}" gh api "/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" --jq '[.[] | select(.merged_at != null)][0] | "\(.number // "")|\(.merged_by.login // "")|\(.user.login // "")"' 2>/dev/null || true)
-    num="${info%%|*}"
+    local info attempt
+    for attempt in 1 2 3; do
+      info=$(GH_TOKEN="${INPUT_TOKEN}" gh api "/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" --jq '[.[] | select(.merged_at != null)][0] | "\(.number // "")|\(.merged_by.login // "")|\(.user.login // "")"' 2>/dev/null || true)
+      num="${info%%|*}"
+      [ -n "$num" ] && break
+      if [ "$attempt" -lt 3 ]; then
+        sleep $((attempt * 2))
+      fi
+    done
   fi
   [ -z "$num" ] && return 0
   [ -z "${INPUT_TOKEN:-}" ] || [ -z "${GITHUB_REPOSITORY:-}" ] && return 0
   CHANGED_PR="$num"
-  GH_TOKEN="${INPUT_TOKEN}" gh api --paginate "/repos/${GITHUB_REPOSITORY}/pulls/${num}/files" --jq '.[].filename' 2>/dev/null || true
+  local files
+  if ! files="$(GH_TOKEN="${INPUT_TOKEN}" gh api --paginate "/repos/${GITHUB_REPOSITORY}/pulls/${num}/files" --jq '.[].filename' 2>"${CHANGED_ERR_FILE}")"; then
+    # Partial pages are discarded so owners never come from an incomplete list
+    return 2
+  fi
+  printf '%s\n' "$files"
 }
 
 CODEOWNERS_HANDLES=""
@@ -164,15 +175,21 @@ if [ -n "$CODEOWNERS_PATH" ]; then
   if [ "$CODEOWNERS_MATCH" == "changed" ]; then
     SELECT_MODE="paths"
     CHANGED_FILES_FILE="$(mktemp)"
-    pr_changed_files > "$CHANGED_FILES_FILE"
-    MATCH_PATHS="$(cat "$CHANGED_FILES_FILE")"
-    if [ -n "$MATCH_PATHS" ]; then
-      CODEOWNERS_REASON="mode=changed (PR #${CHANGED_PR}, $(printf '%s\n' "$MATCH_PATHS" | wc -l | tr -d ' ') files)"
+    CHANGED_ERR_FILE="$(mktemp)"
+    FILES_STATUS=0
+    pr_changed_files > "$CHANGED_FILES_FILE" || FILES_STATUS=$?
+    MATCH_PATHS="$(sed '/^$/d' "$CHANGED_FILES_FILE")"
+    if [ "$FILES_STATUS" -ne 0 ]; then
+      echo "::warning ::workflow-notifier: could not list files for PR #${CHANGED_PR}: $(tr '\n' ' ' < "$CHANGED_ERR_FILE")"
+      MATCH_PATHS="$(workflow_file)"
+      CODEOWNERS_REASON="mode=changed, PR #${CHANGED_PR} files lookup failed; fell back to workflow (${MATCH_PATHS:-unknown})"
+    elif [ -n "$MATCH_PATHS" ]; then
+      CODEOWNERS_REASON="mode=changed (PR #${CHANGED_PR}, $(printf '%s\n' "$MATCH_PATHS" | wc -l | tr -d ' ') file(s))"
     else
       MATCH_PATHS="$(workflow_file)"
       CODEOWNERS_REASON="mode=changed, no PR files found; fell back to workflow (${MATCH_PATHS:-unknown})"
     fi
-    rm -f "$CHANGED_FILES_FILE"
+    rm -f "$CHANGED_FILES_FILE" "$CHANGED_ERR_FILE"
   elif [ "$CODEOWNERS_MATCH" == "workflow" ]; then
     SELECT_MODE="paths"
     MATCH_PATHS="$(workflow_file)"
