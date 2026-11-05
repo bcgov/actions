@@ -158,6 +158,35 @@ if [[ "$*" == *"/pulls/"*"/files"* ]]; then
     printf 'partial.js\n'
     exit 1
   fi
+  if [ -n "${MOCK_PR_FILES_FIXTURE:-}" ]; then
+    # Replay recorded GitHub list-files pages the way real gh does: the
+    # endpoint must be exact, --paginate walks every page and --jq runs
+    # per page, so a dropped flag or a wrong filter shows up as wrong output
+    endpoint="" jq_filter="" paginate=""
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        api) ;;
+        --paginate) paginate=1 ;;
+        --jq) shift; jq_filter="$1" ;;
+        -*) echo "mock-gh: unexpected files flag $1" >&2; exit 1 ;;
+        *) endpoint="$1" ;;
+      esac
+      shift
+    done
+    if ! [[ "$endpoint" =~ ^/repos/[^/]+/[^/]+/pulls/[0-9]+/files$ ]]; then
+      echo "mock-gh: bad files endpoint '${endpoint}'" >&2
+      exit 1
+    fi
+    for page in "${MOCK_PR_FILES_FIXTURE}"/page-*.json; do
+      if [ -n "$jq_filter" ]; then
+        jq -r "$jq_filter" "$page" || exit 1
+      else
+        cat "$page"
+      fi
+      [ -n "$paginate" ] || break
+    done
+    exit 0
+  fi
   printf '%b' "${MOCK_PR_FILES:-}"
   exit 0
 fi
@@ -809,6 +838,37 @@ test_match_changed_retry_without_author() {
   rm -f "${TMP_DIR}/gh_attempts"
 }
 
+# Replays a recorded two-page pulls/{n}/files payload through the real
+# gh arguments built by pr_changed_files (endpoint, --paginate, --jq)
+test_match_changed_recorded_pages() {
+  local fixture="${SCRIPT_DIR}/fixtures/pr-files"
+  local out
+  out=$(run_match INPUT_CODEOWNERS_MATCH="changed" MOCK_PR_USER="dev" MOCK_PR_NUM="77" MOCK_PR_FILES_FIXTURE="$fixture" GITHUB_STEP_SUMMARY="${TMP_DIR}/summary.md")
+  assert_contains "$out" "mode=changed (PR #77, 5 file(s))" "recorded pages: every page is read"
+  assert_contains "$out" "Assignees: app1,app2,wf1" "recorded pages: page-2 workflow file adds its owners"
+  assert_not_contains "$out" "mock-gh:" "recorded pages: gh args accepted by replay"
+  assert_not_contains "$out" "could not list files" "recorded pages: no files lookup error"
+  rm -f "${TMP_DIR}/summary.md"
+}
+
+# Guards the replay itself: dropping --paginate or the filename filter
+# must change the result, or the test above proves nothing
+test_recorded_pages_replay_guards() {
+  local fixture="${SCRIPT_DIR}/fixtures/pr-files" got
+  got=$(env TMP_DIR="$TMP_DIR" MOCK_PR_FILES_FIXTURE="$fixture" "${MOCK_BIN}/gh" api --paginate "/repos/bcgov/actions/pulls/77/files" --jq '.[].filename')
+  assert_eq "$got" "$(printf 'src/a.js\nsrc/My Folder/b.js\ndocs/guide.md\n.github/workflows/pr.yml\nsrc/removed.js')" "replay: filenames in page order, spaces kept"
+  got=$(env TMP_DIR="$TMP_DIR" MOCK_PR_FILES_FIXTURE="$fixture" "${MOCK_BIN}/gh" api "/repos/bcgov/actions/pulls/77/files" --jq '.[].filename' | wc -l | tr -d ' ')
+  assert_eq "$got" "3" "replay: without --paginate only page 1 is returned"
+  if env TMP_DIR="$TMP_DIR" MOCK_PR_FILES_FIXTURE="$fixture" "${MOCK_BIN}/gh" api --paginate "/repos/bcgov/actions/pulls/77" --jq '.[].filename' > /dev/null 2>&1; then
+    assert_eq "accepted" "rejected" "replay: wrong endpoint is rejected"
+  else
+    assert_eq "rejected" "rejected" "replay: wrong endpoint is rejected"
+  fi
+  assert_not_contains "$(sed -n '/pulls\/\${num}\/files/p' "$ACTION_SH")" "per_page=1" "action: files query not page-limited"
+  assert_contains "$(sed -n '/pulls\/\${num}\/files/p' "$ACTION_SH")" "--paginate" "action: files query paginates"
+  assert_contains "$(sed -n '/pulls\/\${num}\/files/p' "$ACTION_SH")" "--jq '.[].filename'" "action: files query extracts filenames"
+}
+
 test_match_workflow() {
   local out
   out=$(run_match INPUT_CODEOWNERS_MATCH="workflow" MOCK_PR_USER="dev" MOCK_PR_FILES='src/a.js\n')
@@ -867,6 +927,8 @@ test_match_changed_pull_request_event
 test_match_changed_falls_back_to_workflow
 test_match_changed_files_error
 test_match_changed_retry_without_author
+test_match_changed_recorded_pages
+test_recorded_pages_replay_guards
 test_match_workflow
 test_match_rejects_bad_value
 test_codeowners_search_order

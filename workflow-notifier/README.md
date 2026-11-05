@@ -31,7 +31,7 @@ Everyone `notify_author` and `notify_codeowners` select is assigned on create (u
 
 ## CODEOWNERS matching
 
-The action reads the first CODEOWNERS file it finds, in GitHub's order: `.github/CODEOWNERS`, `CODEOWNERS`, `docs/CODEOWNERS`. `#` starts a comment anywhere on a line.
+The action reads the first CODEOWNERS file it finds, in GitHub's order: `.github/CODEOWNERS`, `CODEOWNERS`, `docs/CODEOWNERS`. `#` starts a comment anywhere on a line. Patterns follow GitHub's gitignore-style rules (`*`, `**`, `?`, trailing `/`, last match wins, a rule with no owners unsets ownership); `!` negation and `[ ]` ranges are not supported by GitHub CODEOWNERS and are matched literally.
 
 | `codeowners_match` | Owners picked |
 |---|---|
