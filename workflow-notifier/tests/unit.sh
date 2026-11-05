@@ -151,6 +151,12 @@ if [ "${1:-}" = "issue" ] && [ "${2:-}" = "create" ]; then
   exit 0
 fi
 
+if [[ "$*" == *"/pulls/"*"/files"* ]]; then
+  printf '%s\n' "$*" > "${TMP_DIR}/gh_files_args"
+  printf '%b' "${MOCK_PR_FILES:-}"
+  exit 0
+fi
+
 # Fallback for unexpected calls
 echo "mock-gh: $*" >&2
 exit 1
@@ -715,6 +721,123 @@ test_create_when_no_open_match
 test_comment_on_exact_title
 test_rejects_old_codeowners_value
 test_default_title
+
+# CODEOWNERS matching (#343) and team owners (#344)
+MATCH_FIXTURE="${TMP_DIR}/match"
+mkdir -p "${MATCH_FIXTURE}/.github"
+cat << 'EOF' > "${MATCH_FIXTURE}/.github/CODEOWNERS"
+# app owners
+* @app1 @app2 # trailing comment @ghost
+/.github/workflows/ @wf1 @bcgov/devops ops@example.com
+EOF
+
+run_match() {
+  run_action "$MATCH_FIXTURE" \
+    INPUT_TITLE="Match" \
+    INPUT_DRY_RUN="true" \
+    INPUT_TOKEN="dummy-token" \
+    INPUT_NOTIFY_AUTHOR="false" \
+    GITHUB_REPOSITORY="bcgov/actions" \
+    GITHUB_SHA="abc123" \
+    GITHUB_WORKFLOW_REF="bcgov/actions/.github/workflows/merge.yml@refs/heads/main" \
+    "$@"
+}
+
+test_match_all_default() {
+  local out
+  out=$(run_match GITHUB_STEP_SUMMARY="${TMP_DIR}/summary.md")
+  assert_contains "$out" "Assignees: app1,app2,wf1" "all (default) unions every user handle"
+  assert_not_contains "$out" "ghost" "mid-line comment owner is ignored"
+  assert_not_contains "$out" "Assignees: app1,app2,wf1,bcgov" "team org is never an assignee"
+  assert_contains "$out" "CODEOWNERS teams skipped (teams cannot be assigned): @bcgov/devops" "team owner skipped with log"
+  assert_contains "$out" "CODEOWNERS email owners ignored: 1" "email owner ignored with log"
+  assert_contains "$(cat "${TMP_DIR}/summary.md")" "CODEOWNERS: .github/CODEOWNERS, mode=all" "step summary names file and mode"
+  rm -f "${TMP_DIR}/summary.md"
+}
+
+test_match_changed_app_files() {
+  local out
+  out=$(run_match INPUT_CODEOWNERS_MATCH="changed" MOCK_PR_USER="dev" MOCK_PR_NUM="55" MOCK_PR_FILES='src/a.js\nREADME.md\n')
+  assert_contains "$out" "Assignees: app1,app2" "changed: app files pick * owners"
+  assert_not_contains "$out" "wf1" "changed: workflow owners not picked for app files"
+  assert_contains "$out" "mode=changed (PR #55, 2 files)" "changed: logs PR and file count"
+  assert_contains "$(cat "${TMP_DIR}/gh_files_args")" "/repos/bcgov/actions/pulls/55/files" "changed: reads PR files"
+}
+
+test_match_changed_workflow_files() {
+  local out
+  out=$(run_match INPUT_CODEOWNERS_MATCH="changed" MOCK_PR_USER="dev" MOCK_PR_FILES='.github/workflows/pr.yml\n')
+  assert_contains "$out" "Assignees: wf1" "changed: workflows-only PR picks workflow owners"
+  assert_not_contains "$out" "app1" "changed: last match wins over *"
+}
+
+test_match_changed_falls_back_to_workflow() {
+  local out
+  out=$(run_match INPUT_CODEOWNERS_MATCH="changed" GITHUB_EVENT_NAME="schedule")
+  assert_contains "$out" "Assignees: wf1" "changed without PR falls back to workflow file"
+  assert_contains "$out" "fell back to workflow (.github/workflows/merge.yml)" "changed: fallback is logged"
+}
+
+test_match_workflow() {
+  local out
+  out=$(run_match INPUT_CODEOWNERS_MATCH="workflow" MOCK_PR_USER="dev" MOCK_PR_FILES='src/a.js\n')
+  assert_contains "$out" "Assignees: wf1" "workflow: matches failing workflow file only"
+  assert_contains "$out" "mode=workflow (.github/workflows/merge.yml)" "workflow: logs path"
+}
+
+test_match_rejects_bad_value() {
+  local out
+  out=$(run_match INPUT_CODEOWNERS_MATCH="paths" || true)
+  assert_contains "$out" "codeowners_match" "rejects unknown codeowners_match"
+}
+
+test_codeowners_search_order() {
+  local dir="${TMP_DIR}/order"
+  mkdir -p "${dir}/.github" "${dir}/docs"
+  echo "* @root" > "${dir}/CODEOWNERS"
+  echo "* @docs" > "${dir}/docs/CODEOWNERS"
+  echo "* @gh" > "${dir}/.github/CODEOWNERS"
+  local out
+  out=$(run_action "$dir" INPUT_TITLE="Order" INPUT_DRY_RUN="true" INPUT_NOTIFY_AUTHOR="false")
+  assert_contains "$out" "Assignees: gh" ".github/CODEOWNERS wins over root and docs"
+  rm "${dir}/.github/CODEOWNERS"
+  out=$(run_action "$dir" INPUT_TITLE="Order" INPUT_DRY_RUN="true" INPUT_NOTIFY_AUTHOR="false")
+  assert_contains "$out" "Assignees: root" "root CODEOWNERS wins over docs"
+  rm "${dir}/CODEOWNERS"
+  out=$(run_action "$dir" INPUT_TITLE="Order" INPUT_DRY_RUN="true" INPUT_NOTIFY_AUTHOR="false")
+  assert_contains "$out" "Assignees: docs" "docs/CODEOWNERS used last"
+}
+
+test_team_only_codeowners() {
+  local dir="${TMP_DIR}/teams"
+  mkdir -p "$dir"
+  echo "* @bcgov/team-a dev@example.com" > "${dir}/CODEOWNERS"
+  local out
+  out=$(run_action "$dir" INPUT_TITLE="Teams" INPUT_DRY_RUN="true" INPUT_NOTIFY_AUTHOR="false")
+  assert_eq "$(tail -n1 <<< "$out" | xargs)" "Assignees:" "team-only CODEOWNERS assigns nobody"
+  assert_not_contains "$out" "--assignee" "no assignee flag for team-only CODEOWNERS"
+}
+
+test_node_matcher() {
+  if node --test "${SCRIPT_DIR}/codeowners.test.js" > "${TMP_DIR}/node-test.log" 2>&1; then
+    echo "✓ codeowners.js pattern tests"
+    passed=$((passed + 1))
+  else
+    cat "${TMP_DIR}/node-test.log"
+    echo "✗ codeowners.js pattern tests"
+    failed=$((failed + 1))
+  fi
+}
+
+test_match_all_default
+test_match_changed_app_files
+test_match_changed_workflow_files
+test_match_changed_falls_back_to_workflow
+test_match_workflow
+test_match_rejects_bad_value
+test_codeowners_search_order
+test_team_only_codeowners
+test_node_matcher
 
 echo ""
 echo "Unit tests finished: ${passed} passed, ${failed} failed."
