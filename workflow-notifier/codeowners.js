@@ -27,10 +27,16 @@ function parse(text) {
     // `\#` escapes a literal hash at the start of a pattern
     const line = raw.replace(/(^|[^\\])#.*$/, '$1').trim();
     if (!line) continue;
-    // `\ ` keeps a space inside the pattern
-    const m = line.match(/^((?:\\.|\S)+)\s*(.*)$/);
-    const pattern = m[1].replace(/\\(.)/g, '$1');
-    const owners = m[2] ? m[2].split(/\s+/) : [];
+    // `\ ` keeps a space inside the pattern; a backslash escapes the next character
+    let pattern = '';
+    let i = 0;
+    while (i < line.length && !/\s/.test(line[i])) {
+      if (line[i] === '\\' && i + 1 < line.length) i++;
+      pattern += line[i];
+      i++;
+    }
+    const rest = line.slice(i).trim();
+    const owners = rest ? rest.split(/\s+/) : [];
     rules.push({ pattern, owners });
   }
   return rules;
