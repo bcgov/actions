@@ -1960,7 +1960,7 @@ async function runMain() {
 }
 
 if (require.main === module) {
-  // Unknown or renamed inputs fail here; GitHub only warns (shared/README.md)
+  // Undeclared inputs fail here; GitHub only warns (shared/README.md)
   try {
     assertKnownActionInputs(__dirname);
   } catch (e) {

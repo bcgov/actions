@@ -3,7 +3,7 @@
 const { getInput, InputError, assertKnownActionInputs } = require('../shared/inputs.js');
 const { run } = require('../shared/pr-description.js');
 
-// Unknown or renamed inputs fail here; GitHub only warns (shared/README.md)
+// Undeclared inputs fail here; GitHub only warns (shared/README.md)
 try {
   assertKnownActionInputs(__dirname);
 } catch (e) {

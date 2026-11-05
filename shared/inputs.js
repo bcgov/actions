@@ -169,44 +169,8 @@ function getToken(env = process.env) {
 }
 
 
-/** Inputs reference for renamed and removed inputs. */
-const INPUTS_DOCS = 'https://github.com/bcgov/actions/blob/main/docs/INPUTS.md';
-
-/**
- * Inputs renamed or removed in v0.11, per action: old name -> new name, or
- * null when the input was removed with no replacement. Error text only: old
- * names are never accepted. Dropped at v2.
- */
-const RENAMED = {
-  builder: {
-    build_file: 'file',
-    build_context: 'context',
-    ref: 'base',
-    debug: null,
-    sbom: null,
-    repository: null,
-    username: null,
-  },
-  'diff-triggers': { ref: 'base', debug: null, annotations: null },
-  'image-tracker': { package: 'packages', dir: 'working_directory', registry: null, debug: null },
-  'pr-description-add': { add_markdown: 'markdown', debug: null },
-  'pr-validate': { add_markdown: 'markdown', conventional_commits: null },
-  'test-and-analyse': {
-    dir: 'working_directory',
-    ref: 'base',
-    dep_scan: 'unused_deps',
-    debug: null,
-    node_version_file: null,
-    java_version_file: null,
-    python_version_file: null,
-    repository: null,
-    branch: null,
-    checkout_path: null,
-    require_sonar: null,
-  },
-  'workflow-notifier': { debug: null, labels: null, assign: null },
-  'workflow-results': { summary: null, annotations: null, debug: null },
-};
+/** Where the unknown-input check is documented. */
+const INPUTS_DOCS = 'https://github.com/bcgov/actions/blob/main/shared/README.md#unknown-inputs';
 
 /** Runner env form of an input name: INPUT_<NAME>, spaces as `_`. */
 const envKey = name => name.replace(/ /g, '_').toUpperCase();
@@ -237,33 +201,28 @@ function declaredInputs(yml) {
 }
 
 /**
- * Error text for inputs the action does not declare. Names each bad key, the
- * replacement when known, and links the action README and INPUTS.md.
+ * Error text for inputs the action does not declare. Names each bad key,
+ * lists the declared inputs and links the action README.
  * @param {string} action - action directory name, e.g. builder
  * @param {string[]} unknown - bad keys as the caller wrote them
  * @param {string[]} declared
- * @param {{repo?: string, renamed?: Record<string, Record<string, string|null>>}} [opts]
+ * @param {{repo?: string}} [opts]
  * @returns {string}
  */
 function unknownInputsMessage(action, unknown, declared, opts = {}) {
   const repo = opts.repo || 'bcgov/actions';
-  const renamed = (opts.renamed || RENAMED)[action] || {};
-  const lines = [`::error title=${action}: unknown input::Unknown input(s) for ${action}: ${unknown.join(', ')}`];
-  for (const key of unknown) {
-    const hit = Object.keys(renamed).find(k => k.toLowerCase() === key.toLowerCase());
-    if (hit && renamed[hit]) lines.push(`  ${key}: renamed to ${renamed[hit]}`);
-    else if (hit) lines.push(`  ${key}: removed (no replacement)`);
-    else lines.push(`  ${key}: not an input of ${action}`);
-  }
-  lines.push(`Inputs: ${declared.join(', ')}`);
-  lines.push(`Docs: https://github.com/${repo}/blob/main/${action}/README.md`);
-  lines.push(`Reference: ${INPUTS_DOCS}`);
-  return lines.join('%0A');
+  return [
+    `::error title=${action}: unknown input::Unknown input(s) for ${action}: ${unknown.join(', ')}`,
+    ...unknown.map(key => `  ${key}: not an input of ${action}`),
+    `Inputs: ${declared.join(', ')}`,
+    `Docs: https://github.com/${repo}/blob/main/${action}/README.md`,
+    `Check: ${INPUTS_DOCS}`,
+  ].join('%0A');
 }
 
 /**
  * Throw InputError when the caller passed inputs the action does not declare.
- * GitHub only warns ("Unexpected input(s)") and keeps going, so a renamed
+ * GitHub only warns ("Unexpected input(s)") and keeps going, so a mistyped
  * input is silently ignored without this check.
  * @param {string} action
  * @param {string[]} given - input names the caller passed
@@ -313,7 +272,6 @@ function assertKnownActionInputs(actionDir, env = process.env) {
 
 module.exports = {
   INPUTS_DOCS,
-  RENAMED,
   assertKnownActionInputs,
   assertKnownInputs,
   declaredInputs,

@@ -25,9 +25,11 @@ GitHub downloads the whole repository for `uses: bcgov/actions/<action>@<sha>`, 
 
 CLI commands: `list <name>`, `bool <name> [default]`, `enum <name> <a,b,c> <default>`, `debug`, `token`, `assert-known <action_dir>`.
 
-## Unknown and renamed inputs
+## Unknown inputs
 
-GitHub only warns on a `with:` key the action does not declare and keeps going. Every action fails instead, naming the key, its replacement when known, the action README and [docs/INPUTS.md](../docs/INPUTS.md).
+Actions accept only the inputs declared in their `action.yml`. GitHub on its own only warns on any other `with:` key and keeps going; every action here fails instead, naming the bad key(s), listing the declared inputs and linking the action README. The check reads nothing but `action.yml` and the keys passed, so it needs no per-action setup.
+
+test-and-analyse no longer checks out code (`repository`, `branch`, `checkout_path` are gone): run `actions/checkout` yourself and point `working_directory` at it.
 
 - Node actions call `assertKnownActionInputs(__dirname)` first. The runner sets `INPUT_<NAME>` for every `with:` key, declared or not, and the check compares those against `action.yml`.
 - Composite actions run it as their first step. Their own steps set `INPUT_*` vars, so they pass `${{ toJSON(inputs) }}`, which also holds undeclared keys:
@@ -40,6 +42,6 @@ GitHub only warns on a `with:` key the action does not declare and keeps going. 
   run: node "$GITHUB_ACTION_PATH/../shared/inputs.js" assert-known "$GITHUB_ACTION_PATH"
 ```
 
-Renames live in `RENAMED` in `inputs.js` (error text only; old names never work). Estimated removal: v2. bcgov/actions-openshift copies this check; this repo is the source of truth.
+Composite keys (`INPUTS_JSON`) compare case-insensitively as written; only node `INPUT_*` env names map spaces to `_`. bcgov/actions-openshift copies this check; this repo is the source of truth.
 
 - `pr-description.js`: append markdown to a PR description once (pr-description-add, pr-validate `markdown`). Resolves the PR from the `pr` input or the event, so it works outside `pull_request`.

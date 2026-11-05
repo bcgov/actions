@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const {
-  InputError, RENAMED, assertKnownInputs, declaredInputs, givenInputs,
+  InputError, assertKnownInputs, declaredInputs, givenInputs,
 } = require('../inputs.js');
 
 const root = path.join(__dirname, '..', '..');
@@ -24,19 +24,15 @@ test('assertKnownInputs: declared inputs pass, in any case', () => {
   assert.doesNotThrow(() => assertKnownInputs('builder', ['package', 'FILE'], declaredInputs(builderYml)));
 });
 
-test('assertKnownInputs: renamed input fails and names the replacement', () => {
+test('assertKnownInputs: undeclared inputs fail, naming each key, the inputs and README', () => {
   assert.throws(
     () => assertKnownInputs('builder', ['package', 'build_file', 'build_context'], declaredInputs(builderYml)),
     e => e instanceof InputError
-      && e.message.startsWith('::error title=builder: unknown input::')
-      && e.message.includes('build_file: renamed to file')
-      && e.message.includes('build_context: renamed to context')
-      && e.message.includes('docs/INPUTS.md')
-      && e.message.includes('builder/README.md'),
-  );
-  assert.throws(
-    () => assertKnownInputs('image-tracker', ['package'], ['packages']),
-    /package: renamed to packages/,
+      && e.message.startsWith('::error title=builder: unknown input::Unknown input(s) for builder: build_file, build_context')
+      && e.message.includes('build_file: not an input of builder')
+      && e.message.includes('Inputs: package, context, file')
+      && e.message.includes('builder/README.md')
+      && !/renamed|migration/i.test(e.message),
   );
 });
 
@@ -45,7 +41,6 @@ test('assertKnownInputs: unknown input fails and names the key', () => {
     () => assertKnownInputs('builder', ['not_a_thing'], declaredInputs(builderYml)),
     e => e instanceof InputError && e.message.includes('not_a_thing: not an input of builder'),
   );
-  assert.throws(() => assertKnownInputs('builder', ['sbom'], declaredInputs(builderYml)), /sbom: removed/);
 });
 
 test('assertKnownInputs: composite (raw) keys fold case but not spaces', () => {
@@ -68,13 +63,13 @@ test('CLI assert-known: composite INPUTS_JSON rejects a spaced key', () => {
   assert.match(r.stderr, /build args: not an input of builder/);
 });
 
-test('rename map: every replacement is a declared input of that action', () => {
-  for (const [action, map] of Object.entries(RENAMED)) {
-    const declared = declaredInputs(fs.readFileSync(path.join(root, action, 'action.yml'), 'utf8'));
-    for (const [old, now] of Object.entries(map)) {
-      assert.ok(!declared.includes(old), `${action}: ${old} is still declared`);
-      if (now) assert.ok(declared.includes(now), `${action}: ${now} is not declared`);
-    }
+test('every action: declared inputs pass, an extra key fails', () => {
+  const dirs = fs.readdirSync(root).filter(d => fs.existsSync(path.join(root, d, 'action.yml')));
+  assert.ok(dirs.length > 5);
+  for (const d of dirs) {
+    const declared = declaredInputs(fs.readFileSync(path.join(root, d, 'action.yml'), 'utf8'));
+    assert.doesNotThrow(() => assertKnownInputs(d, declared, declared, { raw: true }), d);
+    assert.throws(() => assertKnownInputs(d, [...declared, 'not_an_input'], declared, { raw: true }), /not_an_input/, d);
   }
 });
 
@@ -83,13 +78,13 @@ test('givenInputs: INPUTS_JSON wins, else INPUT_* env', () => {
   assert.deepStrictEqual(givenInputs({ INPUT_BUILD_FILE: 'x', PATH: '/' }), ['build_file']);
 });
 
-test('CLI assert-known: fails non-zero with ::error:: on a renamed input', () => {
+test('CLI assert-known: fails non-zero with ::error:: on an undeclared input', () => {
   const r = spawnSync('node', [cli, 'assert-known', path.join(root, 'builder')], {
     env: { PATH: process.env.PATH, INPUTS_JSON: JSON.stringify({ package: 'x', build_file: 'Dockerfile' }) },
     encoding: 'utf8',
   });
   assert.strictEqual(r.status, 1);
-  assert.match(r.stderr, /::error title=builder: unknown input::.*build_file: renamed to file/);
+  assert.match(r.stderr, /::error title=builder: unknown input::.*build_file: not an input of builder/);
 });
 
 test('CLI assert-known: passes for declared inputs (node action env form)', () => {
@@ -100,7 +95,7 @@ test('CLI assert-known: passes for declared inputs (node action env form)', () =
   assert.strictEqual(r.status, 0, r.stderr);
 });
 
-test('node action entry fails on a renamed input', () => {
+test('node action entry fails on an undeclared input', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ak-'));
   const r = spawnSync('node', [path.join(root, 'image-tracker', 'index.js')], {
     cwd: dir,
@@ -108,5 +103,5 @@ test('node action entry fails on a renamed input', () => {
     encoding: 'utf8',
   });
   assert.strictEqual(r.status, 1);
-  assert.match(r.stdout, /package: renamed to packages/);
+  assert.match(r.stdout, /package: not an input of image-tracker/);
 });
