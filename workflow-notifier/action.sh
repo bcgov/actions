@@ -116,27 +116,27 @@ if [ "${INPUT_NOTIFY_AUTHOR:-true}" == "true" ]; then
   fi
 fi
 
-# 2. Discover CODEOWNERS (GitHub order: .github/, root, docs/); workspace takes precedence over sparse checkout
+# 2. Discover CODEOWNERS (GitHub order: .github/, root, docs/)
 CODEOWNERS_PATH=""
-CODEOWNERS_FILE=""
-SEARCH_ROOTS=(".")
-if [ -n "${CODEOWNERS_CHECKOUT_DIR:-}" ]; then
-  SEARCH_ROOTS+=("${CODEOWNERS_CHECKOUT_DIR}")
+while IFS= read -r path; do
+  if [ -f "$path" ]; then
+    CODEOWNERS_PATH="$path"
+    log_debug "Found CODEOWNERS at $path"
+    break
+  fi
+done < <(node "$CODEOWNERS_JS" search-order)
+
+# None in the workspace (no or sparse checkout): fetch only .github/CODEOWNERS to a temp file outside it
+CODEOWNERS_FILE="$CODEOWNERS_PATH"
+if [ -z "$CODEOWNERS_PATH" ] && [ "$NOTIFY_CODEOWNERS_MODE" != "never" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
+  CODEOWNERS_FILE="$(mktemp "${RUNNER_TEMP:-/tmp}/workflow-notifier-codeowners.XXXXXX")"
+  trap 'rm -f "$CODEOWNERS_FILE"' EXIT
+  if GH_TOKEN="${INPUT_TOKEN}" gh api -H "Accept: application/vnd.github.raw" \
+    "/repos/${GITHUB_REPOSITORY}/contents/.github/CODEOWNERS${GITHUB_SHA:+?ref=${GITHUB_SHA}}" > "$CODEOWNERS_FILE" 2>/dev/null \
+    && [ -s "$CODEOWNERS_FILE" ]; then
+    CODEOWNERS_PATH=".github/CODEOWNERS"
+  fi
 fi
-for root in "${SEARCH_ROOTS[@]}"; do
-  while IFS= read -r path; do
-    candidate="$path"
-    if [ "$root" != "." ]; then
-      candidate="${root}/${path}"
-    fi
-    if [ -f "$candidate" ]; then
-      CODEOWNERS_PATH="$path"
-      CODEOWNERS_FILE="$candidate"
-      log_debug "Found CODEOWNERS at $candidate"
-      break 2
-    fi
-  done < <(node "$CODEOWNERS_JS" search-order)
-done
 
 # Failing workflow file, e.g. .github/workflows/merge.yml (from owner/repo/<path>@ref)
 workflow_file() {
