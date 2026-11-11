@@ -1190,8 +1190,6 @@ jobs:
         run: |
           rm -f .github/CODEOWNERS CODEOWNERS docs/CODEOWNERS .github/codeowners
           echo sentinel > sentinel.txt
-          SUMMARY_LINES_BEFORE=$([ -f "$GITHUB_STEP_SUMMARY" ] && wc -l < "$GITHUB_STEP_SUMMARY" || echo 0)
-          echo "SUMMARY_LINES_BEFORE=${SUMMARY_LINES_BEFORE}" >> "$GITHUB_ENV"
 
       - name: Dry Run - Auto-checkout CODEOWNERS When Missing
         uses: $/workflow-notifier
@@ -1204,9 +1202,17 @@ jobs:
 
       - name: Assert CODEOWNERS Auto-checkout and Workspace Preservation
         run: |
-          grep -q sentinel sentinel.txt
-          tail -n +"$((SUMMARY_LINES_BEFORE + 1))" "$GITHUB_STEP_SUMMARY" | grep -q 'CODEOWNERS: \.github/CODEOWNERS'
-          test ! -d .workflow-notifier-codeowners
+          grep -qx sentinel sentinel.txt || { echo "::error::Workspace sentinel did not survive"; exit 1; }
+          test ! -d .workflow-notifier-codeowners || { echo "::error::CODEOWNERS checkout dir was not removed"; exit 1; }
+          # GITHUB_STEP_SUMMARY is a fresh file per step, so read the notifier's own summary
+          # file (written after the sentinel) from the runner's file-command directory
+          summary_dir="$(dirname "$GITHUB_STEP_SUMMARY")"
+          if ! find "$summary_dir" -type f -name 'step_summary_*' -newer sentinel.txt -exec cat {} + \
+            | grep -q '^- CODEOWNERS: \.github/CODEOWNERS, '; then
+            echo "::error::Notifier step summary has no 'CODEOWNERS: .github/CODEOWNERS'"
+            ls -la "$summary_dir"
+            exit 1
+          fi
 
 
   # ─── SYSDIG MONITOR ────────────────────────────────────────────────────────
