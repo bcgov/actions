@@ -909,6 +909,20 @@ test_team_only_codeowners() {
   assert_not_contains "$out" "--assignee" "no assignee flag for team-only CODEOWNERS"
 }
 
+test_codeowners_checkout_dir() {
+  local dir="${TMP_DIR}/checkout_dir"
+  mkdir -p "${dir}/.workflow-notifier-codeowners/.github"
+  echo "* @sparseowner" > "${dir}/.workflow-notifier-codeowners/.github/CODEOWNERS"
+  local out
+  out=$(run_action "$dir" INPUT_TITLE="CheckoutDir" INPUT_DRY_RUN="true" INPUT_NOTIFY_AUTHOR="false" CODEOWNERS_CHECKOUT_DIR=".workflow-notifier-codeowners")
+  assert_contains "$out" "Assignees: sparseowner" "resolves CODEOWNERS from CODEOWNERS_CHECKOUT_DIR when workspace has none"
+  assert_contains "$out" "CODEOWNERS: .github/CODEOWNERS," "logs repo-relative CODEOWNERS path without internal checkout prefix"
+
+  echo "* @workspaceowner" > "${dir}/CODEOWNERS"
+  out=$(run_action "$dir" INPUT_TITLE="CheckoutDir" INPUT_DRY_RUN="true" INPUT_NOTIFY_AUTHOR="false" CODEOWNERS_CHECKOUT_DIR=".workflow-notifier-codeowners")
+  assert_contains "$out" "Assignees: workspaceowner" "workspace CODEOWNERS takes precedence over CODEOWNERS_CHECKOUT_DIR"
+}
+
 test_node_matcher() {
   if node --test "${SCRIPT_DIR}/codeowners.test.js" > "${TMP_DIR}/node-test.log" 2>&1; then
     echo "✓ codeowners.js pattern tests"
@@ -933,6 +947,7 @@ test_match_workflow
 test_match_rejects_bad_value
 test_codeowners_search_order
 test_team_only_codeowners
+test_codeowners_checkout_dir
 test_node_matcher
 
 echo ""

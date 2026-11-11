@@ -1186,6 +1186,28 @@ jobs:
           notify_codeowners: always
           dry_run: true
 
+      - name: Remove Workspace CODEOWNERS and Plant Sentinel
+        run: |
+          rm -f .github/CODEOWNERS CODEOWNERS docs/CODEOWNERS .github/codeowners
+          echo sentinel > sentinel.txt
+          SUMMARY_LINES_BEFORE=$([ -f "$GITHUB_STEP_SUMMARY" ] && wc -l < "$GITHUB_STEP_SUMMARY" || echo 0)
+          echo "SUMMARY_LINES_BEFORE=${SUMMARY_LINES_BEFORE}" >> "$GITHUB_ENV"
+
+      - name: Dry Run - Auto-checkout CODEOWNERS When Missing
+        uses: $/workflow-notifier
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          title: '[DRY RUN] Auto-checkout CODEOWNERS'
+          body: 'This is a dry run test without workspace CODEOWNERS.'
+          notify_codeowners: always
+          dry_run: true
+
+      - name: Assert CODEOWNERS Auto-checkout and Workspace Preservation
+        run: |
+          grep -q sentinel sentinel.txt
+          tail -n +"$((SUMMARY_LINES_BEFORE + 1))" "$GITHUB_STEP_SUMMARY" | grep -q 'CODEOWNERS: \.github/CODEOWNERS'
+          test ! -d .workflow-notifier-codeowners
+
 
   # ─── SYSDIG MONITOR ────────────────────────────────────────────────────────
   test-test-and-analyse:

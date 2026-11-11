@@ -13,7 +13,7 @@ permissions:
   pull-requests: read  # Optional: required to resolve author from pull request metadata on merge commits
 ```
 
-The action reads `CODEOWNERS` from the **job workspace**, not from the action bundle. A full `actions/checkout` is the usual approach; a sparse checkout of `.github/CODEOWNERS` is enough when you only need owner discovery.
+No prior `actions/checkout` is required: when `notify_codeowners` is not `never` and no `CODEOWNERS` file is in the job workspace, the action sparse-checkouts `CODEOWNERS` into a temporary directory and cleans it up afterward without altering an existing checkout.
 
 ## Inputs
 

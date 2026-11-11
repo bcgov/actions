@@ -116,15 +116,27 @@ if [ "${INPUT_NOTIFY_AUTHOR:-true}" == "true" ]; then
   fi
 fi
 
-# 2. Discover CODEOWNERS (GitHub order: .github/, root, docs/)
+# 2. Discover CODEOWNERS (GitHub order: .github/, root, docs/); workspace takes precedence over sparse checkout
 CODEOWNERS_PATH=""
-while IFS= read -r path; do
-  if [ -f "$path" ]; then
-    CODEOWNERS_PATH="$path"
-    log_debug "Found CODEOWNERS at $path"
-    break
-  fi
-done < <(node "$CODEOWNERS_JS" search-order)
+CODEOWNERS_FILE=""
+SEARCH_ROOTS=(".")
+if [ -n "${CODEOWNERS_CHECKOUT_DIR:-}" ]; then
+  SEARCH_ROOTS+=("${CODEOWNERS_CHECKOUT_DIR}")
+fi
+for root in "${SEARCH_ROOTS[@]}"; do
+  while IFS= read -r path; do
+    candidate="$path"
+    if [ "$root" != "." ]; then
+      candidate="${root}/${path}"
+    fi
+    if [ -f "$candidate" ]; then
+      CODEOWNERS_PATH="$path"
+      CODEOWNERS_FILE="$candidate"
+      log_debug "Found CODEOWNERS at $candidate"
+      break 2
+    fi
+  done < <(node "$CODEOWNERS_JS" search-order)
+done
 
 # Failing workflow file, e.g. .github/workflows/merge.yml (from owner/repo/<path>@ref)
 workflow_file() {
@@ -195,7 +207,7 @@ if [ -n "$CODEOWNERS_PATH" ]; then
     MATCH_PATHS="$(workflow_file)"
     CODEOWNERS_REASON="mode=workflow (${MATCH_PATHS:-unknown})"
   fi
-  SELECTED="$(printf '%s\n' "$MATCH_PATHS" | node "$CODEOWNERS_JS" "$CODEOWNERS_PATH" "$SELECT_MODE")"
+  SELECTED="$(printf '%s\n' "$MATCH_PATHS" | node "$CODEOWNERS_JS" "$CODEOWNERS_FILE" "$SELECT_MODE")"
   CODEOWNERS_HANDLES="$(sed -n 's/^users=//p' <<< "$SELECTED")"
   CODEOWNERS_TEAMS="$(sed -n 's/^teams=//p' <<< "$SELECTED")"
   CODEOWNERS_EMAILS="$(sed -n 's/^emails=//p' <<< "$SELECTED")"

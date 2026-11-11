@@ -40,6 +40,21 @@ runs:
         inputs: ${{ toJSON(inputs) }}
         action_path: ${{ github.action_path }}
 
+    - name: Checkout CODEOWNERS
+      id: checkout_codeowners
+      if: inputs.notify_codeowners != 'never' && hashFiles('.github/CODEOWNERS', 'CODEOWNERS', 'docs/CODEOWNERS', '.github/codeowners') == ''
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        path: .workflow-notifier-codeowners
+        token: ${{ inputs.token }}
+        persist-credentials: false
+        sparse-checkout: |
+          CODEOWNERS
+          .github/CODEOWNERS
+          .github/codeowners
+          docs/CODEOWNERS
+        sparse-checkout-cone-mode: false
+
     - name: Run Notifier
       id: run_script
       shell: bash
@@ -52,5 +67,11 @@ runs:
         INPUT_CODEOWNERS_MATCH: "${{ inputs.codeowners_match }}"
         INPUT_EVENT_NAME: "${{ github.event_name }}"
         INPUT_DRY_RUN: "${{ inputs.dry_run }}"
+        CODEOWNERS_CHECKOUT_DIR: "${{ steps.checkout_codeowners.outcome == 'success' && '.workflow-notifier-codeowners' || '' }}"
       run: |
         "${{ github.action_path }}/action.sh"
+
+    - name: Clean up CODEOWNERS checkout
+      if: always() && steps.checkout_codeowners.outcome != 'skipped'
+      shell: bash
+      run: rm -rf .workflow-notifier-codeowners
