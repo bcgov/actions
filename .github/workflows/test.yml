@@ -1190,6 +1190,8 @@ jobs:
         run: |
           rm -f .github/CODEOWNERS CODEOWNERS docs/CODEOWNERS .github/codeowners
           echo sentinel > sentinel.txt
+          mkdir -p .workflow-notifier-codeowners
+          echo caller > .workflow-notifier-codeowners/keep.txt
 
       - name: Dry Run - Auto-checkout CODEOWNERS When Missing
         uses: $/workflow-notifier
@@ -1203,7 +1205,10 @@ jobs:
       - name: Assert CODEOWNERS Auto-checkout and Workspace Preservation
         run: |
           grep -qx sentinel sentinel.txt || { echo "::error::Workspace sentinel did not survive"; exit 1; }
-          test ! -d .workflow-notifier-codeowners || { echo "::error::CODEOWNERS checkout dir was not removed"; exit 1; }
+          grep -qx caller .workflow-notifier-codeowners/keep.txt || { echo "::error::Caller's .workflow-notifier-codeowners was altered"; exit 1; }
+          if compgen -G '.workflow-notifier-codeowners.*' > /dev/null; then
+            echo "::error::CODEOWNERS checkout dir was not removed"; ls -la; exit 1
+          fi
           # GITHUB_STEP_SUMMARY is a fresh file per step, so read the notifier's own summary
           # file (written after the sentinel) from the runner's file-command directory
           summary_dir="$(dirname "$GITHUB_STEP_SUMMARY")"

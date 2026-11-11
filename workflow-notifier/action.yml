@@ -40,12 +40,21 @@ runs:
         inputs: ${{ toJSON(inputs) }}
         action_path: ${{ github.action_path }}
 
+    # Unique per invocation, so cleanup never removes a caller's directory
+    - name: Allocate CODEOWNERS checkout directory
+      id: codeowners_dir
+      if: inputs.notify_codeowners != 'never' && hashFiles('.github/CODEOWNERS', 'CODEOWNERS', 'docs/CODEOWNERS', '.github/codeowners') == ''
+      shell: bash
+      run: |
+        dir="$(mktemp -d "${GITHUB_WORKSPACE}/.workflow-notifier-codeowners.XXXXXX")"
+        echo "path=$(basename "$dir")" >> "$GITHUB_OUTPUT"
+
     - name: Checkout CODEOWNERS
       id: checkout_codeowners
-      if: inputs.notify_codeowners != 'never' && hashFiles('.github/CODEOWNERS', 'CODEOWNERS', 'docs/CODEOWNERS', '.github/codeowners') == ''
+      if: steps.codeowners_dir.outputs.path != ''
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
-        path: .workflow-notifier-codeowners
+        path: ${{ steps.codeowners_dir.outputs.path }}
         token: ${{ inputs.token }}
         persist-credentials: false
         sparse-checkout: |
@@ -67,11 +76,13 @@ runs:
         INPUT_CODEOWNERS_MATCH: "${{ inputs.codeowners_match }}"
         INPUT_EVENT_NAME: "${{ github.event_name }}"
         INPUT_DRY_RUN: "${{ inputs.dry_run }}"
-        CODEOWNERS_CHECKOUT_DIR: "${{ steps.checkout_codeowners.outcome == 'success' && '.workflow-notifier-codeowners' || '' }}"
+        CODEOWNERS_CHECKOUT_DIR: "${{ steps.checkout_codeowners.outcome == 'success' && steps.codeowners_dir.outputs.path || '' }}"
       run: |
         "${{ github.action_path }}/action.sh"
 
     - name: Clean up CODEOWNERS checkout
-      if: always() && steps.checkout_codeowners.outcome != 'skipped'
+      if: always() && steps.codeowners_dir.outputs.path != ''
       shell: bash
-      run: rm -rf .workflow-notifier-codeowners
+      env:
+        CODEOWNERS_CHECKOUT_DIR: ${{ steps.codeowners_dir.outputs.path }}
+      run: rm -rf -- "${GITHUB_WORKSPACE:?}/${CODEOWNERS_CHECKOUT_DIR:?}"
