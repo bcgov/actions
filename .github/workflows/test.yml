@@ -1186,10 +1186,9 @@ jobs:
           notify_codeowners: always
           dry_run: true
 
-      - name: Fetch CODEOWNERS When Missing From Workspace
+      - name: CODEOWNERS Names - Success
         env:
           INPUT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          INPUT_TITLE: '[DRY RUN] Fetch CODEOWNERS'
           INPUT_NOTIFY_AUTHOR: 'false'
           INPUT_NOTIFY_CODEOWNERS: always
           INPUT_DRY_RUN: 'true'
@@ -1197,10 +1196,19 @@ jobs:
           rm .github/CODEOWNERS
           out="$(bash workflow-notifier/action.sh)"
           echo "$out"
-          grep -q '^CODEOWNERS: \.github/CODEOWNERS, ' <<< "$out"
           grep -qx 'CODEOWNERS users selected: @DerekRoberts' <<< "$out"
-          [ -z "$(compgen -G "${RUNNER_TEMP}/workflow-notifier-codeowners.*")" ]
-          test ! -e .github/CODEOWNERS
+
+      - name: CODEOWNERS Names - Failure
+        env:
+          INPUT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_NOTIFY_AUTHOR: 'false'
+          INPUT_NOTIFY_CODEOWNERS: always
+          INPUT_DRY_RUN: 'true'
+        run: |
+          out="$(GITHUB_SHA=0000000000000000000000000000000000000000 bash workflow-notifier/action.sh)"
+          echo "$out"
+          grep -qx 'No names returned from codeowners' <<< "$out"
+          grep -qx 'CODEOWNERS: none found' <<< "$out"
 
 
   # ─── SYSDIG MONITOR ────────────────────────────────────────────────────────

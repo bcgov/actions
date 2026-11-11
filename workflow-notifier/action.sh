@@ -126,18 +126,6 @@ while IFS= read -r path; do
   fi
 done < <(node "$CODEOWNERS_JS" search-order)
 
-# None in the workspace (no or sparse checkout): fetch only .github/CODEOWNERS to a temp file outside it
-CODEOWNERS_FILE="$CODEOWNERS_PATH"
-if [ -z "$CODEOWNERS_PATH" ] && [ "$NOTIFY_CODEOWNERS_MODE" != "never" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
-  CODEOWNERS_FILE="$(mktemp "${RUNNER_TEMP:-/tmp}/workflow-notifier-codeowners.XXXXXX")"
-  trap 'rm -f "$CODEOWNERS_FILE"' EXIT
-  if GH_TOKEN="${INPUT_TOKEN}" gh api -H "Accept: application/vnd.github.raw" \
-    "/repos/${GITHUB_REPOSITORY}/contents/.github/CODEOWNERS${GITHUB_SHA:+?ref=${GITHUB_SHA}}" > "$CODEOWNERS_FILE" 2>/dev/null \
-    && [ -s "$CODEOWNERS_FILE" ]; then
-    CODEOWNERS_PATH=".github/CODEOWNERS"
-  fi
-fi
-
 # Failing workflow file, e.g. .github/workflows/merge.yml (from owner/repo/<path>@ref)
 workflow_file() {
   local ref="${GITHUB_WORKFLOW_REF:-}"
@@ -207,11 +195,22 @@ if [ -n "$CODEOWNERS_PATH" ]; then
     MATCH_PATHS="$(workflow_file)"
     CODEOWNERS_REASON="mode=workflow (${MATCH_PATHS:-unknown})"
   fi
-  SELECTED="$(printf '%s\n' "$MATCH_PATHS" | node "$CODEOWNERS_JS" "$CODEOWNERS_FILE" "$SELECT_MODE")"
+  SELECTED="$(printf '%s\n' "$MATCH_PATHS" | node "$CODEOWNERS_JS" "$CODEOWNERS_PATH" "$SELECT_MODE")"
   CODEOWNERS_HANDLES="$(sed -n 's/^users=//p' <<< "$SELECTED")"
   CODEOWNERS_TEAMS="$(sed -n 's/^teams=//p' <<< "$SELECTED")"
   CODEOWNERS_EMAILS="$(sed -n 's/^emails=//p' <<< "$SELECTED")"
   log_debug "CODEOWNERS handles: ${CODEOWNERS_HANDLES}"
+fi
+
+# No CODEOWNERS in the workspace: names from .github/CODEOWNERS at this commit, or nothing
+codeowners_names() {
+  GH_TOKEN="${INPUT_TOKEN}" gh api -H "Accept: application/vnd.github.raw" \
+    "/repos/${GITHUB_REPOSITORY:-}/contents/.github/CODEOWNERS${GITHUB_SHA:+?ref=${GITHUB_SHA}}" 2>/dev/null \
+    | node "$CODEOWNERS_JS" /dev/stdin all | sed -n 's/^users=//p'
+}
+if [ -z "$CODEOWNERS_PATH" ] && [ "$NOTIFY_CODEOWNERS_MODE" != "never" ]; then
+  CODEOWNERS_HANDLES="$(codeowners_names || true)"
+  [ -n "$CODEOWNERS_HANDLES" ] && CODEOWNERS_PATH=".github/CODEOWNERS" || echo "No names returned from codeowners"
 fi
 
 # Determine whether CODEOWNERS should be included

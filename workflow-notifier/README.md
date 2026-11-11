@@ -13,7 +13,7 @@ permissions:
   pull-requests: read  # Optional: required to resolve author from pull request metadata on merge commits
 ```
 
-The action reads `CODEOWNERS` from the **job workspace** first. When none is there and `notify_codeowners` is not `never`, it fetches only `.github/CODEOWNERS` for the run's commit through the contents API (needs `contents: read`) into a temp file outside the workspace and deletes it afterward, so no prior `actions/checkout` is required.
+The action reads `CODEOWNERS` from the **job workspace** first. When none is there and `notify_codeowners` is not `never`, it reads the `@user` names from `.github/CODEOWNERS` at the run's commit through the contents API (needs `contents: read`; every rule, so `codeowners_match` only applies to a workspace file), so no prior `actions/checkout` is required. If that returns no names it logs `No names returned from codeowners` and continues.
 
 ## Inputs
 
