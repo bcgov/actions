@@ -460,20 +460,21 @@ test_notify_codeowners_always() {
   assert_contains "$out" "Assignees: merger1,author1,alice,bob" "includes actors and CODEOWNERS when notify_codeowners is true"
 }
 
-# Test 7: Assignees when no CODEOWNERS exists
+# Test 7: No CODEOWNERS anywhere halts the job unless notify_codeowners is never
 test_no_codeowners() {
   local empty_fixture="${TMP_DIR}/empty_fixture"
   mkdir -p "$empty_fixture"
 
-  local out
+  local out rc=0
   out=$(run_action "$empty_fixture" \
     INPUT_TITLE="Test No CODEOWNERS" \
     INPUT_NOTIFY_AUTHOR="true" \
     INPUT_DRY_RUN="true" \
-    GITHUB_TRIGGERING_ACTOR="solouser")
+    GITHUB_TRIGGERING_ACTOR="solouser") || rc=$?
 
-  assert_contains "$out" "Author:    @solouser" "identifies solouser"
-  assert_contains "$out" "Assignees: solouser" "assignees contains only solouser when no CODEOWNERS"
+  assert_eq "$rc" "1" "exits 1 when no CODEOWNERS names are returned"
+  assert_contains "$out" "::error::No names returned from codeowners" "reports no CODEOWNERS names"
+  assert_not_contains "$out" "Assignees:" "creates no issue when no CODEOWNERS names are returned"
 }
 
 # Test 7b: notify_codeowners="false" excludes CODEOWNERS even on scheduled runs

@@ -210,7 +210,11 @@ codeowners_names() {
 }
 if [ -z "$CODEOWNERS_PATH" ] && [ "$NOTIFY_CODEOWNERS_MODE" != "never" ]; then
   CODEOWNERS_HANDLES="$(codeowners_names || true)"
-  [ -n "$CODEOWNERS_HANDLES" ] && CODEOWNERS_PATH=".github/CODEOWNERS" || echo "No names returned from codeowners"
+  if [ -z "$CODEOWNERS_HANDLES" ]; then
+    echo "::error::No names returned from codeowners"
+    exit 1
+  fi
+  CODEOWNERS_PATH=".github/CODEOWNERS"
 fi
 
 # Determine whether CODEOWNERS should be included

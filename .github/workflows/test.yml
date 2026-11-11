@@ -1205,10 +1205,12 @@ jobs:
           INPUT_NOTIFY_CODEOWNERS: always
           INPUT_DRY_RUN: 'true'
         run: |
-          out="$(GITHUB_SHA=0000000000000000000000000000000000000000 bash workflow-notifier/action.sh)"
+          rc=0
+          out="$(GITHUB_SHA=0000000000000000000000000000000000000000 bash workflow-notifier/action.sh)" || rc=$?
           echo "$out"
-          grep -qx 'No names returned from codeowners' <<< "$out"
-          grep -qx 'CODEOWNERS: none found' <<< "$out"
+          [ "$rc" -ne 0 ]
+          [ -z "$(grep 'CODEOWNERS users selected' <<< "$out" || true)" ]
+          grep -qx '::error::No names returned from codeowners' <<< "$out"
 
 
   # ─── SYSDIG MONITOR ────────────────────────────────────────────────────────
