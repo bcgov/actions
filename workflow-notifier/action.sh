@@ -202,6 +202,21 @@ if [ -n "$CODEOWNERS_PATH" ]; then
   log_debug "CODEOWNERS handles: ${CODEOWNERS_HANDLES}"
 fi
 
+# No CODEOWNERS in the workspace: names from .github/CODEOWNERS at this commit, or nothing
+codeowners_names() {
+  GH_TOKEN="${INPUT_TOKEN}" gh api -H "Accept: application/vnd.github.raw" \
+    "/repos/${GITHUB_REPOSITORY:-}/contents/.github/CODEOWNERS${GITHUB_SHA:+?ref=${GITHUB_SHA}}" 2>/dev/null \
+    | node "$CODEOWNERS_JS" /dev/stdin all | sed -n 's/^users=//p'
+}
+if [ -z "$CODEOWNERS_PATH" ] && [ "$NOTIFY_CODEOWNERS_MODE" != "never" ]; then
+  CODEOWNERS_HANDLES="$(codeowners_names || true)"
+  if [ -z "$CODEOWNERS_HANDLES" ]; then
+    echo "::error::No names returned from codeowners"
+    exit 1
+  fi
+  CODEOWNERS_PATH=".github/CODEOWNERS"
+fi
+
 # Determine whether CODEOWNERS should be included
 INCLUDE_CODEOWNERS=false
 
