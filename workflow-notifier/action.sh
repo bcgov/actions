@@ -116,6 +116,20 @@ if [ "${INPUT_NOTIFY_AUTHOR:-true}" == "true" ]; then
   fi
 fi
 
+# Determine whether CODEOWNERS should be included
+INCLUDE_CODEOWNERS=false
+
+if [ "$NOTIFY_CODEOWNERS_MODE" == "always" ]; then
+  INCLUDE_CODEOWNERS=true
+elif [ "$NOTIFY_CODEOWNERS_MODE" == "never" ]; then
+  INCLUDE_CODEOWNERS=false
+else
+  # "fallback": include CODEOWNERS only if no human authors were identified
+  if [ ${#AUTHORS_LIST[@]} -eq 0 ]; then
+    INCLUDE_CODEOWNERS=true
+  fi
+fi
+
 # 2. Discover CODEOWNERS (GitHub order: .github/, root, docs/)
 CODEOWNERS_PATH=""
 while IFS= read -r path; do
@@ -208,27 +222,14 @@ codeowners_names() {
     "/repos/${GITHUB_REPOSITORY:-}/contents/.github/CODEOWNERS${GITHUB_SHA:+?ref=${GITHUB_SHA}}" 2>/dev/null \
     | node "$CODEOWNERS_JS" /dev/stdin all | sed -n 's/^users=//p'
 }
-if [ -z "$CODEOWNERS_PATH" ] && [ "$NOTIFY_CODEOWNERS_MODE" != "never" ]; then
+# Fetch only when CODEOWNERS is required (always, or fallback with no author/merger)
+if [ -z "$CODEOWNERS_PATH" ] && [ "$INCLUDE_CODEOWNERS" == "true" ]; then
   CODEOWNERS_HANDLES="$(codeowners_names || true)"
   if [ -z "$CODEOWNERS_HANDLES" ]; then
     echo "::error::No names returned from codeowners"
     exit 1
   fi
   CODEOWNERS_PATH=".github/CODEOWNERS"
-fi
-
-# Determine whether CODEOWNERS should be included
-INCLUDE_CODEOWNERS=false
-
-if [ "$NOTIFY_CODEOWNERS_MODE" == "always" ]; then
-  INCLUDE_CODEOWNERS=true
-elif [ "$NOTIFY_CODEOWNERS_MODE" == "never" ]; then
-  INCLUDE_CODEOWNERS=false
-else
-  # "fallback": include CODEOWNERS only if no human authors were identified
-  if [ ${#AUTHORS_LIST[@]} -eq 0 ]; then
-    INCLUDE_CODEOWNERS=true
-  fi
 fi
 
 # Log and summarize which CODEOWNERS file, handles and why

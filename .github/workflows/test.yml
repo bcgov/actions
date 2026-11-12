@@ -1212,6 +1212,36 @@ jobs:
           [ -z "$(grep 'CODEOWNERS users selected' <<< "$out" || true)" ]
           grep -qx '::error::No names returned from codeowners' <<< "$out"
 
+      - name: CODEOWNERS Names - Fallback With Author
+        env:
+          INPUT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_NOTIFY_AUTHOR: 'true'
+          INPUT_NOTIFY_CODEOWNERS: fallback
+          INPUT_DRY_RUN: 'true'
+        run: |
+          rc=0
+          # Nonexistent SHA would fail the fetch if it ran; lookup must be skipped
+          out="$(GITHUB_SHA=0000000000000000000000000000000000000000 bash workflow-notifier/action.sh)" || rc=$?
+          echo "$out"
+          [ "$rc" -eq 0 ]
+          [ -z "$(grep '::error::No names returned from codeowners' <<< "$out" || true)" ]
+          actor="${GITHUB_TRIGGERING_ACTOR:-${GITHUB_ACTOR}}"
+          grep -q "Assignees: ${actor}" <<< "$out"
+
+      - name: CODEOWNERS Names - Fallback No Author
+        env:
+          INPUT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_NOTIFY_AUTHOR: 'false'
+          INPUT_NOTIFY_CODEOWNERS: fallback
+          INPUT_DRY_RUN: 'true'
+        run: |
+          rc=0
+          out="$(GITHUB_SHA=0000000000000000000000000000000000000000 bash workflow-notifier/action.sh)" || rc=$?
+          echo "$out"
+          [ "$rc" -ne 0 ]
+          [ -z "$(grep 'CODEOWNERS users selected' <<< "$out" || true)" ]
+          grep -qx '::error::No names returned from codeowners' <<< "$out"
+
 
   # ─── SYSDIG MONITOR ────────────────────────────────────────────────────────
   test-test-and-analyse:

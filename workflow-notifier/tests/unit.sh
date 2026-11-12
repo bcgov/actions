@@ -460,21 +460,59 @@ test_notify_codeowners_always() {
   assert_contains "$out" "Assignees: merger1,author1,alice,bob" "includes actors and CODEOWNERS when notify_codeowners is true"
 }
 
-# Test 7: No CODEOWNERS anywhere halts the job unless notify_codeowners is never
-test_no_codeowners() {
-  local empty_fixture="${TMP_DIR}/empty_fixture"
+# Test 7: always + missing CODEOWNERS fails with the exact error
+test_no_codeowners_always_fails() {
+  local empty_fixture="${TMP_DIR}/empty_fixture_always"
   mkdir -p "$empty_fixture"
 
   local out rc=0
   out=$(run_action "$empty_fixture" \
-    INPUT_TITLE="Test No CODEOWNERS" \
+    INPUT_TITLE="Test No CODEOWNERS always" \
     INPUT_NOTIFY_AUTHOR="true" \
+    INPUT_NOTIFY_CODEOWNERS="always" \
     INPUT_DRY_RUN="true" \
     GITHUB_TRIGGERING_ACTOR="solouser") || rc=$?
 
-  assert_eq "$rc" "1" "exits 1 when no CODEOWNERS names are returned"
-  assert_contains "$out" "::error::No names returned from codeowners" "reports no CODEOWNERS names"
-  assert_not_contains "$out" "Assignees:" "creates no issue when no CODEOWNERS names are returned"
+  assert_eq "$rc" "1" "always + missing CODEOWNERS exits 1"
+  assert_contains "$out" "::error::No names returned from codeowners" "always + missing reports the exact error"
+  assert_not_contains "$out" "Assignees:" "always + missing creates no issue"
+}
+
+# Test 7a: fallback + author + missing CODEOWNERS passes and assigns the author
+test_no_codeowners_fallback_with_author() {
+  local empty_fixture="${TMP_DIR}/empty_fixture_fallback_author"
+  mkdir -p "$empty_fixture"
+
+  local out rc=0
+  out=$(run_action "$empty_fixture" \
+    INPUT_TITLE="Test No CODEOWNERS fallback with author" \
+    INPUT_NOTIFY_AUTHOR="true" \
+    INPUT_NOTIFY_CODEOWNERS="fallback" \
+    INPUT_DRY_RUN="true" \
+    GITHUB_TRIGGERING_ACTOR="solouser") || rc=$?
+
+  assert_eq "$rc" "0" "fallback + author + missing CODEOWNERS exits 0"
+  assert_not_contains "$out" "::error::No names returned from codeowners" "fallback + author does not fail the lookup"
+  assert_contains "$out" "Assignees: solouser" "fallback + author assigns the author"
+}
+
+# Test 7a2: fallback + no author + missing CODEOWNERS fails with the exact error
+test_no_codeowners_fallback_no_author() {
+  local empty_fixture="${TMP_DIR}/empty_fixture_fallback_none"
+  mkdir -p "$empty_fixture"
+
+  local out rc=0
+  out=$(run_action "$empty_fixture" \
+    INPUT_TITLE="Test No CODEOWNERS fallback no author" \
+    INPUT_NOTIFY_AUTHOR="false" \
+    INPUT_NOTIFY_CODEOWNERS="fallback" \
+    INPUT_DRY_RUN="true" \
+    GITHUB_TRIGGERING_ACTOR="" \
+    GITHUB_ACTOR="") || rc=$?
+
+  assert_eq "$rc" "1" "fallback + no author + missing CODEOWNERS exits 1"
+  assert_contains "$out" "::error::No names returned from codeowners" "fallback + no author reports the exact error"
+  assert_not_contains "$out" "Assignees:" "fallback + no author creates no issue"
 }
 
 # Test 7b: notify_codeowners="false" excludes CODEOWNERS even on scheduled runs
@@ -631,7 +669,9 @@ test_pr_merger_priority_over_rerunner
 test_pr_bot_merger_falls_back_to_pr_author
 test_pr_same_author_and_merger
 test_notify_codeowners_always
-test_no_codeowners
+test_no_codeowners_always_fails
+test_no_codeowners_fallback_with_author
+test_no_codeowners_fallback_no_author
 test_notify_codeowners_disabled
 test_notify_all_disabled
 test_workflow_dispatch_event
