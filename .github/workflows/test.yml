@@ -1218,6 +1218,9 @@ jobs:
           INPUT_NOTIFY_AUTHOR: 'true'
           INPUT_NOTIFY_CODEOWNERS: fallback
           INPUT_DRY_RUN: 'true'
+          # Pin a human actor so bot-triggered PRs do not fall through to the lookup
+          GITHUB_TRIGGERING_ACTOR: test-author
+          GITHUB_ACTOR: test-author
         run: |
           rc=0
           # Nonexistent SHA would fail the fetch if it ran; lookup must be skipped
@@ -1225,8 +1228,7 @@ jobs:
           echo "$out"
           [ "$rc" -eq 0 ]
           [ -z "$(grep '::error::No names returned from codeowners' <<< "$out" || true)" ]
-          actor="${GITHUB_TRIGGERING_ACTOR:-${GITHUB_ACTOR}}"
-          grep -q "Assignees: ${actor}" <<< "$out"
+          grep -q "Assignees: test-author" <<< "$out"
 
       - name: CODEOWNERS Names - Fallback No Author
         env:
