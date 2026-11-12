@@ -1218,13 +1218,11 @@ jobs:
           INPUT_NOTIFY_AUTHOR: 'true'
           INPUT_NOTIFY_CODEOWNERS: fallback
           INPUT_DRY_RUN: 'true'
-          # Pin a human actor so bot-triggered PRs do not fall through to the lookup
-          GITHUB_TRIGGERING_ACTOR: test-author
-          GITHUB_ACTOR: test-author
         run: |
           rc=0
+          # Pin a human actor on the command: GitHub ignores GITHUB_ACTOR in env:
           # Nonexistent SHA would fail the fetch if it ran; lookup must be skipped
-          out="$(GITHUB_SHA=0000000000000000000000000000000000000000 bash workflow-notifier/action.sh)" || rc=$?
+          out="$(GITHUB_SHA=0000000000000000000000000000000000000000 GITHUB_TRIGGERING_ACTOR=test-author GITHUB_ACTOR=test-author bash workflow-notifier/action.sh)" || rc=$?
           echo "$out"
           [ "$rc" -eq 0 ]
           [ -z "$(grep '::error::No names returned from codeowners' <<< "$out" || true)" ]
