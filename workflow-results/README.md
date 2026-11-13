@@ -61,7 +61,7 @@ results:
 
 ### Merge, Release or Scheduled Workflows (notify on failure)
 
-No extra steps: on non-PR events a failed gate checks out CODEOWNERS and notifies via [`workflow-notifier`](../workflow-notifier/).
+No extra steps: on non-PR events a failed gate checks out CODEOWNERS and notifies via [`workflow-notifier`](../workflow-notifier/). Notify uses `notify_codeowners: fallback`, so a missing or empty CODEOWNERS file fails that step with `No names returned from codeowners` only when no author or merger was found.
 
 ```yaml
 results:

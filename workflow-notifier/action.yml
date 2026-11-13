@@ -20,7 +20,7 @@ inputs:
     description: "Whether to notify the triggering author/merger on failure"
     default: "true"
   notify_codeowners:
-    description: "When to notify repository CODEOWNERS on failure: always, fallback (only when no author or merger was found) or never"
+    description: "When to notify repository CODEOWNERS on failure: always, fallback (only when no author or merger was found) or never. Fails with 'No names returned from codeowners' when CODEOWNERS is required (always, or fallback with no author or merger) but missing or has no @user names."
     default: "fallback"
   codeowners_match:
     description: "Which CODEOWNERS rules pick owners: all (every handle in the file), changed (last matching rule for the PR's changed files; falls back to workflow without a PR) or workflow (last matching rule for the failing workflow file)"

@@ -13,7 +13,7 @@ permissions:
   pull-requests: read  # Optional: required to resolve author from pull request metadata on merge commits
 ```
 
-The action reads `CODEOWNERS` from the **job workspace** first. When none is there and `notify_codeowners` is not `never`, it reads the `@user` names from `.github/CODEOWNERS` at the run's commit through the contents API (needs `contents: read`; every rule, so `codeowners_match` only applies to a workspace file), so no prior `actions/checkout` is required. If that returns no names, the job fails with `No names returned from codeowners`; set `notify_codeowners: never` to skip the lookup.
+The action reads `CODEOWNERS` from the **job workspace** first. When none is there and CODEOWNERS is required (`always`, or `fallback` when no author or merger was found), it reads the `@user` names from `.github/CODEOWNERS` at the run's commit through the contents API (needs `contents: read`; every rule, so `codeowners_match` only applies to a workspace file), so no prior `actions/checkout` is required. If that returns no names, the job fails with `No names returned from codeowners`. With `fallback` and an author or merger found, the lookup is skipped. `never` also skips the lookup.
 
 ## Inputs
 
@@ -23,7 +23,7 @@ The action reads `CODEOWNERS` from the **job workspace** first. When none is the
 | `title` | Issue title. An open issue with this exact title gets a comment for each later run. A closed issue is not reused. | `"fix: failure in ${{ github.workflow }}"` | No |
 | `body` | Issue body (pre-filled with workflow run URL if omitted) | | No |
 | `notify_author` | Whether to notify the triggering author/merger on failure | `"true"` | No |
-| `notify_codeowners` | When to notify repository CODEOWNERS on failure: `always`, `fallback` or `never`. By default (`fallback`), CODEOWNERS are only alerted if no human author/operator was resolved (e.g. scheduled cron runs). `always` always includes CODEOWNERS; `never` never does. | `"fallback"` | No |
+| `notify_codeowners` | When to notify repository CODEOWNERS on failure: `always`, `fallback` or `never`. By default (`fallback`), CODEOWNERS are only alerted if no human author/operator was resolved (e.g. scheduled cron runs). `always` always includes CODEOWNERS; `never` never does. The job fails with `No names returned from codeowners` when CODEOWNERS is required (`always`, or `fallback` with no author or merger) but missing or has no `@user` names. | `"fallback"` | No |
 | `codeowners_match` | Which CODEOWNERS rules pick owners: `all`, `changed` or `workflow` (see [CODEOWNERS matching](#codeowners-matching)). | `"all"` | No |
 | `dry_run` | If true, logs the issue create or comment without calling it | `"false"` | No |
 
