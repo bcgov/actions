@@ -555,7 +555,8 @@ if (
     bash "${ACTION_ROOT}/semgrep.sh" >/dev/null
 ) && grep -q -- '--config p/default' "$SEMGREP_ARGS_LOG" \
   && grep -q 'semgrep-rules\.yml' "$SEMGREP_ARGS_LOG" \
-  && grep -q -- '--exclude __tests__' "$SEMGREP_ARGS_LOG" \
+  && grep -q -- '--exclude /app/__tests__' "$SEMGREP_ARGS_LOG" \
+  && grep -q -- '--exclude /app/\*\*/__tests__' "$SEMGREP_ARGS_LOG" \
   && grep -q -- '--exclude \*.test.\*' "$SEMGREP_ARGS_LOG" \
   && grep -q -- '--exclude \*.spec.\*' "$SEMGREP_ARGS_LOG"; then
     echo "✓ semgrep.sh includes bundled semantic rules on p/default and excludes test/spec paths"

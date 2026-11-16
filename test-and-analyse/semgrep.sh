@@ -29,7 +29,7 @@ out="$(mktemp -d "${RUNNER_TEMP}/semgrep.XXXXXX")"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Registry rulesets (p/..., r/...) pass through; other entries are files
-# relative to the workspace root. Default p/default also loads bundled FDS semantic rules.
+# relative to the workspace root. Default p/default also loads bundled semantic security rules.
 configs=()
 bundled_rules="${script_dir}/semgrep-rules.yml"
 bundled_added=false
@@ -50,13 +50,14 @@ while IFS= read -r c; do
 done <<< "${INPUT_SEMGREP_CONFIG:-p/default}"
 [[ ${#configs[@]} -gt 0 ]] || { echo "::error::semgrep_config is empty"; exit 1; }
 
+prefix="${rel:+${rel}/}"
 excludes=(
-  --exclude '__tests__' --exclude 'tests' --exclude 'test'
-  --exclude 'spec' --exclude 'specs' --exclude 'e2e'
-  --exclude 'fixtures' --exclude 'mocks'
   --exclude '*.test.*' --exclude '*.spec.*'
   --exclude '*_test.go' --exclude 'test_*.py'
 )
+for d in __tests__ tests test spec specs e2e fixtures mocks; do
+  excludes+=(--exclude "/${prefix}${d}" --exclude "/${prefix}**/${d}")
+done
 
 json="${out}/semgrep.json"
 sarif="${out}/semgrep.sarif"
