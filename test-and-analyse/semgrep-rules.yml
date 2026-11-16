@@ -1,0 +1,133 @@
+# High/Critical semantic rules aligned with bcgov/action-repo-reporter
+# (`scripts/analyze-semantic-domains.py`) so template repositories surface the
+# same classes of issues on pull requests.
+rules:
+  - id: fds-raw-http-error-logging
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: Avoid logging raw HTTP client error objects (may expose Authorization headers or Bearer tokens); log error.message or error.code instead.
+    metadata:
+      cwe: ["CWE-532"]
+      category: security
+    patterns:
+      - pattern-inside: |
+          try {
+            ...
+            $HTTP(...)
+            ...
+          } catch ($ERR) {
+            ...
+          }
+      - metavariable-regex:
+          metavariable: $HTTP
+          regex: ^(?:axios(?:\.\w+)?|fetch)$
+      - pattern-either:
+          - pattern: console.$LOG(..., $ERR, ...)
+          - pattern: logger.$LOG(..., $ERR, ...)
+          - pattern: console.$LOG(..., $ERR.config, ...)
+          - pattern: logger.$LOG(..., $ERR.config, ...)
+
+  - id: fds-credential-logging
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Avoid logging credential variables ($VAR) directly in application logs.
+    metadata:
+      cwe: ["CWE-532"]
+      category: security
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: console.$LOG(..., $VAR, ...)
+              - pattern: logger.$LOG(..., $VAR, ...)
+          - metavariable-regex:
+              metavariable: $VAR
+              regex: ^(?:accessToken|refreshToken|clientSecret|client_secret|bearerToken)$
+      - patterns:
+          - pattern-either:
+              - pattern: console.$LOG(`...${$VAR}...`)
+              - pattern: logger.$LOG(`...${$VAR}...`)
+          - metavariable-regex:
+              metavariable: $VAR
+              regex: ^(?:accessToken|refreshToken|clientSecret|client_secret|bearerToken)$
+
+  - id: fds-weak-secret-fallback-js
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Hardcoded fallback value for secret/key/token environment variable ($ENV); fail closed instead.
+    metadata:
+      cwe: ["CWE-798"]
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: process.env.$ENV || "$FALLBACK"
+          - pattern: process.env.$ENV ?? "$FALLBACK"
+      - metavariable-regex:
+          metavariable: $ENV
+          regex: (?i).*(?:JWT|SECRET|TOKEN|ENCRYPTION_KEY|PRIVATE_KEY).*
+      - metavariable-regex:
+          metavariable: $FALLBACK
+          regex: .+
+
+  - id: fds-weak-secret-fallback-py
+    languages: [python]
+    severity: ERROR
+    message: Hardcoded fallback value for secret/key/token environment variable ($ENV); fail closed instead.
+    metadata:
+      cwe: ["CWE-798"]
+      category: security
+    patterns:
+      - pattern-either:
+          - pattern: os.environ.get("$ENV", "$FALLBACK")
+          - pattern: os.getenv("$ENV", "$FALLBACK")
+      - metavariable-regex:
+          metavariable: $ENV
+          regex: (?i).*(?:JWT|SECRET|TOKEN|ENCRYPTION_KEY|PRIVATE_KEY).*
+      - metavariable-regex:
+          metavariable: $FALLBACK
+          regex: .+
+
+  - id: fds-jwt-verify-unpinned-algorithm
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "jwt.verify() without an explicit algorithms allowlist risks algorithm confusion attacks; pin algorithms (e.g. { algorithms: ['RS256'] })."
+    metadata:
+      cwe: ["CWE-347"]
+      category: security
+    pattern-either:
+      - pattern: jwt.verify($TOKEN, $KEY)
+      - patterns:
+          - pattern: 'jwt.verify($TOKEN, $KEY, { ... })'
+          - pattern-not: 'jwt.verify($TOKEN, $KEY, { algorithms: ..., ... })'
+
+  - id: fds-express-unprotected-mutation
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: State-changing Express route lacks an inline authentication middleware.
+    metadata:
+      cwe: ["CWE-306"]
+      category: security
+    patterns:
+      - pattern: $R.$M("$PATH", $HANDLER)
+      - metavariable-regex:
+          metavariable: $R
+          regex: ^(?:router|app)$
+      - metavariable-regex:
+          metavariable: $M
+          regex: ^(?:post|put|patch|delete)$
+      - metavariable-regex:
+          metavariable: $PATH
+          regex: ^/(?!.*(?:login|logout|signin|signup|register|auth|callback|refresh|health|ready|live|metrics|webhook|public)).*$
+      - pattern-not-inside: |
+          $R.use(...)
+          ...
+
+  - id: fds-django-unprotected-drf-view
+    languages: [python]
+    severity: WARNING
+    message: Django REST view sets empty or AllowAny permission_classes; enforce explicit authentication/permission checks on mutations.
+    metadata:
+      cwe: ["CWE-306"]
+      category: security
+    pattern-either:
+      - pattern: permission_classes = []
+      - pattern: permission_classes = [..., AllowAny, ...]

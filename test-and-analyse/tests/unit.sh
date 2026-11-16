@@ -510,6 +510,64 @@ else
 fi
 rm -rf "$REPORTER_WS" "$REPORTER_OUT" "$REPORTER_SUMMARY"
 
+# --- Semgrep exclusions and bundled semantic rules ---
+SEMGREP_WS="$(mktemp -d)"
+SEMGREP_TMP="$(mktemp -d)"
+SEMGREP_BIN="$(mktemp -d)"
+SEMGREP_OUT="$(mktemp)"
+SEMGREP_ARGS_LOG="${SEMGREP_TMP}/args.log"
+mkdir -p "${SEMGREP_WS}/app"
+cat > "${SEMGREP_BIN}/docker" <<EOF
+#!/usr/bin/env bash
+printf '%s\n' "\$*" > "${SEMGREP_ARGS_LOG}"
+json_path=""
+for arg in "\$@"; do
+  case "\$arg" in
+    --json-output=*) json_path="\${arg#--json-output=}" ;;
+    --sarif-output=*) sarif_path="\${arg#--sarif-output=}" ;;
+  esac
+done
+printf '%s\n' '{"results":[],"errors":[]}' > "\$json_path"
+printf '%s\n' '{"version":"2.1.0","runs":[{"results":[]}]}' > "\$sarif_path"
+exit 0
+EOF
+chmod +x "${SEMGREP_BIN}/docker"
+if ! command -v jq >/dev/null 2>&1; then
+    cat > "${SEMGREP_BIN}/jq" <<'EOF'
+#!/usr/bin/env node
+const q = process.argv[process.argv.length - 1];
+if (q.includes('level == "error"') || q.includes('level != "error"') || q.includes('.results | length')) {
+  process.stdout.write('0\n');
+}
+EOF
+    chmod +x "${SEMGREP_BIN}/jq"
+fi
+
+if (
+    cd "${SEMGREP_WS}/app"
+    PATH="${SEMGREP_BIN}:${PATH}" \
+    SEMGREP_IMAGE="semgrep/semgrep:test" \
+    INPUT_SEMGREP_CONFIG="p/default" \
+    INPUT_SEMGREP_FAIL="false" \
+    GITHUB_WORKSPACE="$SEMGREP_WS" \
+    RUNNER_TEMP="$SEMGREP_TMP" \
+    GITHUB_OUTPUT="$SEMGREP_OUT" \
+    bash "${ACTION_ROOT}/semgrep.sh" >/dev/null
+) && grep -q -- '--config p/default' "$SEMGREP_ARGS_LOG" \
+  && grep -q 'semgrep-rules\.yml' "$SEMGREP_ARGS_LOG" \
+  && grep -q -- '--exclude __tests__' "$SEMGREP_ARGS_LOG" \
+  && grep -q -- '--exclude \*.test.\*' "$SEMGREP_ARGS_LOG" \
+  && grep -q -- '--exclude \*.spec.\*' "$SEMGREP_ARGS_LOG"; then
+    echo "✓ semgrep.sh includes bundled semantic rules on p/default and excludes test/spec paths"
+    passed=$((passed + 1))
+else
+    echo "✗ semgrep.sh includes bundled semantic rules on p/default and excludes test/spec paths"
+    cat "$SEMGREP_ARGS_LOG" 2>/dev/null || true
+    failed=$((failed + 1))
+fi
+
+rm -rf "$SEMGREP_WS" "$SEMGREP_TMP" "$SEMGREP_BIN" "$SEMGREP_OUT"
+
 echo ""
 echo "Unit tests finished: ${passed} passed, ${failed} failed."
 

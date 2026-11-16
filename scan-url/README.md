@@ -2,7 +2,7 @@
 
 Scan a running site's URL. Today this is security scanning with [ZAP](https://www.zaproxy.org/) and [Nuclei](https://github.com/projectdiscovery/nuclei); other scan types may be added later. Each scanner runs as its own step; results are not merged. One URL per run.
 
-- **ZAP**: [`zaproxy/action-full-scan`](https://github.com/zaproxy/action-full-scan) runs a full (active) scan, opens or updates the GitHub issue `ZAP Full Scan Report: <url>`, and uploads its reports as the `zap_scan-<slug>` artifact. When `tests/.zap/rules.tsv` exists in the caller's workspace, it is passed as the rules file. The JSON report is converted to SARIF (`zap-results.sarif`) and uploaded under category `zap-<slug>`.
+- **ZAP**: [`zaproxy/action-full-scan`](https://github.com/zaproxy/action-full-scan) runs a full (active) scan with `allow_issue_writing: false` and uploads its reports as the `zap_scan-<slug>` artifact. When `tests/.zap/rules.tsv` exists in the caller's workspace, it is passed as the rules file. The JSON report is converted to SARIF (`zap-results.sarif`) and uploaded under category `zap-<slug>`.
 - **Nuclei**: [`projectdiscovery/nuclei-action`](https://github.com/projectdiscovery/nuclei-action) v3 runs with `-u <url> -jsonl-export nuclei-results.jsonl -sarif-export nuclei-results.sarif`. SARIF is uploaded under category `nuclei-<slug>`. Nuclei writes SARIF only when it has findings, so after a clean scan the action uploads an empty run to close stale alerts.
 
 `<slug>` is the URL without its scheme, with each run of non-alphanumeric characters replaced by `-` (e.g. `https://app.example.gov.bc.ca` → `app-example-gov-bc-ca`).
@@ -22,7 +22,6 @@ To run this action, the calling workflow job must have the following minimum per
 ```yaml
 permissions:
   contents: read          # Required to read tests/.zap/rules.tsv from the checkout
-  issues: write           # Required for ZAP to open or update its findings issue
   security-events: write  # Required to upload SARIF to the Security tab
 ```
 
@@ -53,7 +52,6 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-      issues: write
       security-events: write
     steps:
       - uses: actions/checkout@v7 # Optional: needed only for tests/.zap/rules.tsv
@@ -64,7 +62,7 @@ jobs:
 
 ### Several URLs
 
-Use a matrix, one job per URL. SARIF categories, the ZAP artifact and the ZAP issue all include the URL slug, so results for each URL stay separate.
+Use a matrix, one job per URL. SARIF categories and the ZAP artifact include the URL slug, so results for each URL stay separate.
 
 ```yaml
 jobs:
@@ -72,7 +70,6 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-      issues: write
       security-events: write
     strategy:
       fail-fast: false

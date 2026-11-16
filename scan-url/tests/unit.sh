@@ -57,5 +57,8 @@ assert_eq "$(NUCLEI_ENABLED=false verify_rc success skipped report_json.json)" "
 assert_eq "$(ZAP_ENABLED=false verify_rc skipped success nuclei-results.jsonl)" "0" "verify: ZAP disabled is not checked"
 assert_eq "$(ZAP_ENABLED=false verify_rc skipped failure nuclei-results.jsonl)" "1" "verify: enabled Nuclei still checked"
 
+ACTION_YML="${SCRIPT_DIR}/../action.yml"
+assert_eq "$(grep -c 'allow_issue_writing: false' "$ACTION_YML")" "1" "action.yml disables duplicate ZAP issue writing"
+
 echo "Passed: $passed, Failed: $failed"
 [[ "$failed" -eq 0 ]]
