@@ -8,3 +8,10 @@ class PublicOrdersViewSet:
 
     def create(self, request):
         return None
+
+
+class PublicCatalogReadOnlyView:
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        return None

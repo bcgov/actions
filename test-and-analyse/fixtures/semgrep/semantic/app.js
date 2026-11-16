@@ -24,5 +24,6 @@ async function badLogging(accessToken) {
 }
 
 router.post('/items', (req, res) => res.sendStatus(200));
+router.post('/authors', (req, res) => res.sendStatus(200));
 router.post('/auth/login', (req, res) => res.sendStatus(200));
 protectedRouter.post('/admin/items', (req, res) => res.sendStatus(200));

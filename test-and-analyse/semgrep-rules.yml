@@ -123,7 +123,7 @@ rules:
           regex: ^(?:post|put|patch|delete)$
       - metavariable-regex:
           metavariable: $PATH
-          regex: ^/(?!.*(?:login|logout|signin|signup|register|auth|callback|refresh|health|ready|live|metrics|webhook|public)).*$
+          regex: ^/(?!.*(?:^|/)(?:login|logout|signin|signup|register|auth|callback|refresh|health|healthz|ready|live|metrics|webhook|public)(?:/|$)).*$
       - pattern-not-inside:
           patterns:
             - pattern-either:
@@ -202,15 +202,33 @@ rules:
                 }
             - metavariable-regex:
                 metavariable: $ROUTE
-                regex: (?i).*(?:login|logout|token|auth|callback|public|health|healthz|webhook|register|signup).*
+                regex: (?i)(?:^|/)(?:login|logout|token|auth|callback|public|health|healthz|webhook|register|signup)(?:/|$)
 
   - id: bcgov-django-unprotected-drf-view
     languages: [python]
     severity: WARNING
-    message: Django REST view sets empty or AllowAny permission_classes; enforce explicit authentication/permission checks on mutations.
+    message: Django REST view with state-changing handlers sets empty or AllowAny permission_classes; enforce explicit authentication/permission checks.
     metadata:
       cwe: ["CWE-306"]
       category: security
-    pattern-either:
-      - pattern: permission_classes = []
-      - pattern: permission_classes = [..., AllowAny, ...]
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern-inside: |
+                  class $VIEW(...):
+                    ...
+                    def $MUT(self, ...):
+                      ...
+              - metavariable-regex:
+                  metavariable: $MUT
+                  regex: ^(?:post|put|patch|delete|create|update|partial_update|destroy)$
+          - patterns:
+              - pattern-inside: |
+                  class $VIEW($BASE):
+                    ...
+              - metavariable-regex:
+                  metavariable: $BASE
+                  regex: ^.*ModelViewSet$
+      - pattern-either:
+          - pattern: permission_classes = []
+          - pattern: permission_classes = [..., AllowAny, ...]
