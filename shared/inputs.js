@@ -148,8 +148,8 @@ function parseEnum(raw, name, allowed, fallback) {
   );
 }
 
-// GitHub login: letters, digits and hyphens, up to 39 characters, not starting with a hyphen
-const LOGIN = '[A-Za-z0-9][A-Za-z0-9-]{0,38}';
+// GitHub login: up to 39 letters, digits and single hyphens, not at either end
+const LOGIN = '(?=[A-Za-z0-9-]{1,39}(?![A-Za-z0-9-]))[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*';
 // user, @user, org/team or @org/team; team slugs also allow `_` and `.`
 const HANDLE = new RegExp(`^@?(${LOGIN})(?:/([A-Za-z0-9][A-Za-z0-9_.-]*))?$`);
 

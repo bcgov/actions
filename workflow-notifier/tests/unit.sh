@@ -1078,7 +1078,7 @@ test_handles_comment_mentions_teams() {
 
 test_handles_rejects_bad_entries() {
   local raw out rc
-  for raw in "alice bob" "alice;bob" "@org/team/extra" "-alice" $'alice\nbob' "al!ce"; do
+  for raw in "alice bob" "alice;bob" "@org/team/extra" "-alice" "alice--bob" $'alice\nbob' "al!ce"; do
     rc=0
     out=$(run_action "$FIXTURE_DIR" INPUT_TITLE="t" INPUT_DRY_RUN="true" INPUT_NOTIFY_HANDLES="$raw" 2>&1) || rc=$?
     assert_eq "$rc" "1" "handles: rejects '${raw//$'\n'/\\n}'"

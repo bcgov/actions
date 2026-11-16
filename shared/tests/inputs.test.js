@@ -89,10 +89,11 @@ test('parseHandles: comma-separated users and teams, trimmed and deduplicated', 
     'bcgov/team-a',
   ]);
   assert.deepStrictEqual(parseHandles('@org/team_b.x'), ['org/team_b.x']);
+  assert.deepStrictEqual(parseHandles(`a-b-c, ${'a'.repeat(39)}`), ['a-b-c', 'a'.repeat(39)]);
 });
 
 test('parseHandles: anything else throws', () => {
-  for (const raw of ['alice bob', 'alice;bob', 'alice\nbob', '@org/team/x', '-alice', 'a'.repeat(40), '@', 'org/']) {
+  for (const raw of ['alice bob', 'alice;bob', 'alice\nbob', '@org/team/x', '-alice', 'alice-', 'alice--bob', 'org-/team', 'a'.repeat(40), `${'a'.repeat(40)}/team`, '@', 'org/']) {
     assert.throws(() => parseHandles(raw, 'notify_handles'), InputError, raw);
   }
   assert.throws(() => parseHandles('al!ce', 'notify_handles'), {
