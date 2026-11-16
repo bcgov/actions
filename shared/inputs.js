@@ -148,6 +148,41 @@ function parseEnum(raw, name, allowed, fallback) {
   );
 }
 
+// GitHub login: up to 39 letters, digits and single hyphens, not at either end
+const LOGIN = '(?=[A-Za-z0-9-]{1,39}(?![A-Za-z0-9-]))[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*';
+// user, @user, org/team or @org/team; team slugs also allow `_` and `.`
+const USER_OR_TEAM = new RegExp(`^@?(${LOGIN})(?:/([A-Za-z0-9][A-Za-z0-9_.-]*))?$`);
+
+/**
+ * Parse a comma-separated list of GitHub users and teams: `user`, `@user`,
+ * `org/team` or `@org/team`. Items are trimmed and empty items skipped.
+ * Duplicates (any case) are dropped, keeping the first spelling. Returned
+ * without the leading `@`, so teams are the items with a `/`.
+ * @param {string} raw
+ * @param {string} [name]
+ * @returns {string[]}
+ */
+function parseUsers(raw, name = 'input') {
+  const items = [];
+  const seen = new Set();
+  for (const part of String(raw ?? '').split(',')) {
+    const t = part.trim();
+    if (!t) continue;
+    const m = USER_OR_TEAM.exec(t);
+    if (!m) {
+      throw new InputError(
+        `::error title=${name}: invalid entry::Invalid ${name} entry: ${t.replace(/\r?\n/g, '%0A')}. ` +
+          'Use a comma-separated list of user, @user, org/team or @org/team.'
+      );
+    }
+    const handle = m[2] ? `${m[1]}/${m[2]}` : m[1];
+    if (seen.has(handle.toLowerCase())) continue;
+    seen.add(handle.toLowerCase());
+    items.push(handle);
+  }
+  return items;
+}
+
 /**
  * Debug is on when the run has step debug logging enabled (re-run with
  * debug logging sets RUNNER_DEBUG=1). Actions have no `debug` input.
@@ -176,6 +211,7 @@ module.exports = {
   listFormatMessage,
   parseBool,
   parseEnum,
+  parseUsers,
   parseList,
   stripQuotes,
 };
@@ -186,6 +222,7 @@ module.exports = {
  *   list <name>                 one item per line (input: one per line or a single value)
  *   bool <name> [true|false]    true or false (second arg is the default)
  *   enum <name> <a,b,c> <dflt>  the chosen value
+ *   users <name>                one user or org/team per line (input: comma-separated)
  *   debug                       true or false
  *   token                       the token input, else GITHUB_TOKEN
  */
@@ -196,6 +233,7 @@ if (require.main === module) {
     if (cmd === 'list') out = parseList(getInput(name), name).join('\n');
     else if (cmd === 'bool') out = String(parseBool(getInput(name), name, a === 'true'));
     else if (cmd === 'enum') out = parseEnum(getInput(name), name, a.split(','), b);
+    else if (cmd === 'users') out = parseUsers(getInput(name), name).join('\n');
     else if (cmd === 'debug') out = String(isDebug());
     else if (cmd === 'token') out = getToken();
     else throw new Error(`unknown command: ${cmd}`);

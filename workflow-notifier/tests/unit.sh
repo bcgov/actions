@@ -976,6 +976,124 @@ test_codeowners_search_order
 test_team_only_codeowners
 test_node_matcher
 
+# notify_users: explicit users are assigned, teams are @-mentioned
+test_notify_users_users_and_teams() {
+  local out
+  out=$(run_action "$FIXTURE_DIR" \
+    INPUT_TITLE="Notify users" \
+    INPUT_DRY_RUN="true" \
+    INPUT_NOTIFY_CODEOWNERS="always" \
+    INPUT_NOTIFY_USERS=" @Charlie, dana ,bcgov/team-a, @Alice,@bcgov/Team-A, DANA, @org/team_b.x " \
+    GITHUB_TRIGGERING_ACTOR="charlie")
+  assert_contains "$out" "Assignees: charlie,dana,Alice,bob" "notify_users: author, then notify_users users, then CODEOWNERS, deduplicated any case"
+  assert_contains "$out" "Mentions:  @bcgov/team-a @org/team_b.x" "notify_users: teams mentioned once, @ added"
+  assert_not_contains "$out" "--assignee charlie,dana,Alice,bob,bcgov" "notify_users: teams are not assigned"
+}
+
+test_notify_users_fallback_with_author_skips_codeowners() {
+  local out
+  out=$(run_action "$FIXTURE_DIR" \
+    INPUT_TITLE="Notify users fallback" \
+    INPUT_DRY_RUN="true" \
+    INPUT_NOTIFY_USERS="dana" \
+    GITHUB_TRIGGERING_ACTOR="charlie")
+  assert_contains "$out" "Assignees: charlie,dana" "notify_users: fallback with author adds notify_users users only"
+  assert_not_contains "$out" "Mentions:" "notify_users: no Mentions line without teams"
+}
+
+test_notify_users_never_needs_no_codeowners() {
+  local dir="${TMP_DIR}/notify_users_empty"
+  mkdir -p "$dir"
+  local out rc=0
+  out=$(run_action "$dir" \
+    INPUT_TITLE="Notify users never" \
+    INPUT_TOKEN="dummy-token" \
+    INPUT_DRY_RUN="true" \
+    INPUT_NOTIFY_AUTHOR="false" \
+    INPUT_NOTIFY_CODEOWNERS="never" \
+    INPUT_NOTIFY_USERS="dana,@bcgov/team-a" \
+    GITHUB_REPOSITORY="bcgov/actions" \
+    GITHUB_SHA="abc123") || rc=$?
+  assert_eq "$rc" "0" "notify_users: never with no CODEOWNERS file succeeds"
+  assert_contains "$out" "CODEOWNERS: none found" "notify_users: never reads no CODEOWNERS"
+  assert_not_contains "$out" "contents/" "notify_users: never does not fetch CODEOWNERS"
+  assert_not_contains "$out" "mock-gh:" "notify_users: never makes no unexpected gh call"
+  assert_contains "$out" "Assignees: dana" "notify_users: never assigns notify_users users only"
+  assert_contains "$out" "Mentions:  @bcgov/team-a" "notify_users: never still mentions teams"
+}
+
+test_notify_users_ten_assignee_limit() {
+  local out
+  out=$(run_action "$FIXTURE_DIR" \
+    INPUT_TITLE="Notify users limit" \
+    INPUT_DRY_RUN="true" \
+    INPUT_NOTIFY_CODEOWNERS="always" \
+    INPUT_NOTIFY_USERS="h01,h02,h03,h04,h05,h06,h07,h08,h09,h10,h11" \
+    GITHUB_TRIGGERING_ACTOR="lead")
+  assert_contains "$out" "Assignees: lead,h01,h02,h03,h04,h05,h06,h07,h08,h09" "notify_users: assignees capped at 10 total"
+  assert_not_contains "$out" ",h10" "notify_users: 11th assignee dropped"
+  assert_not_contains "$(grep 'Assignees:' <<< "$out")" "alice" "notify_users: CODEOWNERS past the cap dropped"
+}
+
+test_notify_users_create_body_mentions_teams() {
+  reset_issue_fixtures
+  local out
+  out=$(run_action "$FIXTURE_DIR" \
+    INPUT_TITLE="Notify users create" \
+    INPUT_BODY="Boom" \
+    INPUT_TOKEN="dummy-token" \
+    INPUT_DRY_RUN="false" \
+    INPUT_NOTIFY_USERS="dana,@bcgov/team-a,org/team-b" \
+    GITHUB_REPOSITORY="bcgov/actions" \
+    GITHUB_SERVER_URL="https://github.com" \
+    GITHUB_RUN_ID="321" \
+    GITHUB_TRIGGERING_ACTOR="charlie")
+  local body create_args
+  body="$(cat "${TMP_DIR}/gh_create_body")"
+  create_args="$(cat "${TMP_DIR}/gh_create_args")"
+  assert_eq "$body" "$(printf 'Boom\n\nPushed by @charlie\n\ncc @bcgov/team-a @org/team-b\n\n[View Workflow Run](https://github.com/bcgov/actions/actions/runs/321)')" "notify_users: create body mentions teams before the run link"
+  assert_contains "$create_args" $'--assignee\ncharlie,dana' "notify_users: create assigns author and notify_users users"
+}
+
+test_notify_users_comment_mentions_teams() {
+  reset_issue_fixtures
+  printf '%s\n' $'41\tNotify users comment' > "${TMP_DIR}/mock_open_issues"
+  local out
+  out=$(run_action "$FIXTURE_DIR" \
+    INPUT_TITLE="Notify users comment" \
+    INPUT_TOKEN="dummy-token" \
+    INPUT_DRY_RUN="false" \
+    INPUT_NOTIFY_USERS="dana,@bcgov/team-a" \
+    GITHUB_REPOSITORY="bcgov/actions" \
+    GITHUB_SERVER_URL="https://github.com" \
+    GITHUB_RUN_ID="654" \
+    GITHUB_TRIGGERING_ACTOR="charlie")
+  local body comment_args
+  body="$(cat "${TMP_DIR}/gh_comment_body")"
+  comment_args="$(cat "${TMP_DIR}/gh_comment_args")"
+  assert_eq "$body" "$(run_line 654)"$'\n\ncc @bcgov/team-a' "notify_users: comment on reuse mentions teams"
+  assert_not_contains "$comment_args" "--assignee" "notify_users: comment does not assign"
+  reset_issue_fixtures
+}
+
+test_notify_users_rejects_bad_entries() {
+  local raw out rc
+  for raw in "alice bob" "alice;bob" "@org/team/extra" "-alice" "alice--bob" $'alice\nbob' "al!ce"; do
+    rc=0
+    out=$(run_action "$FIXTURE_DIR" INPUT_TITLE="t" INPUT_DRY_RUN="true" INPUT_NOTIFY_USERS="$raw" 2>&1) || rc=$?
+    assert_eq "$rc" "1" "notify_users: rejects '${raw//$'\n'/\\n}'"
+    assert_contains "$out" "::error title=notify_users: invalid entry::" "notify_users: error names the input for '${raw//$'\n'/\\n}'"
+  done
+}
+
+test_notify_users_rejects_bad_entries
+test_notify_users_users_and_teams
+test_notify_users_fallback_with_author_skips_codeowners
+test_notify_users_never_needs_no_codeowners
+test_notify_users_ten_assignee_limit
+test_notify_users_create_body_mentions_teams
+test_notify_users_comment_mentions_teams
+
 echo ""
 echo "Unit tests finished: ${passed} passed, ${failed} failed."
 

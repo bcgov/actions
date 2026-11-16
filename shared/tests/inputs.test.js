@@ -3,7 +3,7 @@ const assert = require('node:assert');
 const { execFileSync, spawnSync } = require('node:child_process');
 const path = require('node:path');
 const {
-  InputError, getInput, getToken, isDebug, parseBool, parseEnum, parseList,
+  InputError, getInput, getToken, isDebug, parseBool, parseEnum, parseUsers, parseList,
 } = require('../inputs.js');
 
 const cli = path.join(__dirname, '..', 'inputs.js');
@@ -79,4 +79,24 @@ test('CLI for composite actions', () => {
   const bad = spawnSync('node', [cli, 'list', 'packages'], { env: { ...env, INPUT_PACKAGES: 'a, b' } });
   assert.strictEqual(bad.status, 1);
   assert.match(bad.stderr.toString(), /Invalid packages input/);
+});
+
+test('parseUsers: comma-separated users and teams, trimmed and deduplicated', () => {
+  assert.deepStrictEqual(parseUsers(''), []);
+  assert.deepStrictEqual(parseUsers(' alice , @Bob,bcgov/team-a, @bcgov/Team-A, ALICE,, '), [
+    'alice',
+    'Bob',
+    'bcgov/team-a',
+  ]);
+  assert.deepStrictEqual(parseUsers('@org/team_b.x'), ['org/team_b.x']);
+  assert.deepStrictEqual(parseUsers(`a-b-c, ${'a'.repeat(39)}`), ['a-b-c', 'a'.repeat(39)]);
+});
+
+test('parseUsers: anything else throws', () => {
+  for (const raw of ['alice bob', 'alice;bob', 'alice\nbob', '@org/team/x', '-alice', 'alice-', 'alice--bob', 'org-/team', 'a'.repeat(40), `${'a'.repeat(40)}/team`, '@', 'org/']) {
+    assert.throws(() => parseUsers(raw, 'notify_users'), InputError, raw);
+  }
+  assert.throws(() => parseUsers('al!ce', 'notify_users'), {
+    message: /^::error title=notify_users: invalid entry::Invalid notify_users entry: al!ce\. Use a comma-separated list/,
+  });
 });

@@ -8,6 +8,7 @@ INPUT_NOTIFY_AUTHOR="$(node "$SHARED_INPUTS" bool notify_author true)"
 INPUT_DRY_RUN="$(node "$SHARED_INPUTS" bool dry_run false)"
 NOTIFY_CODEOWNERS_MODE="$(node "$SHARED_INPUTS" enum notify_codeowners always,fallback,never fallback)"
 CODEOWNERS_MATCH="$(node "$SHARED_INPUTS" enum codeowners_match all,changed,workflow all)"
+NOTIFY_ENTRIES="$(node "$SHARED_INPUTS" users notify_users)"
 CODEOWNERS_JS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/codeowners.js"
 INPUT_TOKEN="$(node "$SHARED_INPUTS" token)"
 INPUT_TITLE="${INPUT_TITLE:-"fix: failure in ${GITHUB_WORKFLOW:-workflow}"}"
@@ -23,6 +24,18 @@ function log_debug() {
   fi
 }
 
+
+# Explicit recipients: users are assigned, teams (org/team) are @-mentioned
+NOTIFY_USERS=()
+TEAM_MENTIONS=""
+while IFS= read -r handle; do
+  [ -z "$handle" ] && continue
+  if [[ "$handle" == */* ]]; then
+    TEAM_MENTIONS="${TEAM_MENTIONS:+${TEAM_MENTIONS} }@${handle}"
+  else
+    NOTIFY_USERS+=("$handle")
+  fi
+done <<< "$NOTIFY_ENTRIES"
 
 # 1. Discover Triggering Actor / Merger / Author based on Event
 AUTHORS_LIST=()
@@ -276,6 +289,15 @@ for author in "${AUTHORS_LIST[@]}"; do
   fi
 done
 
+for user in "${NOTIFY_USERS[@]}"; do
+  log_debug "Adding notify_users user to assignees: ${user}"
+  if [ -z "$ASSIGNEES" ]; then
+    ASSIGNEES="$user"
+  elif ! echo "$ASSIGNEES" | tr ',' '\n' | grep -i -q -x "$user"; then
+    ASSIGNEES="${ASSIGNEES},${user}"
+  fi
+done
+
 if [ "$INCLUDE_CODEOWNERS" == "true" ] && [ -n "$CODEOWNERS_HANDLES" ]; then
   log_debug "Adding CODEOWNERS to assignees..."
   IFS=',' read -r -a OWNERS_ARRAY <<< "$CODEOWNERS_HANDLES" || true
@@ -297,11 +319,16 @@ FINAL_BODY="${INPUT_BODY:-"Workflow failure detected at $(date)."}"
 RUN_URL="${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-local/repo}/actions/runs/${GITHUB_RUN_ID:-0}"
 RUN_LINE="- $(date -u +"%Y-%m-%dT%H:%M:%SZ") — [run](${RUN_URL})"
 
+COMMENT_BODY="$RUN_LINE"
+
 if [ -n "$TRIGGER_NOTE" ]; then
-  printf -v FINAL_BODY "%s\n\n%s\n\n[View Workflow Run](%s)" "$FINAL_BODY" "$TRIGGER_NOTE" "$RUN_URL"
-else
-  printf -v FINAL_BODY "%s\n\n[View Workflow Run](%s)" "$FINAL_BODY" "$RUN_URL"
+  printf -v FINAL_BODY "%s\n\n%s" "$FINAL_BODY" "$TRIGGER_NOTE"
 fi
+if [ -n "$TEAM_MENTIONS" ]; then
+  printf -v FINAL_BODY "%s\n\ncc %s" "$FINAL_BODY" "$TEAM_MENTIONS"
+  printf -v COMMENT_BODY "%s\n\ncc %s" "$COMMENT_BODY" "$TEAM_MENTIONS"
+fi
+printf -v FINAL_BODY "%s\n\n[View Workflow Run](%s)" "$FINAL_BODY" "$RUN_URL"
 log_debug "Issue body: ${FINAL_BODY}"
 
 copy_redacted_gh_args() {
@@ -348,7 +375,7 @@ if [ -n "$MATCHED_NUM" ]; then
   ISSUE_ACTION="commented"
   ISSUE_NUM="$MATCHED_NUM"
   ISSUE_URL="${GITHUB_SERVER_URL:-https://github.com}/${REPO}/issues/${MATCHED_NUM}"
-  GH_ARGS=(issue comment "$MATCHED_NUM" --repo "$REPO" --body "$RUN_LINE")
+  GH_ARGS=(issue comment "$MATCHED_NUM" --repo "$REPO" --body "$COMMENT_BODY")
   copy_redacted_gh_args
   log_debug "Constructed gh arguments: gh ${REDACTED_GH_ARGS[*]}"
   if [ "${INPUT_DRY_RUN:-}" = "true" ]; then
@@ -395,6 +422,9 @@ if [ -n "$TRIGGER_NOTE" ]; then
   while IFS= read -r line; do
     printf "\tNote:      %s\n" "${line}"
   done <<< "$TRIGGER_NOTE"
+fi
+if [ -n "$TEAM_MENTIONS" ]; then
+  printf "\tMentions:  %s\n" "${TEAM_MENTIONS}"
 fi
 printf "\tAssignees: %s\n" "${CLEAN_ASSIGNEES}"
 
