@@ -3,7 +3,7 @@ const assert = require('node:assert');
 const { execFileSync, spawnSync } = require('node:child_process');
 const path = require('node:path');
 const {
-  InputError, getInput, getToken, isDebug, parseBool, parseEnum, parseHandles, parseList,
+  InputError, getInput, getToken, isDebug, parseBool, parseEnum, parseUsers, parseList,
 } = require('../inputs.js');
 
 const cli = path.join(__dirname, '..', 'inputs.js');
@@ -81,22 +81,22 @@ test('CLI for composite actions', () => {
   assert.match(bad.stderr.toString(), /Invalid packages input/);
 });
 
-test('parseHandles: comma-separated users and teams, trimmed and deduplicated', () => {
-  assert.deepStrictEqual(parseHandles(''), []);
-  assert.deepStrictEqual(parseHandles(' alice , @Bob,bcgov/team-a, @bcgov/Team-A, ALICE,, '), [
+test('parseUsers: comma-separated users and teams, trimmed and deduplicated', () => {
+  assert.deepStrictEqual(parseUsers(''), []);
+  assert.deepStrictEqual(parseUsers(' alice , @Bob,bcgov/team-a, @bcgov/Team-A, ALICE,, '), [
     'alice',
     'Bob',
     'bcgov/team-a',
   ]);
-  assert.deepStrictEqual(parseHandles('@org/team_b.x'), ['org/team_b.x']);
-  assert.deepStrictEqual(parseHandles(`a-b-c, ${'a'.repeat(39)}`), ['a-b-c', 'a'.repeat(39)]);
+  assert.deepStrictEqual(parseUsers('@org/team_b.x'), ['org/team_b.x']);
+  assert.deepStrictEqual(parseUsers(`a-b-c, ${'a'.repeat(39)}`), ['a-b-c', 'a'.repeat(39)]);
 });
 
-test('parseHandles: anything else throws', () => {
+test('parseUsers: anything else throws', () => {
   for (const raw of ['alice bob', 'alice;bob', 'alice\nbob', '@org/team/x', '-alice', 'alice-', 'alice--bob', 'org-/team', 'a'.repeat(40), `${'a'.repeat(40)}/team`, '@', 'org/']) {
-    assert.throws(() => parseHandles(raw, 'notify_handles'), InputError, raw);
+    assert.throws(() => parseUsers(raw, 'notify_users'), InputError, raw);
   }
-  assert.throws(() => parseHandles('al!ce', 'notify_handles'), {
-    message: /^::error title=notify_handles: invalid handle::Invalid notify_handles entry: al!ce\. Use a comma-separated list/,
+  assert.throws(() => parseUsers('al!ce', 'notify_users'), {
+    message: /^::error title=notify_users: invalid entry::Invalid notify_users entry: al!ce\. Use a comma-separated list/,
   });
 });

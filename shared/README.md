@@ -5,7 +5,7 @@
 | Kind | Accepted | Rejected |
 |---|---|---|
 | List | one item per line, or a single value | `a, b`, JSON arrays, bash `('a' 'b')`, `a b`, `a;b`. The error names the value and shows it one item per line. |
-| Handles | comma-separated GitHub users and teams: `user`, `@user`, `org/team`, `@org/team`; trimmed, duplicates (any case) dropped | anything that isn't a GitHub login or `org/team` (spaces, `;`, one handle per line) |
+| Users | comma-separated GitHub users and teams: `user`, `@user`, `org/team`, `@org/team`; trimmed, duplicates (any case) dropped | anything that isn't a GitHub login or `org/team` (spaces, `;`, one handle per line) |
 | Boolean | `true` / `false` (any case) | anything else |
 | Enum | one of the listed values (any case) | anything else |
 | Debug | a run re-run with debug logging (`RUNNER_DEBUG=1`); actions have no `debug` input | |
@@ -24,7 +24,7 @@ GitHub downloads the whole repository for `uses: bcgov/actions/<action>@<sha>`, 
   run: node "$GITHUB_ACTION_PATH/../shared/inputs.js" list packages
 ```
 
-CLI commands: `list <name>`, `handles <name>`, `bool <name> [default]`, `enum <name> <a,b,c> <default>`, `debug`, `token`.
+CLI commands: `list <name>`, `users <name>`, `bool <name> [default]`, `enum <name> <a,b,c> <default>`, `debug`, `token`.
 
 ## Unknown inputs
 

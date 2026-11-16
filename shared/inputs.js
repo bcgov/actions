@@ -151,7 +151,7 @@ function parseEnum(raw, name, allowed, fallback) {
 // GitHub login: up to 39 letters, digits and single hyphens, not at either end
 const LOGIN = '(?=[A-Za-z0-9-]{1,39}(?![A-Za-z0-9-]))[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*';
 // user, @user, org/team or @org/team; team slugs also allow `_` and `.`
-const HANDLE = new RegExp(`^@?(${LOGIN})(?:/([A-Za-z0-9][A-Za-z0-9_.-]*))?$`);
+const USER_OR_TEAM = new RegExp(`^@?(${LOGIN})(?:/([A-Za-z0-9][A-Za-z0-9_.-]*))?$`);
 
 /**
  * Parse a comma-separated list of GitHub users and teams: `user`, `@user`,
@@ -162,16 +162,16 @@ const HANDLE = new RegExp(`^@?(${LOGIN})(?:/([A-Za-z0-9][A-Za-z0-9_.-]*))?$`);
  * @param {string} [name]
  * @returns {string[]}
  */
-function parseHandles(raw, name = 'input') {
+function parseUsers(raw, name = 'input') {
   const items = [];
   const seen = new Set();
   for (const part of String(raw ?? '').split(',')) {
     const t = part.trim();
     if (!t) continue;
-    const m = HANDLE.exec(t);
+    const m = USER_OR_TEAM.exec(t);
     if (!m) {
       throw new InputError(
-        `::error title=${name}: invalid handle::Invalid ${name} entry: ${t.replace(/\r?\n/g, '%0A')}. ` +
+        `::error title=${name}: invalid entry::Invalid ${name} entry: ${t.replace(/\r?\n/g, '%0A')}. ` +
           'Use a comma-separated list of user, @user, org/team or @org/team.'
       );
     }
@@ -211,7 +211,7 @@ module.exports = {
   listFormatMessage,
   parseBool,
   parseEnum,
-  parseHandles,
+  parseUsers,
   parseList,
   stripQuotes,
 };
@@ -222,7 +222,7 @@ module.exports = {
  *   list <name>                 one item per line (input: one per line or a single value)
  *   bool <name> [true|false]    true or false (second arg is the default)
  *   enum <name> <a,b,c> <dflt>  the chosen value
- *   handles <name>              one user or org/team per line (input: comma-separated)
+ *   users <name>                one user or org/team per line (input: comma-separated)
  *   debug                       true or false
  *   token                       the token input, else GITHUB_TOKEN
  */
@@ -233,7 +233,7 @@ if (require.main === module) {
     if (cmd === 'list') out = parseList(getInput(name), name).join('\n');
     else if (cmd === 'bool') out = String(parseBool(getInput(name), name, a === 'true'));
     else if (cmd === 'enum') out = parseEnum(getInput(name), name, a.split(','), b);
-    else if (cmd === 'handles') out = parseHandles(getInput(name), name).join('\n');
+    else if (cmd === 'users') out = parseUsers(getInput(name), name).join('\n');
     else if (cmd === 'debug') out = String(isDebug());
     else if (cmd === 'token') out = getToken();
     else throw new Error(`unknown command: ${cmd}`);

@@ -25,8 +25,8 @@ inputs:
   codeowners_match:
     description: "Which CODEOWNERS rules pick owners: all (every handle in the file), changed (last matching rule for the PR's changed files; falls back to workflow without a PR) or workflow (last matching rule for the failing workflow file)"
     default: "all"
-  notify_handles:
-    description: "Comma-separated GitHub users and teams to notify on failure: user, @user, org/team or @org/team. Users are assigned on create along with the author and CODEOWNERS (deduplicated, 10 max). Teams cannot be assigned, so they are @-mentioned in the issue body and in each comment on a reused issue. Needs no checkout or CODEOWNERS file; set notify_codeowners: never to skip CODEOWNERS entirely."
+  notify_users:
+    description: "Comma-separated GitHub users to notify on failure: user or @user. Teams are accepted too (org/team or @org/team). Users are assigned on create along with the author and CODEOWNERS (deduplicated, 10 max). Teams cannot be assigned, so they are @-mentioned in the issue body and in each comment on a reused issue. Needs no checkout or CODEOWNERS file; set notify_codeowners: never to skip CODEOWNERS entirely."
     default: ""
   dry_run:
     description: "If true, logs the issue create or comment without calling it"
@@ -53,7 +53,7 @@ runs:
         INPUT_NOTIFY_AUTHOR: "${{ inputs.notify_author }}"
         INPUT_NOTIFY_CODEOWNERS: "${{ inputs.notify_codeowners }}"
         INPUT_CODEOWNERS_MATCH: "${{ inputs.codeowners_match }}"
-        INPUT_NOTIFY_HANDLES: "${{ inputs.notify_handles }}"
+        INPUT_NOTIFY_USERS: "${{ inputs.notify_users }}"
         INPUT_EVENT_NAME: "${{ github.event_name }}"
         INPUT_DRY_RUN: "${{ inputs.dry_run }}"
       run: |

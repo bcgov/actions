@@ -8,7 +8,7 @@ INPUT_NOTIFY_AUTHOR="$(node "$SHARED_INPUTS" bool notify_author true)"
 INPUT_DRY_RUN="$(node "$SHARED_INPUTS" bool dry_run false)"
 NOTIFY_CODEOWNERS_MODE="$(node "$SHARED_INPUTS" enum notify_codeowners always,fallback,never fallback)"
 CODEOWNERS_MATCH="$(node "$SHARED_INPUTS" enum codeowners_match all,changed,workflow all)"
-NOTIFY_HANDLES="$(node "$SHARED_INPUTS" handles notify_handles)"
+NOTIFY_ENTRIES="$(node "$SHARED_INPUTS" users notify_users)"
 CODEOWNERS_JS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/codeowners.js"
 INPUT_TOKEN="$(node "$SHARED_INPUTS" token)"
 INPUT_TITLE="${INPUT_TITLE:-"fix: failure in ${GITHUB_WORKFLOW:-workflow}"}"
@@ -35,7 +35,7 @@ while IFS= read -r handle; do
   else
     NOTIFY_USERS+=("$handle")
   fi
-done <<< "$NOTIFY_HANDLES"
+done <<< "$NOTIFY_ENTRIES"
 
 # 1. Discover Triggering Actor / Merger / Author based on Event
 AUTHORS_LIST=()
@@ -290,7 +290,7 @@ for author in "${AUTHORS_LIST[@]}"; do
 done
 
 for user in "${NOTIFY_USERS[@]}"; do
-  log_debug "Adding notify_handles user to assignees: ${user}"
+  log_debug "Adding notify_users user to assignees: ${user}"
   if [ -z "$ASSIGNEES" ]; then
     ASSIGNEES="$user"
   elif ! echo "$ASSIGNEES" | tr ',' '\n' | grep -i -q -x "$user"; then

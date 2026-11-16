@@ -1144,7 +1144,7 @@ jobs:
           assert 'notify_codeowners' in action['inputs'], 'inputs must declare notify_codeowners'
           assert action['inputs']['notify_codeowners'].get('default') == 'fallback', 'notify_codeowners default must be fallback'
           assert action['inputs']['codeowners_match'].get('default') == 'all', 'codeowners_match default must be all'
-          assert action['inputs']['notify_handles'].get('default') == '', 'notify_handles default must be empty'
+          assert action['inputs']['notify_users'].get('default') == '', 'notify_users default must be empty'
           assert 'outputs' not in action, 'workflow-notifier has no outputs'
           "
 
@@ -1188,14 +1188,14 @@ jobs:
           dry_run: true
 
       - name: Dry Run - Simulate Failure with Explicit Users and Teams
-        id: dry_run_handles
+        id: dry_run_users
         uses: $/workflow-notifier
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           title: '[DRY RUN] Simulating a failure with explicit users and teams'
-          body: 'This is a dry run test with notify_handles.'
+          body: 'This is a dry run test with notify_users.'
           notify_codeowners: never
-          notify_handles: 'test-user-a, @test-user-b, bcgov/test-team, @bcgov/Test-Team, TEST-USER-A'
+          notify_users: 'test-user-a, @test-user-b, bcgov/test-team, @bcgov/Test-Team, TEST-USER-A'
           dry_run: true
 
       - name: Explicit Users and Teams - Assignees and Mentions
@@ -1203,11 +1203,11 @@ jobs:
           INPUT_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           INPUT_NOTIFY_AUTHOR: 'true'
           INPUT_NOTIFY_CODEOWNERS: never
-          INPUT_NOTIFY_HANDLES: 'test-user-a, @test-user-b, bcgov/test-team, @bcgov/Test-Team, TEST-USER-A'
-          INPUT_TITLE: '[DRY RUN] notify_handles assignees and mentions'
+          INPUT_NOTIFY_USERS: 'test-user-a, @test-user-b, bcgov/test-team, @bcgov/Test-Team, TEST-USER-A'
+          INPUT_TITLE: '[DRY RUN] notify_users assignees and mentions'
           INPUT_DRY_RUN: 'true'
         run: |
-          # Run outside the checkout so no CODEOWNERS file exists: never plus explicit handles needs none
+          # Run outside the checkout so no CODEOWNERS file exists: never plus notify_users needs none
           cd "$RUNNER_TEMP"
           # Pin a human actor on the command: GitHub ignores GITHUB_ACTOR in env:
           out="$(GITHUB_TRIGGERING_ACTOR=test-author GITHUB_ACTOR=test-author bash "$GITHUB_WORKSPACE/workflow-notifier/action.sh")"
@@ -1220,14 +1220,14 @@ jobs:
       - name: Explicit Users and Teams - Invalid Entry Fails
         env:
           INPUT_NOTIFY_CODEOWNERS: never
-          INPUT_NOTIFY_HANDLES: 'test-user-a; bcgov/test-team'
+          INPUT_NOTIFY_USERS: 'test-user-a; bcgov/test-team'
           INPUT_DRY_RUN: 'true'
         run: |
           rc=0
           out="$(bash workflow-notifier/action.sh 2>&1)" || rc=$?
           # Captured, not echoed: the expected ::error would annotate the run
-          if [ "$rc" -eq 0 ] || ! grep -q '::error title=notify_handles: invalid handle::' <<< "$out"; then
-            echo "Expected a notify_handles validation failure, got rc=${rc}: ${out//::/: :}"
+          if [ "$rc" -eq 0 ] || ! grep -q '::error title=notify_users: invalid entry::' <<< "$out"; then
+            echo "Expected a notify_users validation failure, got rc=${rc}: ${out//::/: :}"
             exit 1
           fi
 

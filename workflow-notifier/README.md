@@ -1,6 +1,6 @@
 # workflow-notifier
 
-Find CODEOWNERS and triggering workflow/PR merge authors, plus any users and teams listed in `notify_handles`, notifying them via GitHub Issues on workflow/job failure.
+Find CODEOWNERS and triggering workflow/PR merge authors, plus any users and teams listed in `notify_users`, notifying them via GitHub Issues on workflow/job failure.
 
 ## Permissions
 
@@ -25,19 +25,19 @@ The action reads `CODEOWNERS` from the **job workspace** first. When none is the
 | `notify_author` | Whether to notify the triggering author/merger on failure | `"true"` | No |
 | `notify_codeowners` | When to notify repository CODEOWNERS on failure: `always`, `fallback` or `never`. By default (`fallback`), CODEOWNERS are only alerted if no human author/operator was resolved (e.g. scheduled cron runs). `always` always includes CODEOWNERS; `never` never does. The job fails with `No names returned from codeowners` when CODEOWNERS is required (`always`, or `fallback` with no author or merger) but missing or has no `@user` names. | `"fallback"` | No |
 | `codeowners_match` | Which CODEOWNERS rules pick owners: `all`, `changed` or `workflow` (see [CODEOWNERS matching](#codeowners-matching)). | `"all"` | No |
-| `notify_handles` | Comma-separated GitHub users and teams to notify: `user`, `@user`, `org/team` or `@org/team` (see [Explicit users and teams](#explicit-users-and-teams)). | `""` | No |
+| `notify_users` | Comma-separated GitHub users to assign: `user` or `@user`. Teams are accepted too (`org/team` or `@org/team`) and are @-mentioned, not assigned (see [Explicit users and teams](#explicit-users-and-teams)). | `""` | No |
 | `dry_run` | If true, logs the issue create or comment without calling it | `"false"` | No |
 
-Everyone `notify_author`, `notify_handles` and `notify_codeowners` select is assigned on create (up to 10, in that order); leave `notify_handles` empty and set `notify_author: false` and `notify_codeowners: never` to assign nobody. The action has no outputs.
+Everyone `notify_author`, `notify_users` and `notify_codeowners` select is assigned on create (up to 10, in that order); leave `notify_users` empty and set `notify_author: false` and `notify_codeowners: never` to assign nobody. The action has no outputs.
 
 ## Explicit users and teams
 
-`notify_handles` routes failures to a fixed set of people without CODEOWNERS. Entries are trimmed, a leading `@` is optional and duplicates (any case) are dropped. An entry that isn't a GitHub login or `org/team` fails the step.
+`notify_users` routes failures to a fixed set of people without CODEOWNERS. Despite the name, it accepts teams as well as users: `user`, `@user`, `org/team` or `@org/team`. Entries are trimmed, a leading `@` is optional and duplicates (any case) are dropped. An entry that isn't a GitHub login or `org/team` fails the step.
 
 - **Users** are added to the assignees on create, deduplicated with the author and CODEOWNERS users, within GitHub's 10-assignee limit. A comment on a reused issue does not change its assignees.
 - **Teams** cannot be assigned, so they are @-mentioned (`cc @org/team`) in the issue body and in every comment on a reused issue. GitHub only notifies a mentioned team that has access to the repository and team notifications enabled.
 
-`notify_handles` needs no checkout or CODEOWNERS file. With `notify_codeowners: never`, CODEOWNERS is not fetched and no file is needed. The default `fallback` still requires CODEOWNERS when no author or merger was found (e.g. `schedule`), even with `notify_handles` set.
+`notify_users` needs no checkout or CODEOWNERS file. With `notify_codeowners: never`, CODEOWNERS is not fetched and no file is needed. The default `fallback` still requires CODEOWNERS when no author or merger was found (e.g. `schedule`), even with `notify_users` set.
 
 ```yaml
 - name: Notify on Failure
@@ -45,7 +45,7 @@ Everyone `notify_author`, `notify_handles` and `notify_codeowners` select is ass
   uses: bcgov/actions/workflow-notifier@vX.Y.Z
   with:
     notify_codeowners: never
-    notify_handles: alice, @bob, @bcgov/my-team
+    notify_users: alice, @bob, @bcgov/my-team
 ```
 
 ## CODEOWNERS matching
