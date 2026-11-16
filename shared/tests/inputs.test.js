@@ -3,7 +3,7 @@ const assert = require('node:assert');
 const { execFileSync, spawnSync } = require('node:child_process');
 const path = require('node:path');
 const {
-  InputError, getInput, getToken, isDebug, parseBool, parseEnum, parseList,
+  InputError, getInput, getToken, isDebug, parseBool, parseEnum, parseHandles, parseList,
 } = require('../inputs.js');
 
 const cli = path.join(__dirname, '..', 'inputs.js');
@@ -79,4 +79,23 @@ test('CLI for composite actions', () => {
   const bad = spawnSync('node', [cli, 'list', 'packages'], { env: { ...env, INPUT_PACKAGES: 'a, b' } });
   assert.strictEqual(bad.status, 1);
   assert.match(bad.stderr.toString(), /Invalid packages input/);
+});
+
+test('parseHandles: comma-separated users and teams, trimmed and deduplicated', () => {
+  assert.deepStrictEqual(parseHandles(''), []);
+  assert.deepStrictEqual(parseHandles(' alice , @Bob,bcgov/team-a, @bcgov/Team-A, ALICE,, '), [
+    'alice',
+    'Bob',
+    'bcgov/team-a',
+  ]);
+  assert.deepStrictEqual(parseHandles('@org/team_b.x'), ['org/team_b.x']);
+});
+
+test('parseHandles: anything else throws', () => {
+  for (const raw of ['alice bob', 'alice;bob', 'alice\nbob', '@org/team/x', '-alice', 'a'.repeat(40), '@', 'org/']) {
+    assert.throws(() => parseHandles(raw, 'notify_handles'), InputError, raw);
+  }
+  assert.throws(() => parseHandles('al!ce', 'notify_handles'), {
+    message: /^::error title=notify_handles: invalid handle::Invalid notify_handles entry: al!ce\. Use a comma-separated list/,
+  });
 });
