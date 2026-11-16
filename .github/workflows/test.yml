@@ -1499,7 +1499,7 @@ jobs:
           unused_deps: off
           supply_scan: 'false'
 
-      - name: Bundled FDS semantic rules clean and findings check
+      - name: Bundled semantic rules clean and findings check
         id: semantic
         uses: $/test-and-analyse
         with:
@@ -1532,7 +1532,7 @@ jobs:
           [ "$uri" = "test-and-analyse/fixtures/semgrep/findings/index.js" ] || { echo "❌ SARIF path should be relative to the workspace root, got $uri"; exit 1; }
           [ "$FAIL_OUTCOME" = "failure" ] || { echo "❌ semgrep_fail: true should fail on findings"; exit 1; }
           [ -z "$OFF_FINDINGS" ] || { echo "❌ Scan should not run when semgrep is off"; exit 1; }
-          [ "$SEMANTIC_FINDINGS" -ge 4 ] || { echo "❌ Expected bundled FDS semantic rules to catch at least 4 findings, got $SEMANTIC_FINDINGS"; exit 1; }
+          [ "$SEMANTIC_FINDINGS" = "8" ] || { echo "❌ Expected bundled semantic rules to catch 8 findings, got $SEMANTIC_FINDINGS"; exit 1; }
           echo "✅ Semgrep: clean passes, test paths excluded, semantic rules match, semgrep_fail fails, off by default"
 
   # ─── GET PR ────────────────────────────────────────────────────────────────

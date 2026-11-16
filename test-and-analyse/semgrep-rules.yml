@@ -1,8 +1,8 @@
-# High/Critical semantic rules aligned with bcgov/action-repo-reporter
+# High/Critical semantic security rules aligned with bcgov/action-repo-reporter
 # (`scripts/analyze-semantic-domains.py`) so template repositories surface the
 # same classes of issues on pull requests.
 rules:
-  - id: fds-raw-http-error-logging
+  - id: bcgov-raw-http-error-logging
     languages: [javascript, typescript]
     severity: WARNING
     message: Avoid logging raw HTTP client error objects (may expose Authorization headers or Bearer tokens); log error.message or error.code instead.
@@ -27,10 +27,10 @@ rules:
           - pattern: console.$LOG(..., $ERR.config, ...)
           - pattern: logger.$LOG(..., $ERR.config, ...)
 
-  - id: fds-credential-logging
+  - id: bcgov-credential-logging
     languages: [javascript, typescript]
     severity: ERROR
-    message: Avoid logging credential variables ($VAR) directly in application logs.
+    message: Avoid logging credential variables or authorization headers directly in application logs.
     metadata:
       cwe: ["CWE-532"]
       category: security
@@ -49,8 +49,12 @@ rules:
           - metavariable-regex:
               metavariable: $VAR
               regex: ^(?:accessToken|refreshToken|clientSecret|client_secret|bearerToken)$
+      - pattern: console.$LOG(..., $REQ.headers.authorization, ...)
+      - pattern: logger.$LOG(..., $REQ.headers.authorization, ...)
+      - pattern: console.$LOG(..., $REQ.headers["authorization"], ...)
+      - pattern: logger.$LOG(..., $REQ.headers["authorization"], ...)
 
-  - id: fds-weak-secret-fallback-js
+  - id: bcgov-weak-secret-fallback-js
     languages: [javascript, typescript]
     severity: ERROR
     message: Hardcoded fallback value for secret/key/token environment variable ($ENV); fail closed instead.
@@ -68,7 +72,7 @@ rules:
           metavariable: $FALLBACK
           regex: .+
 
-  - id: fds-weak-secret-fallback-py
+  - id: bcgov-weak-secret-fallback-py
     languages: [python]
     severity: ERROR
     message: Hardcoded fallback value for secret/key/token environment variable ($ENV); fail closed instead.
@@ -79,6 +83,9 @@ rules:
       - pattern-either:
           - pattern: os.environ.get("$ENV", "$FALLBACK")
           - pattern: os.getenv("$ENV", "$FALLBACK")
+          - pattern: os.environ.get("$ENV") or "$FALLBACK"
+          - pattern: os.getenv("$ENV") or "$FALLBACK"
+          - pattern: os.environ["$ENV"] or "$FALLBACK"
       - metavariable-regex:
           metavariable: $ENV
           regex: (?i).*(?:JWT|SECRET|TOKEN|ENCRYPTION_KEY|PRIVATE_KEY).*
@@ -86,7 +93,7 @@ rules:
           metavariable: $FALLBACK
           regex: .+
 
-  - id: fds-jwt-verify-unpinned-algorithm
+  - id: bcgov-jwt-verify-unpinned-algorithm
     languages: [javascript, typescript]
     severity: ERROR
     message: "jwt.verify() without an explicit algorithms allowlist risks algorithm confusion attacks; pin algorithms (e.g. { algorithms: ['RS256'] })."
@@ -99,7 +106,7 @@ rules:
           - pattern: 'jwt.verify($TOKEN, $KEY, { ... })'
           - pattern-not: 'jwt.verify($TOKEN, $KEY, { algorithms: ..., ... })'
 
-  - id: fds-express-unprotected-mutation
+  - id: bcgov-express-unprotected-mutation
     languages: [javascript, typescript]
     severity: WARNING
     message: State-changing Express route lacks an inline authentication middleware.
@@ -117,11 +124,87 @@ rules:
       - metavariable-regex:
           metavariable: $PATH
           regex: ^/(?!.*(?:login|logout|signin|signup|register|auth|callback|refresh|health|ready|live|metrics|webhook|public)).*$
-      - pattern-not-inside: |
-          $R.use(...)
-          ...
+      - pattern-not-inside:
+          patterns:
+            - pattern-either:
+                - pattern: |
+                    $R.use($MW)
+                    ...
+                - pattern: |
+                    $R.use($PREFIX, $MW)
+                    ...
+            - metavariable-regex:
+                metavariable: $MW
+                regex: (?i).*(?:auth|authenticate|jwt|verify|guard|checkRole|isLoggedIn|passport).*
 
-  - id: fds-django-unprotected-drf-view
+  - id: bcgov-nestjs-unprotected-mutation
+    languages: [typescript]
+    severity: WARNING
+    message: State-changing NestJS controller method lacks an authentication or role guard (@UseGuards, @Roles, @Auth, or @Public).
+    metadata:
+      cwe: ["CWE-306"]
+      category: security
+    patterns:
+      - pattern-inside: |
+          @Controller(...)
+          class $CLS {
+            ...
+          }
+      - pattern-not-inside: |
+          @UseGuards(...)
+          class $CLS {
+            ...
+          }
+      - pattern-not-inside: |
+          @Roles(...)
+          class $CLS {
+            ...
+          }
+      - pattern-not-inside: |
+          @Auth(...)
+          class $CLS {
+            ...
+          }
+      - pattern: |
+          @$VERB(...)
+          $METHOD(...) {
+            ...
+          }
+      - metavariable-regex:
+          metavariable: $VERB
+          regex: ^(?:Post|Put|Patch|Delete)$
+      - pattern-not: |
+          @UseGuards(...)
+          $METHOD(...) {
+            ...
+          }
+      - pattern-not: |
+          @Roles(...)
+          $METHOD(...) {
+            ...
+          }
+      - pattern-not: |
+          @Auth(...)
+          $METHOD(...) {
+            ...
+          }
+      - pattern-not: |
+          @Public(...)
+          $METHOD(...) {
+            ...
+          }
+      - pattern-not:
+          patterns:
+            - pattern: |
+                @$VERB("$ROUTE")
+                $METHOD(...) {
+                  ...
+                }
+            - metavariable-regex:
+                metavariable: $ROUTE
+                regex: (?i).*(?:login|logout|token|auth|callback|public|health|healthz|webhook|register|signup).*
+
+  - id: bcgov-django-unprotected-drf-view
     languages: [python]
     severity: WARNING
     message: Django REST view sets empty or AllowAny permission_classes; enforce explicit authentication/permission checks on mutations.
