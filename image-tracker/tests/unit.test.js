@@ -3187,3 +3187,339 @@ test('runMain rejects invalid tags before resolving anything', async () => {
   assert.match(String(r.error), /process\.exit called with code 1/);
   assert.ok(!r.calls.some((c) => c.url.includes('/manifests/')), 'no registry calls');
 });
+
+test('readCommitHistory reads SHA, parents, and subject in one pass', () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const { readCommitHistory } = require('../index.js');
+  const cwd = process.cwd();
+  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hist-test-'));
+  try {
+    process.chdir(repoDir);
+    execFileSync('git', ['init', '-b', 'main'], { stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.name', 'Test'], { stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.email', 'test@example.com'], { stdio: 'ignore' });
+    fs.writeFileSync(path.join(repoDir, 'a.txt'), '1');
+    execFileSync('git', ['add', '.'], { stdio: 'ignore' });
+    execFileSync('git', ['commit', '-m', 'first (#10)'], { stdio: 'ignore' });
+    fs.writeFileSync(path.join(repoDir, 'a.txt'), '2');
+    execFileSync('git', ['add', '.'], { stdio: 'ignore' });
+    execFileSync('git', ['commit', '-m', 'second (#11)'], { stdio: 'ignore' });
+    const head = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    const commits = readCommitHistory(head, 10);
+    assert.strictEqual(commits.length, 2);
+    assert.strictEqual(commits[0].sha, head);
+    assert.strictEqual(commits[0].msg, 'second (#11)');
+    assert.strictEqual(commits[0].parents.length, 1);
+    assert.strictEqual(commits[1].msg, 'first (#10)');
+    assert.strictEqual(commits[1].parents.length, 0);
+  } finally {
+    process.chdir(cwd);
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+test('runMain PR fast path skips deepening and PR API lookups when HEAD resolves', async () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const { runMain, isShallowRepository } = require('../index.js');
+  const origFetch = global.fetch;
+  const origExit = process.exit;
+  const saved = snapshotEnv();
+  const cwd = process.cwd();
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pr-fast-base-'));
+  const shallowDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pr-fast-clone-'));
+  try {
+    process.exit = (code) => {
+      throw new Error(`process.exit called with code ${code}`);
+    };
+    execFileSync('git', ['init', '-b', 'main'], { cwd: baseDir, stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.name', 'Test'], { cwd: baseDir, stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: baseDir, stdio: 'ignore' });
+    for (let i = 1; i <= 5; i++) {
+      fs.writeFileSync(path.join(baseDir, 'f.txt'), `v${i}\n`);
+      execFileSync('git', ['add', '.'], { cwd: baseDir, stdio: 'ignore' });
+      execFileSync('git', ['commit', '-m', `commit ${i}`], { cwd: baseDir, stdio: 'ignore' });
+    }
+    const headSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: baseDir, encoding: 'utf8' }).trim();
+    execFileSync('git', ['clone', '--depth', '1', `file://${baseDir}`, shallowDir], { stdio: 'ignore' });
+    process.chdir(shallowDir);
+    assert.strictEqual(isShallowRepository(), true);
+
+    const eventPath = path.join(shallowDir, 'event.json');
+    fs.writeFileSync(
+      eventPath,
+      JSON.stringify({ pull_request: { number: 42, head: { sha: headSha }, title: 'fast PR' } })
+    );
+
+    const calls = [];
+    const digest = 'sha256:' + 'a'.repeat(64);
+    global.fetch = async (url) => {
+      calls.push(url);
+      if (url.endsWith('/manifests/latest')) {
+        return {
+          ok: false,
+          status: 401,
+          headers: { get: (h) => (h.toLowerCase() === 'www-authenticate' ? 'Bearer realm="https://ghcr.io/token",service="ghcr.io"' : null) },
+          json: async () => ({})
+        };
+      }
+      if (url.includes('/token?')) {
+        return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({ token: 'pull' }) };
+      }
+      if (url.includes(`/manifests/${headSha}`)) {
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: (h) => (h.toLowerCase() === 'docker-content-digest' ? digest : null) },
+          json: async () => ({
+            mediaType: 'application/vnd.oci.image.manifest.v1+json',
+            annotations: { 'org.opencontainers.image.revision': headSha }
+          })
+        };
+      }
+      return { ok: false, status: 404, headers: { get: () => null }, json: async () => ({}) };
+    };
+
+    const out = path.join(shallowDir, 'out');
+    process.env.GITHUB_ACTIONS = 'true';
+    process.env.GITHUB_OUTPUT = out;
+    delete process.env.GITHUB_STEP_SUMMARY;
+    process.env.GITHUB_EVENT_PATH = eventPath;
+    process.env.GITHUB_EVENT_NAME = 'pull_request';
+    process.env.GITHUB_REPOSITORY = 'bcgov/demo';
+    process.env.INPUT_PACKAGES = 'frontend\nbackend';
+    delete process.env.PACKAGES;
+    process.env.INPUT_REPOSITORY = 'bcgov/demo';
+    delete process.env.REPOSITORY;
+    process.env.INPUT_REVISION = headSha;
+    delete process.env.REVISION;
+    process.env.INPUT_WORKING_DIRECTORY = shallowDir;
+    delete process.env.DIR;
+    process.env.INPUT_TOKEN = 'gh-token';
+
+    await runMain();
+
+    const commitCount = execFileSync('git', ['rev-list', '--count', 'HEAD'], { cwd: shallowDir, encoding: 'utf8' }).trim();
+    assert.strictEqual(commitCount, '1', 'shallow clone must not deepen when HEAD hits');
+    assert.ok(!calls.some((u) => u.includes('/pulls')), 'must not query /commits/*/pulls when event has PR info');
+    assert.ok(!calls.some((u) => u.includes('/packages/container/')), 'must not fetch package versions on HEAD hit');
+  } finally {
+    global.fetch = origFetch;
+    process.exit = origExit;
+    process.chdir(cwd);
+    restoreEnv(saved);
+    fs.rmSync(baseDir, { recursive: true, force: true });
+    fs.rmSync(shallowDir, { recursive: true, force: true });
+  }
+});
+
+test('runMain stops /pulls API calls on 403 and uses package versions index to skip 404 manifest probes', async () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const { runMain } = require('../index.js');
+  const origFetch = global.fetch;
+  const origExit = process.exit;
+  const saved = snapshotEnv();
+  const cwd = process.cwd();
+  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'walk-perf-test-'));
+  try {
+    process.exit = (code) => {
+      throw new Error(`process.exit called with code ${code}`);
+    };
+    process.chdir(repoDir);
+    execFileSync('git', ['init', '-b', 'main'], { stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.name', 'Test'], { stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.email', 'test@example.com'], { stdio: 'ignore' });
+    execFileSync('git', ['remote', 'add', 'origin', 'https://github.com/bcgov/demo.git'], { stdio: 'ignore' });
+
+    for (let i = 1; i <= 25; i++) {
+      fs.writeFileSync(path.join(repoDir, 'f.txt'), `v${i}\n`);
+      execFileSync('git', ['add', '.'], { stdio: 'ignore' });
+      execFileSync('git', ['commit', '-m', `feat: change ${i} (#${700 + i})`], { stdio: 'ignore' });
+    }
+    const headSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    const digest = 'sha256:' + 'b'.repeat(64);
+    const pr702Revision = '1234567890abcdef1234567890abcdef12345678';
+
+    const calls = [];
+    global.fetch = async (url) => {
+      calls.push(url);
+      if (url.includes('/commits/') && url.endsWith('/pulls')) {
+        return { ok: false, status: 403, headers: { get: () => null }, json: async () => ({}) };
+      }
+      if (url.includes('/orgs/bcgov/packages/container/demo%2Fmigrations/versions')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          json: async () => [{ name: digest, metadata: { container: { tags: ['702'] } } }]
+        };
+      }
+      if (url.endsWith('/manifests/latest')) {
+        return {
+          ok: false,
+          status: 401,
+          headers: { get: (h) => (h.toLowerCase() === 'www-authenticate' ? 'Bearer realm="https://ghcr.io/token",service="ghcr.io"' : null) },
+          json: async () => ({})
+        };
+      }
+      if (url.includes('/token?')) {
+        return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({ token: 'pull' }) };
+      }
+      if (url.endsWith('/migrations/manifests/702')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: (h) => (h.toLowerCase() === 'docker-content-digest' ? digest : null) },
+          json: async () => ({
+            mediaType: 'application/vnd.oci.image.manifest.v1+json',
+            annotations: {
+              'org.opencontainers.image.revision': pr702Revision,
+              'org.opencontainers.image.version': '702',
+              'org.opencontainers.image.source': 'https://github.com/bcgov/demo'
+            }
+          })
+        };
+      }
+      return { ok: false, status: 404, headers: { get: () => null }, json: async () => ({}) };
+    };
+
+    const out = path.join(repoDir, 'out');
+    process.env.GITHUB_ACTIONS = 'true';
+    process.env.GITHUB_OUTPUT = out;
+    delete process.env.GITHUB_STEP_SUMMARY;
+    delete process.env.GITHUB_EVENT_PATH;
+    process.env.GITHUB_EVENT_NAME = 'push';
+    process.env.GITHUB_REPOSITORY = 'bcgov/demo';
+    process.env.INPUT_PACKAGES = 'migrations';
+    delete process.env.PACKAGES;
+    process.env.INPUT_REPOSITORY = 'bcgov/demo';
+    delete process.env.REPOSITORY;
+    process.env.INPUT_REVISION = headSha;
+    delete process.env.REVISION;
+    process.env.INPUT_WORKING_DIRECTORY = repoDir;
+    delete process.env.DIR;
+    process.env.INPUT_TOKEN = 'gh-token';
+
+    await runMain();
+
+    const output = fs.readFileSync(out, 'utf8');
+    assert.match(output, new RegExp(`digest=${digest}`), 'must resolve PR #702 digest');
+    assert.match(output, /pr=702/, 'must resolve PR #702');
+
+    const pullCalls = calls.filter((u) => u.includes('/pulls'));
+    assert.ok(pullCalls.length <= 9, `must stop /pulls after 403 instead of walking all 25 commits (got ${pullCalls.length})`);
+
+    const manifestProbes = calls.filter((u) => u.includes('/migrations/manifests/') && !u.endsWith('/latest'));
+    assert.ok(manifestProbes.length <= 6, `must skip 404 probes via versions index (got ${manifestProbes.length})`);
+  } finally {
+    global.fetch = origFetch;
+    process.exit = origExit;
+    process.chdir(cwd);
+    restoreEnv(saved);
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+test('runMain falls back to Pass 2 probes when GHCR versions page has 100 entries', async () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const { runMain } = require('../index.js');
+  const origFetch = global.fetch;
+  const origExit = process.exit;
+  const saved = snapshotEnv();
+  const cwd = process.cwd();
+  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pass2-test-'));
+  try {
+    process.exit = (code) => {
+      throw new Error(`process.exit called with code ${code}`);
+    };
+    process.chdir(repoDir);
+    execFileSync('git', ['init', '-b', 'main'], { stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.name', 'Test'], { stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.email', 'test@example.com'], { stdio: 'ignore' });
+    execFileSync('git', ['remote', 'add', 'origin', 'https://github.com/bcgov/demo.git'], { stdio: 'ignore' });
+
+    fs.writeFileSync(path.join(repoDir, 'f.txt'), 'v1\n');
+    execFileSync('git', ['add', '.'], { stdio: 'ignore' });
+    execFileSync('git', ['commit', '-m', 'old build (#50)'], { stdio: 'ignore' });
+    const oldSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+
+    fs.writeFileSync(path.join(repoDir, 'f.txt'), 'v2\n');
+    execFileSync('git', ['add', '.'], { stdio: 'ignore' });
+    execFileSync('git', ['commit', '-m', 'docs (#51)'], { stdio: 'ignore' });
+    fs.writeFileSync(path.join(repoDir, 'f.txt'), 'v3\n');
+    execFileSync('git', ['add', '.'], { stdio: 'ignore' });
+    execFileSync('git', ['commit', '-m', 'docs (#52)'], { stdio: 'ignore' });
+    const headSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    const digest = 'sha256:' + 'c'.repeat(64);
+
+    global.fetch = async (url) => {
+      if (url.includes('/commits/') && url.endsWith('/pulls')) {
+        return { ok: false, status: 403, headers: { get: () => null }, json: async () => ({}) };
+      }
+      if (url.includes('/orgs/bcgov/packages/container/demo%2Fbackend/versions')) {
+        const hundred = Array.from({ length: 100 }, (_, i) => ({
+          name: `sha256:${String(i).padStart(64, '0')}`,
+          metadata: { container: { tags: [`unrelated-${i}`] } }
+        }));
+        return { ok: true, status: 200, headers: { get: () => null }, json: async () => hundred };
+      }
+      if (url.endsWith('/manifests/latest')) {
+        return {
+          ok: false,
+          status: 401,
+          headers: { get: (h) => (h.toLowerCase() === 'www-authenticate' ? 'Bearer realm="https://ghcr.io/token",service="ghcr.io"' : null) },
+          json: async () => ({})
+        };
+      }
+      if (url.includes('/token?')) {
+        return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({ token: 'pull' }) };
+      }
+      if (url.endsWith(`/backend/manifests/${oldSha}`)) {
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: (h) => (h.toLowerCase() === 'docker-content-digest' ? digest : null) },
+          json: async () => ({
+            mediaType: 'application/vnd.oci.image.manifest.v1+json',
+            annotations: { 'org.opencontainers.image.revision': oldSha }
+          })
+        };
+      }
+      return { ok: false, status: 404, headers: { get: () => null }, json: async () => ({}) };
+    };
+
+    const out = path.join(repoDir, 'out');
+    process.env.GITHUB_ACTIONS = 'true';
+    process.env.GITHUB_OUTPUT = out;
+    delete process.env.GITHUB_STEP_SUMMARY;
+    delete process.env.GITHUB_EVENT_PATH;
+    process.env.GITHUB_EVENT_NAME = 'push';
+    process.env.GITHUB_REPOSITORY = 'bcgov/demo';
+    process.env.INPUT_PACKAGES = 'backend';
+    delete process.env.PACKAGES;
+    process.env.INPUT_REPOSITORY = 'bcgov/demo';
+    delete process.env.REPOSITORY;
+    process.env.INPUT_REVISION = headSha;
+    delete process.env.REVISION;
+    process.env.INPUT_WORKING_DIRECTORY = repoDir;
+    delete process.env.DIR;
+    process.env.INPUT_TOKEN = 'gh-token';
+
+    await runMain();
+    const output = fs.readFileSync(out, 'utf8');
+    assert.match(output, new RegExp(`digest=${digest}`), 'Pass 2 must resolve older version beyond 100');
+  } finally {
+    global.fetch = origFetch;
+    process.exit = origExit;
+    process.chdir(cwd);
+    restoreEnv(saved);
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});

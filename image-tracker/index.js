@@ -488,15 +488,17 @@ async function applyTags({ tags, registry, pkgOrder, imagePaths, images, pivotSh
   if (toApply.length === 0) return [];
 
   // Mint every push token before the first write so auth failures cannot leave partial tags.
-  const bearers = {};
-  for (const pkg of pkgOrder) {
-    const path = imagePaths[pkg];
-    const bearer = await registryToken(path, registry, token, 'pull,push');
-    if (!bearer || bearer === '__NO_AUTH__') {
-      throw new Error(`Could not obtain a push token for ${registry}/${path}. Tagging needs 'packages: write'.`);
-    }
-    bearers[pkg] = bearer;
-  }
+  const bearerEntries = await Promise.all(
+    pkgOrder.map(async (pkg) => {
+      const path = imagePaths[pkg];
+      const bearer = await registryToken(path, registry, token, 'pull,push');
+      if (!bearer || bearer === '__NO_AUTH__') {
+        throw new Error(`Could not obtain a push token for ${registry}/${path}. Tagging needs 'packages: write'.`);
+      }
+      return [pkg, bearer];
+    })
+  );
+  const bearers = Object.fromEntries(bearerEntries);
 
   for (const pkg of pkgOrder) {
     const path = imagePaths[pkg];
@@ -582,7 +584,8 @@ async function probeTag(
   prMergeMap = {},
   token = null,
   sourceRepository = '',
-  diagnostics = null
+  diagnostics = null,
+  options = {}
 ) {
   const base = `https://${registry}/v2/${imagePath}`;
   const accept =
@@ -759,7 +762,19 @@ async function probeTag(
               }
             } catch (err) {}
 
-            // 2. GitHub API commit lookup check
+            // 2. OCI version & source annotation check (in-memory, avoids API call when labels already prove PR ownership)
+            if (
+              !verified &&
+              (version === `pr-${pn}` || version === String(pn) || version === tag)
+            ) {
+              const normSource = normalizeRepo(repositoryFromRemoteUrl(source) || source);
+              const normRepo = normalizeRepo(repositoryFromRemoteUrl(sourceRepository) || sourceRepository);
+              if (normSource && normRepo && normSource === normRepo) {
+                verified = true;
+              }
+            }
+
+            // 3. GitHub API commit lookup check
             if (!verified && token && sourceRepository && /^[0-9a-f]{7,40}$/i.test(revision)) {
               try {
                 const commitRes = await fetch(
@@ -788,18 +803,6 @@ async function probeTag(
                   }
                 }
               } catch (err) {}
-            }
-
-            // 3. OCI version & source annotation fallback
-            if (
-              !verified &&
-              (version === `pr-${pn}` || version === String(pn) || version === tag)
-            ) {
-              const normSource = normalizeRepo(repositoryFromRemoteUrl(source) || source);
-              const normRepo = normalizeRepo(repositoryFromRemoteUrl(sourceRepository) || sourceRepository);
-              if (normSource && normRepo && normSource === normRepo) {
-                verified = true;
-              }
             }
 
             if (verified) {
@@ -843,7 +846,7 @@ async function probeTag(
         );
 
         if (isPrTag ? revMatch : (revision ? revMatch : shaMatch)) {
-          let title = prTitleMap[cand] || '';
+          let title = prTitleMap[cand] || options?.candidateMessages?.[cand] || '';
           if (!title) {
             try {
               title = execFileSync('git', ['log', '-1', '--format=%s', cand], {
@@ -860,7 +863,7 @@ async function probeTag(
           if (pn) auditMsg += ` | PR #${pn}`;
           if (title) auditMsg += `: ${title}`;
           if (created) auditMsg += ` | Built: ${created}`;
-          logInfo(auditMsg);
+          if (!options?.quietHit) logInfo(auditMsg);
 
           if (diagnostics) diagnostics.delete(tag);
 
@@ -869,7 +872,8 @@ async function probeTag(
             digest: finalDigest,
             created,
             prNum: pn || digestPrMap[finalDigest] || '',
-            msg: title
+            msg: title,
+            auditMsg
           };
         }
       }
@@ -925,6 +929,113 @@ async function probeTag(
   }
 }
 
+// ---- Concurrency & History Helpers -----------------------------------------
+const COMMIT_BATCH_SIZE = 8;
+const PROBE_CONCURRENCY = 16;
+
+async function mapLimit(items, limit, fn) {
+  if (items.length === 0) return [];
+  const results = new Array(items.length);
+  let next = 0;
+  const workerCount = Math.min(limit, items.length);
+  async function worker() {
+    while (next < items.length) {
+      const idx = next++;
+      results[idx] = await fn(items[idx], idx);
+    }
+  }
+  await Promise.all(Array.from({ length: workerCount }, worker));
+  return results;
+}
+
+function readCommitHistory(pivotSha, maxDepth) {
+  try {
+    const out = execFileSync(
+      'git',
+      ['log', '--topo-order', '-n', String(maxDepth), '--format=%H%x1f%P%x1f%s%x1e', pivotSha],
+      { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }
+    );
+    const commits = [];
+    for (const rec of out.split('\x1e')) {
+      const trimmed = rec.replace(/^\r?\n+|\r?\n+$/g, '');
+      if (!trimmed) continue;
+      const [sha = '', parentsStr = '', ...msgParts] = trimmed.split('\x1f');
+      const cleanSha = sha.trim();
+      if (!cleanSha) continue;
+      commits.push({
+        sha: cleanSha,
+        parents: parentsStr.trim().split(/\s+/).filter(Boolean),
+        msg: msgParts.join('\x1f').trim()
+      });
+    }
+    if (commits.length > 0) return commits;
+  } catch (err) {}
+  return [{ sha: pivotSha, parents: [], msg: '' }];
+}
+
+function buildCandidateTags(candidate, prMap, prNumMap, prMergeMap) {
+  const prHead = prMap[candidate];
+  const prNum = prNumMap[candidate];
+  const prMerges = Array.isArray(prMergeMap[candidate])
+    ? prMergeMap[candidate]
+    : (prMergeMap[candidate] ? [prMergeMap[candidate]] : []);
+  return [
+    ...new Set(
+      [
+        `sha-${candidate.slice(0, 7)}`,
+        candidate,
+        `sha-${candidate}`,
+        prHead && `sha-${prHead.slice(0, 7)}`,
+        prHead,
+        prHead && `sha-${prHead}`,
+        ...prMerges.flatMap((m) => [`sha-${m.slice(0, 7)}`, m, `sha-${m}`]),
+        prNum && `pr-${prNum}`,
+        prNum && String(prNum)
+      ].filter(Boolean)
+    )
+  ];
+}
+
+async function fetchPackageVersions({ imagePath, repository, registry = 'ghcr.io', token = '' }) {
+  const owner = repository.split('/')[0];
+  if (registry !== 'ghcr.io' || !token || !owner) return null;
+  const pkg = imagePath.split('/').slice(1).join('/') || imagePath;
+  const pkgEnc = encodeURIComponent(pkg);
+  const ghHeaders = {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github+json',
+    'User-Agent': 'image-tracker'
+  };
+
+  let apiRes = await fetch(
+    `https://api.github.com/orgs/${owner}/packages/container/${pkgEnc}/versions?per_page=100`,
+    { headers: ghHeaders }
+  ).catch(() => null);
+
+  if (!apiRes || apiRes.status === 404) {
+    apiRes = await fetch(
+      `https://api.github.com/users/${owner}/packages/container/${pkgEnc}/versions?per_page=100`,
+      { headers: ghHeaders }
+    ).catch(() => null);
+  }
+
+  if (!apiRes || !apiRes.ok) return null;
+  const rawData = await apiRes.json().catch(() => null);
+  if (!Array.isArray(rawData)) return null;
+
+  const knownTags = new Set();
+  for (const item of rawData) {
+    for (const t of item?.metadata?.container?.tags || []) {
+      knownTags.add(t);
+    }
+  }
+  return {
+    rawData,
+    knownTags,
+    isComplete: rawData.length < 100
+  };
+}
+
 // ---- Iterative Digest Resolution -------------------------------------------
 async function resolveDigestIterative({
   imagePath,
@@ -941,35 +1052,13 @@ async function resolveDigestIterative({
   debug = false,
   prMergeMap = {},
   sourceRepository = '',
-  diagnostics = null
+  diagnostics = null,
+  prefetchedRawData = null
 }) {
-  const owner = repository.split('/')[0];
-  const pkg = imagePath.split('/').slice(1).join('/') || imagePath;
-  const pkgEnc = encodeURIComponent(pkg);
-
-  let rawData = null;
-  if (registry === 'ghcr.io' && token && owner) {
-    const ghHeaders = {
-      Authorization: `Bearer ${token}`,
-      Accept: 'application/vnd.github+json',
-      'User-Agent': 'image-tracker'
-    };
-
-    let apiRes = await fetch(
-      `https://api.github.com/orgs/${owner}/packages/container/${pkgEnc}/versions?per_page=100`,
-      { headers: ghHeaders }
-    ).catch(() => null);
-
-    if (!apiRes || !apiRes.ok) {
-      apiRes = await fetch(
-        `https://api.github.com/users/${owner}/packages/container/${pkgEnc}/versions?per_page=100`,
-        { headers: ghHeaders }
-      ).catch(() => null);
-    }
-
-    if (apiRes && apiRes.ok) {
-      rawData = await apiRes.json().catch(() => null);
-    }
+  let rawData = prefetchedRawData;
+  if (!rawData && registry === 'ghcr.io' && token && repository) {
+    const pkgInfo = await fetchPackageVersions({ imagePath, repository, registry, token });
+    rawData = pkgInfo?.rawData || null;
   }
 
   let tagsSeen = 0;
@@ -1613,6 +1702,8 @@ async function runMain() {
     if (gitParents.length >= 2 && gitParents[1] && isSyntheticPrMerge) {
       addPrMerge(prMergeMap, gitParents[1], gitHead);
       prMap[gitHead] = gitParents[1];
+      if (eventPr.number && !prNumMap[gitHead]) prNumMap[gitHead] = String(eventPr.number);
+      if (eventPr.title && !prTitleMap[gitHead]) prTitleMap[gitHead] = eventPr.title;
     }
   } catch (err) {}
 
@@ -1642,107 +1733,86 @@ async function runMain() {
     process.exit(1);
   }
 
-  let candidates = [];
-  try {
-    const revListOut = execFileSync('git', ['rev-list', '--topo-order', '-n', String(maxDepth), pivotSha], {
-      encoding: 'utf8',
-      stdio: ['pipe', 'pipe', 'ignore']
-    }).trim();
-    candidates = revListOut.split(/\r?\n/).filter(Boolean);
-  } catch (err) {
-    candidates = [pivotSha];
-  }
-
-  if (candidates.length < maxDepth && isShallowRepository()) {
-    logInfo(`Repository is shallow (${candidates.length}/${maxDepth} commits). Deepening history...`);
-    if (gitFetchDeepen(pivotSha, maxDepth)) {
-      try {
-        const revListOut = execFileSync('git', ['rev-list', '--topo-order', '-n', String(maxDepth), pivotSha], {
-          encoding: 'utf8',
-          stdio: ['pipe', 'pipe', 'ignore']
-        }).trim();
-        candidates = revListOut.split(/\r?\n/).filter(Boolean);
-      } catch (err) {}
-    }
-  }
-
+  let commits = readCommitHistory(pivotSha, maxDepth);
+  let candidates = commits.map((c) => c.sha);
   const candidateMessages = {};
-  for (const sha of candidates) {
-    candidateMap[sha] = true;
-    let msg = '';
-    try {
-      msg = execFileSync('git', ['log', '-1', '--format=%s', sha], {
-        encoding: 'utf8',
-        stdio: ['pipe', 'pipe', 'ignore']
-      }).trim();
-    } catch (err) {}
-    candidateMessages[sha] = msg;
 
-    const prFromMsg = msg.match(/\(#([0-9]+)\)/);
-    if (prFromMsg) {
-      logDebug(`Mapped ${sha.slice(0, 7)} to PR #${prFromMsg[1]} (from msg)`, debug);
-      prNumMap[sha] = prFromMsg[1];
+  function seedCommits(list) {
+    for (const { sha, msg } of list) {
+      if (candidateMap[sha]) continue;
+      candidateMap[sha] = true;
+      candidateMessages[sha] = msg;
+      const prFromMsg = msg.match(/\(#([0-9]+)\)/);
+      if (prFromMsg) {
+        logDebug(`Mapped ${sha.slice(0, 7)} to PR #${prFromMsg[1]} (from msg)`, debug);
+        if (!prNumMap[sha]) prNumMap[sha] = prFromMsg[1];
+      }
     }
+  }
+  seedCommits(commits);
 
-    if (token) {
-      try {
-        const apiShas = [sha];
+  let prApiDisabled = false;
+  const prLookupCache = new Map();
+  function ensureCommitPrInfo(commit) {
+    const { sha, parents = [] } = commit;
+    if (!token || !sourceRepository || prApiDisabled) return Promise.resolve();
+    if (prMap[sha] && prNumMap[sha]) return Promise.resolve();
+    if (prLookupCache.has(sha)) return prLookupCache.get(sha);
+
+    const p = (async () => {
+      if (prApiDisabled) return;
+      const apiShas = [sha];
+      if (parents.length >= 2 && parents[1]) {
+        apiShas.push(parents[1]);
+      }
+      const ghHeaders = {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'image-tracker'
+      };
+      for (const checkSha of apiShas) {
+        if (prApiDisabled) return;
         try {
-          const parents = execFileSync('git', ['log', '-1', '--format=%P', sha], {
-            encoding: 'utf8',
-            stdio: ['pipe', 'pipe', 'ignore']
-          })
-            .trim()
-            .split(/\s+/);
-          if (parents.length >= 2) {
-            apiShas.push(parents[1]);
-          }
-        } catch (pErr) {}
-
-        const ghHeaders = {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github+json',
-          'User-Agent': 'image-tracker'
-        };
-
-        for (const checkSha of apiShas) {
           const prRes = await fetch(prLookupUrl(sourceRepository, checkSha), {
             headers: ghHeaders
           }).catch(() => null);
-
-          if (prRes && prRes.ok) {
-            const prs = await prRes.json().catch(() => []);
-            if (Array.isArray(prs) && prs.length > 0) {
-              const pr = prs[0];
-              const headSha = pr.head?.sha;
-              const mergeSha = pr.merge_commit_sha;
-              const prNumApi = pr.number;
-              const prTitle = pr.title;
-
-              if (prNumApi) {
-                logDebug(`Mapped ${sha.slice(0, 7)} to PR #${prNumApi} (from API)`, debug);
-                prNumMap[sha] = String(prNumApi);
-                prTitleMap[sha] = prTitle;
-                if (mergeSha) addPrMerge(prMergeMap, sha, mergeSha);
-                if (headSha) {
-                  prMap[sha] = headSha;
-                  prNumMap[headSha] = String(prNumApi);
-                  prTitleMap[headSha] = prTitle;
-                  if (mergeSha) addPrMerge(prMergeMap, headSha, mergeSha);
-                }
-                if (mergeSha) {
-                  if (headSha) prMap[mergeSha] = headSha;
-                  prNumMap[mergeSha] = String(prNumApi);
-                  prTitleMap[mergeSha] = prTitle;
-                  addPrMerge(prMergeMap, mergeSha, mergeSha);
-                }
-                break;
-              }
-            }
+          if (!prRes) continue;
+          if (prRes.status === 401 || prRes.status === 403) {
+            prApiDisabled = true;
+            return;
           }
-        }
-      } catch (err) {}
-    }
+          if (!prRes.ok) continue;
+          const prs = await prRes.json().catch(() => []);
+          if (!Array.isArray(prs) || prs.length === 0) continue;
+          const pr = prs[0];
+          const headSha = pr.head?.sha;
+          const mergeSha = pr.merge_commit_sha;
+          const prNumApi = pr.number;
+          const prTitle = pr.title;
+          if (prNumApi) {
+            logDebug(`Mapped ${sha.slice(0, 7)} to PR #${prNumApi} (from API)`, debug);
+            prNumMap[sha] = String(prNumApi);
+            prTitleMap[sha] = prTitle;
+            if (mergeSha) addPrMerge(prMergeMap, sha, mergeSha);
+            if (headSha) {
+              prMap[sha] = headSha;
+              prNumMap[headSha] = String(prNumApi);
+              prTitleMap[headSha] = prTitle;
+              if (mergeSha) addPrMerge(prMergeMap, headSha, mergeSha);
+            }
+            if (mergeSha) {
+              if (headSha) prMap[mergeSha] = headSha;
+              prNumMap[mergeSha] = String(prNumApi);
+              prTitleMap[mergeSha] = prTitle;
+              addPrMerge(prMergeMap, mergeSha, mergeSha);
+            }
+            return;
+          }
+        } catch (err) {}
+      }
+    })();
+    prLookupCache.set(sha, p);
+    return p;
   }
 
   const { imagePaths, pkgOrder } = mapPackages(packageInput, repository);
@@ -1760,107 +1830,194 @@ async function runMain() {
 
   const imagesJson = {};
   const packageDiagnostics = {};
-
+  const pkgStates = {};
   for (const pkg of pkgOrder) {
-    const path = imagePaths[pkg];
     packageDiagnostics[pkg] = {
       probedTags: new Map(),
       bearerFailed: false,
       iterativeTagsScanned: 0,
       iterativeStatus: ''
     };
-    const pkgDiag = packageDiagnostics[pkg];
+    pkgStates[pkg] = {
+      path: imagePaths[pkg],
+      pkgDiag: packageDiagnostics[pkg],
+      bearer: null,
+      res: null,
+      maxTagsExceeded: false
+    };
+  }
 
-    const bearer = await registryToken(path, registry, token);
-    if (!bearer) {
-      logError(`Failed to obtain registry token for ${path}.`);
-      pkgDiag.bearerFailed = true;
+  const probeOpts = { quietHit: true, candidateMessages };
+
+  function probeOneTag(st, tag) {
+    return probeTag(
+      st.path,
+      tag,
+      st.bearer,
+      registry,
+      candidates,
+      prMap,
+      prNumMap,
+      prTitleMap,
+      digestPrMap,
+      debug,
+      prMergeMap,
+      token,
+      sourceRepository,
+      st.pkgDiag.probedTags,
+      probeOpts
+    );
+  }
+
+  async function probeTagBatch(st, tags) {
+    if (tags.length === 0) return null;
+    const hits = await mapLimit(tags, PROBE_CONCURRENCY, (tag) => probeOneTag(st, tag));
+    return hits.find(Boolean) || null;
+  }
+
+  // Phase 1: Fast path on commit 0 (HEAD / current PR) across all packages in parallel.
+  // Avoids shallow deepening, PR API walks, and package version fetches when HEAD already hits.
+  if (commits.length > 0) {
+    await ensureCommitPrInfo(commits[0]);
+    const headTags = buildCandidateTags(commits[0].sha, prMap, prNumMap, prMergeMap);
+    await Promise.all(
+      pkgOrder.map(async (pkg) => {
+        const st = pkgStates[pkg];
+        st.bearer = await registryToken(st.path, registry, token);
+        if (!st.bearer) {
+          st.pkgDiag.bearerFailed = true;
+          return;
+        }
+        st.res = await probeTagBatch(st, headTags);
+      })
+    );
+  }
+
+  // Phase 2: Deepen shallow history once and walk remaining commits only for unresolved packages.
+  const unresolvedAfterHead = pkgOrder.filter((pkg) => !pkgStates[pkg].res && !pkgStates[pkg].pkgDiag.bearerFailed);
+  if (unresolvedAfterHead.length > 0) {
+    const checkedPrefixLen = Math.min(1, commits.length);
+    if (commits.length < maxDepth && isShallowRepository()) {
+      logInfo(`Repository is shallow (${commits.length}/${maxDepth} commits). Deepening history...`);
+      if (gitFetchDeepen(pivotSha, maxDepth)) {
+        commits = readCommitHistory(pivotSha, maxDepth);
+        candidates = commits.map((c) => c.sha);
+        seedCommits(commits);
+      }
+    }
+
+    const tailCommits = commits.slice(checkedPrefixLen);
+    await Promise.all(
+      unresolvedAfterHead.map(async (pkg) => {
+        const st = pkgStates[pkg];
+        const pkgVersions =
+          tailCommits.length > 1
+            ? await fetchPackageVersions({
+                imagePath: st.path,
+                repository,
+                registry,
+                token
+              })
+            : null;
+        const knownTags = pkgVersions?.knownTags || null;
+        const skippedTags = [];
+
+        for (let i = 0; i < tailCommits.length; i += COMMIT_BATCH_SIZE) {
+          const batch = tailCommits.slice(i, i + COMMIT_BATCH_SIZE);
+          await Promise.all(batch.map((c) => ensureCommitPrInfo(c)));
+
+          const batchTags = [];
+          for (const commit of batch) {
+            const tags = buildCandidateTags(commit.sha, prMap, prNumMap, prMergeMap);
+            for (const tag of tags) {
+              if (!knownTags || knownTags.has(tag)) {
+                batchTags.push(tag);
+              } else {
+                skippedTags.push(tag);
+              }
+            }
+          }
+
+          st.res = await probeTagBatch(st, batchTags);
+          if (st.res) break;
+        }
+
+        // If GHCR returned a truncated page of 100 versions and Pass 1 missed, probe skipped tags.
+        if (!st.res && skippedTags.length > 0) {
+          if (pkgVersions && !pkgVersions.isComplete) {
+            for (let i = 0; i < skippedTags.length; i += COMMIT_BATCH_SIZE * 4) {
+              st.res = await probeTagBatch(st, skippedTags.slice(i, i + COMMIT_BATCH_SIZE * 4));
+              if (st.res) break;
+            }
+          } else {
+            for (const tag of skippedTags) {
+              if (!st.pkgDiag.probedTags.has(tag)) {
+                st.pkgDiag.probedTags.set(tag, {
+                  tag,
+                  status: 404,
+                  statusText: 'Not Found',
+                  reason: 'Tag not found',
+                  details: 'Tag does not exist in registry'
+                });
+              }
+            }
+          }
+        }
+
+        if (!st.res) {
+          logInfo('Direct candidate probes missed; falling back to iterative scan...');
+          const iterRes = await resolveDigestIterative({
+            imagePath: st.path,
+            bearer: st.bearer,
+            registry,
+            maxTags,
+            token,
+            repository,
+            candidates,
+            prMap,
+            prNumMap,
+            prTitleMap,
+            digestPrMap,
+            debug,
+            prMergeMap,
+            sourceRepository,
+            diagnostics: st.pkgDiag,
+            prefetchedRawData: pkgVersions?.rawData || null
+          });
+
+          if (iterRes.code === 2) {
+            st.maxTagsExceeded = true;
+            return;
+          }
+          st.res = iterRes.hit;
+        }
+      })
+    );
+  }
+
+  for (const pkg of pkgOrder) {
+    const st = pkgStates[pkg];
+    if (st.pkgDiag.bearerFailed) {
+      logError(`Failed to obtain registry token for ${st.path}.`);
       missing.push(pkg);
       continue;
     }
-
-    let res = null;
-    // 1. Direct candidate probes (Issue #143)
-    for (const candidate of candidates) {
-      const prHead = prMap[candidate];
-      const prNum = prNumMap[candidate];
-      const prMerges = Array.isArray(prMergeMap[candidate])
-        ? prMergeMap[candidate]
-        : (prMergeMap[candidate] ? [prMergeMap[candidate]] : []);
-      const tags = new Set(
-        [
-          `sha-${candidate.slice(0, 7)}`,
-          candidate,
-          `sha-${candidate}`,
-          prHead && `sha-${prHead.slice(0, 7)}`,
-          prHead,
-          prHead && `sha-${prHead}`,
-          ...prMerges.flatMap((m) => [`sha-${m.slice(0, 7)}`, m, `sha-${m}`]),
-          prNum && `pr-${prNum}`,
-          prNum && String(prNum)
-        ].filter(Boolean)
-      );
-
-      for (const tag of tags) {
-        res = await probeTag(
-          path,
-          tag,
-          bearer,
-          registry,
-          candidates,
-          prMap,
-          prNumMap,
-          prTitleMap,
-          digestPrMap,
-          debug,
-          prMergeMap,
-          token,
-          sourceRepository,
-          pkgDiag.probedTags
-        );
-        if (res) break;
-      }
-
-      if (res) break;
+    if (st.maxTagsExceeded) {
+      logError(`Iterative scan stopped for ${st.path} because MAX_TAGS (${maxTags}) was exceeded. Increase MAX_TAGS to continue.`);
+      process.exit(2);
     }
-
-    if (!res) {
-      logInfo('Direct candidate probes missed; falling back to iterative scan...');
-      const iterRes = await resolveDigestIterative({
-        imagePath: path,
-        bearer,
-        registry,
-        maxTags,
-        token,
-        repository,
-        candidates,
-        prMap,
-        prNumMap,
-        prTitleMap,
-        digestPrMap,
-        debug,
-        prMergeMap,
-        sourceRepository,
-        diagnostics: pkgDiag
-      });
-
-      if (iterRes.code === 2) {
-        logError(`Iterative scan stopped for ${path} because MAX_TAGS (${maxTags}) was exceeded. Increase MAX_TAGS to continue.`);
-        process.exit(2);
-      }
-      res = iterRes.hit;
-    }
-
-    if (!res) {
+    if (!st.res) {
       console.error(`  [x] MISS: ${pkg}`);
       missing.push(pkg);
       continue;
     }
-
-    const ref = `${registry}/${path}@${res.digest}`;
+    if (st.res.auditMsg) {
+      logInfo(st.res.auditMsg);
+    }
+    const ref = `${registry}/${st.path}@${st.res.digest}`;
     console.error(`  [✓] HIT: ${pkg} -> ${ref}`);
 
-    images[pkg] = res;
+    images[pkg] = st.res;
     imagesJson[pkg] = ref;
   }
 
@@ -2001,5 +2158,9 @@ module.exports = {
   defaultBranchTip,
   retagDigest,
   applyTags,
+  mapLimit,
+  readCommitHistory,
+  buildCandidateTags,
+  fetchPackageVersions,
   runMain
 };
