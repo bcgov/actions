@@ -81,7 +81,7 @@ runs:
         target: ${{ inputs.url }}
         rules_file_name: ${{ steps.preflight.outputs.zap_rules }}
         artifact_name: zap_scan-${{ steps.preflight.outputs.slug }}
-        issue_title: 'ZAP Full Scan Report: ${{ inputs.url }}'
+        allow_issue_writing: false
 
     - name: Nuclei Scan
       id: nuclei

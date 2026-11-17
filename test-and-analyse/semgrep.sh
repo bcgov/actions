@@ -24,9 +24,15 @@ esac
 rel="${target#"${workspace}"}"
 rel="${rel#/}"
 
+# Unique per run, so several scans in one job keep their own reports
+out="$(mktemp -d "${RUNNER_TEMP}/semgrep.XXXXXX")"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Registry rulesets (p/..., r/...) pass through; other entries are files
-# relative to the workspace root.
+# relative to the workspace root. Default p/default also loads bundled semantic security rules.
 configs=()
+bundled_rules="${script_dir}/semgrep-rules.yml"
+bundled_added=false
 while IFS= read -r c; do
   c="${c#"${c%%[![:space:]]*}"}"
   c="${c%"${c##*[![:space:]]}"}"
@@ -36,11 +42,23 @@ while IFS= read -r c; do
     c="${workspace}/${c}"
   fi
   configs+=(--config "$c")
+  if [[ "$c" == "p/default" && -f "$bundled_rules" && "$bundled_added" == false ]]; then
+    cp "$bundled_rules" "${out}/semgrep-rules.yml"
+    configs+=(--config "${out}/semgrep-rules.yml")
+    bundled_added=true
+  fi
 done <<< "${INPUT_SEMGREP_CONFIG:-p/default}"
 [[ ${#configs[@]} -gt 0 ]] || { echo "::error::semgrep_config is empty"; exit 1; }
 
-# Unique per run, so several scans in one job keep their own reports
-out="$(mktemp -d "${RUNNER_TEMP}/semgrep.XXXXXX")"
+prefix="${rel:+${rel}/}"
+excludes=(
+  --exclude '*.test.*' --exclude '*.spec.*'
+  --exclude '*_test.go' --exclude 'test_*.py'
+)
+for d in __tests__ tests test spec specs e2e fixtures mocks; do
+  excludes+=(--exclude "/${prefix}${d}" --exclude "/${prefix}**/${d}")
+done
+
 json="${out}/semgrep.json"
 sarif="${out}/semgrep.sarif"
 
@@ -49,7 +67,7 @@ set +e
 docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e SEMGREP_SEND_METRICS=off \
   -v "${workspace}:${workspace}" -v "${out}:${out}" -w "${target}" \
   "${SEMGREP_IMAGE}" \
-  semgrep scan "${configs[@]}" --metrics=off --error --json-output="$json" --sarif-output="$sarif" .
+  semgrep scan "${configs[@]}" "${excludes[@]}" --metrics=off --error --json-output="$json" --sarif-output="$sarif" .
 rc=$?
 set -e
 if [[ "$rc" -ne 0 && "$rc" -ne 1 ]]; then

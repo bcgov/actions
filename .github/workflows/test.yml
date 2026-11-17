@@ -377,8 +377,8 @@ jobs:
           echo "Input guards failed fast as expected."
 
   # Real scans of quickstart-openshift TEST frontend and backend. A down site
-  # fails that matrix leg on purpose. ZAP issue writing stays on so each URL's
-  # issue is maintained in this repo. Slugs keep artifacts and SARIF apart.
+  # fails that matrix leg on purpose. Duplicate ZAP issue creation is disabled
+  # in scan-url so findings upload via SARIF only. Slugs keep artifacts and SARIF apart.
   test-scan-url-live:
     name: Test Scan URL (Live) (${{ matrix.name }})
     needs: [filter]
@@ -388,7 +388,6 @@ jobs:
     permissions:
       actions: read
       contents: read
-      issues: write
       security-events: write
     strategy:
       fail-fast: false
@@ -1545,6 +1544,19 @@ jobs:
           unused_deps: off
           supply_scan: 'false'
 
+      - name: Bundled semantic rules clean and findings check
+        id: semantic
+        uses: $/test-and-analyse
+        with:
+          commands: echo "Semgrep semantic rules test"
+          working_directory: test-and-analyse/fixtures/semgrep/semantic
+          node_version: '24'
+          cache: none
+          unused_deps: off
+          supply_scan: 'false'
+          semgrep: 'true'
+          semgrep_config: test-and-analyse/semgrep-rules.yml
+
       - name: Verify Semgrep behaviour
         env:
           CLEAN_FINDINGS: ${{ steps.clean.outputs.semgrep_findings }}
@@ -1553,18 +1565,20 @@ jobs:
           WARN_SARIF: ${{ steps.warn.outputs.semgrep_sarif }}
           FAIL_OUTCOME: ${{ steps.fail.outcome }}
           OFF_FINDINGS: ${{ steps.off.outputs.semgrep_findings }}
+          SEMANTIC_FINDINGS: ${{ steps.semantic.outputs.semgrep_findings }}
         run: |
-          echo "clean=${CLEAN_FINDINGS} warn=${WARN_OUTCOME}/${WARN_FINDINGS} fail=${FAIL_OUTCOME} off='${OFF_FINDINGS}'"
+          echo "clean=${CLEAN_FINDINGS} warn=${WARN_OUTCOME}/${WARN_FINDINGS} fail=${FAIL_OUTCOME} off='${OFF_FINDINGS}' semantic=${SEMANTIC_FINDINGS}"
           [ "$CLEAN_FINDINGS" = "0" ] || { echo "❌ Clean project: expected 0 findings"; exit 1; }
           if [ "$WARN_OUTCOME" != "success" ] || [ "$WARN_FINDINGS" != "1" ]; then
-            echo "❌ Findings should warn, not fail"; exit 1
+            echo "❌ Findings should warn, not fail (and test/spec files must be excluded)"; exit 1
           fi
           [ "$(jq '.runs[0].results | length' "$WARN_SARIF")" = "1" ] || { echo "❌ SARIF report should hold 1 result"; exit 1; }
           uri=$(jq -r '.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uri' "$WARN_SARIF")
           [ "$uri" = "test-and-analyse/fixtures/semgrep/findings/index.js" ] || { echo "❌ SARIF path should be relative to the workspace root, got $uri"; exit 1; }
           [ "$FAIL_OUTCOME" = "failure" ] || { echo "❌ semgrep_fail: true should fail on findings"; exit 1; }
           [ -z "$OFF_FINDINGS" ] || { echo "❌ Scan should not run when semgrep is off"; exit 1; }
-          echo "✅ Semgrep: clean passes, findings warn, semgrep_fail fails, off by default"
+          [ "$SEMANTIC_FINDINGS" = "9" ] || { echo "❌ Expected bundled semantic rules to catch 9 findings, got $SEMANTIC_FINDINGS"; exit 1; }
+          echo "✅ Semgrep: clean passes, test paths excluded, semantic rules match, semgrep_fail fails, off by default"
 
   # ─── GET PR ────────────────────────────────────────────────────────────────
 

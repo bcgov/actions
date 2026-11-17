@@ -13,7 +13,7 @@
     "glob": "^14.0.0"
   },
   "scripts": {
-    "test": "vitest run --maxConcurrency=2",
+    "test": "vitest run tests --maxConcurrency=2",
     "lint": "eslint src/**",
     "format": "prettier --write src/**",
     "format:check": "prettier --check src/**",
