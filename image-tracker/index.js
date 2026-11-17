@@ -1919,7 +1919,7 @@ async function runMain() {
                 token
               })
             : null;
-        const knownTags = pkgVersions?.knownTags || null;
+        const knownTags = pkgVersions?.isComplete ? pkgVersions.knownTags : null;
         const skippedTags = [];
 
         for (let i = 0; i < tailCommits.length; i += COMMIT_BATCH_SIZE) {
@@ -1942,24 +1942,16 @@ async function runMain() {
           if (st.res) break;
         }
 
-        // If GHCR returned a truncated page of 100 versions and Pass 1 missed, probe skipped tags.
         if (!st.res && skippedTags.length > 0) {
-          if (pkgVersions && !pkgVersions.isComplete) {
-            for (let i = 0; i < skippedTags.length; i += COMMIT_BATCH_SIZE * 4) {
-              st.res = await probeTagBatch(st, skippedTags.slice(i, i + COMMIT_BATCH_SIZE * 4));
-              if (st.res) break;
-            }
-          } else {
-            for (const tag of skippedTags) {
-              if (!st.pkgDiag.probedTags.has(tag)) {
-                st.pkgDiag.probedTags.set(tag, {
-                  tag,
-                  status: 404,
-                  statusText: 'Not Found',
-                  reason: 'Tag not found',
-                  details: 'Tag does not exist in registry'
-                });
-              }
+          for (const tag of skippedTags) {
+            if (!st.pkgDiag.probedTags.has(tag)) {
+              st.pkgDiag.probedTags.set(tag, {
+                tag,
+                status: 404,
+                statusText: 'Not Found',
+                reason: 'Tag not found',
+                details: 'Tag does not exist in registry'
+              });
             }
           }
         }

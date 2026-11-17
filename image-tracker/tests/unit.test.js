@@ -3425,7 +3425,7 @@ test('runMain stops /pulls API calls on 403 and uses package versions index to s
   }
 });
 
-test('runMain falls back to Pass 2 probes when GHCR versions page has 100 entries', async () => {
+test('runMain ignores truncated 100-entry GHCR versions page so newer unindexed ancestor beats older indexed rebuild', async () => {
   const fs = require('node:fs');
   const os = require('node:os');
   const path = require('node:path');
@@ -3434,7 +3434,7 @@ test('runMain falls back to Pass 2 probes when GHCR versions page has 100 entrie
   const origExit = process.exit;
   const saved = snapshotEnv();
   const cwd = process.cwd();
-  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pass2-test-'));
+  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'truncated-versions-test-'));
   try {
     process.exit = (code) => {
       throw new Error(`process.exit called with code ${code}`);
@@ -3447,26 +3447,30 @@ test('runMain falls back to Pass 2 probes when GHCR versions page has 100 entrie
 
     fs.writeFileSync(path.join(repoDir, 'f.txt'), 'v1\n');
     execFileSync('git', ['add', '.'], { stdio: 'ignore' });
-    execFileSync('git', ['commit', '-m', 'old build (#50)'], { stdio: 'ignore' });
+    execFileSync('git', ['commit', '-m', 'older build (#50)'], { stdio: 'ignore' });
     const oldSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 
     fs.writeFileSync(path.join(repoDir, 'f.txt'), 'v2\n');
     execFileSync('git', ['add', '.'], { stdio: 'ignore' });
-    execFileSync('git', ['commit', '-m', 'docs (#51)'], { stdio: 'ignore' });
+    execFileSync('git', ['commit', '-m', 'newer build (#51)'], { stdio: 'ignore' });
+    const newerSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+
     fs.writeFileSync(path.join(repoDir, 'f.txt'), 'v3\n');
     execFileSync('git', ['add', '.'], { stdio: 'ignore' });
     execFileSync('git', ['commit', '-m', 'docs (#52)'], { stdio: 'ignore' });
     const headSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-    const digest = 'sha256:' + 'c'.repeat(64);
+    const olderDigest = 'sha256:' + 'd'.repeat(64);
+    const newerDigest = 'sha256:' + 'c'.repeat(64);
 
     global.fetch = async (url) => {
       if (url.includes('/commits/') && url.endsWith('/pulls')) {
         return { ok: false, status: 403, headers: { get: () => null }, json: async () => ({}) };
       }
       if (url.includes('/orgs/bcgov/packages/container/demo%2Fbackend/versions')) {
+        // Older commit (#50) appears in the truncated 100-entry page; newer commit (#51) is omitted.
         const hundred = Array.from({ length: 100 }, (_, i) => ({
-          name: `sha256:${String(i).padStart(64, '0')}`,
-          metadata: { container: { tags: [`unrelated-${i}`] } }
+          name: i === 0 ? olderDigest : `sha256:${String(i).padStart(64, '0')}`,
+          metadata: { container: { tags: [i === 0 ? oldSha : `unrelated-${i}`] } }
         }));
         return { ok: true, status: 200, headers: { get: () => null }, json: async () => hundred };
       }
@@ -3481,11 +3485,22 @@ test('runMain falls back to Pass 2 probes when GHCR versions page has 100 entrie
       if (url.includes('/token?')) {
         return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({ token: 'pull' }) };
       }
+      if (url.endsWith(`/backend/manifests/${newerSha}`)) {
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: (h) => (h.toLowerCase() === 'docker-content-digest' ? newerDigest : null) },
+          json: async () => ({
+            mediaType: 'application/vnd.oci.image.manifest.v1+json',
+            annotations: { 'org.opencontainers.image.revision': newerSha }
+          })
+        };
+      }
       if (url.endsWith(`/backend/manifests/${oldSha}`)) {
         return {
           ok: true,
           status: 200,
-          headers: { get: (h) => (h.toLowerCase() === 'docker-content-digest' ? digest : null) },
+          headers: { get: (h) => (h.toLowerCase() === 'docker-content-digest' ? olderDigest : null) },
           json: async () => ({
             mediaType: 'application/vnd.oci.image.manifest.v1+json',
             annotations: { 'org.opencontainers.image.revision': oldSha }
@@ -3514,7 +3529,7 @@ test('runMain falls back to Pass 2 probes when GHCR versions page has 100 entrie
 
     await runMain();
     const output = fs.readFileSync(out, 'utf8');
-    assert.match(output, new RegExp(`digest=${digest}`), 'Pass 2 must resolve older version beyond 100');
+    assert.match(output, new RegExp(`digest=${newerDigest}`), 'must resolve newer ancestor instead of older rebuilt digest');
   } finally {
     global.fetch = origFetch;
     process.exit = origExit;
