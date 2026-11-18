@@ -686,13 +686,32 @@ jobs:
           node-version: 26
 
       - name: Run Unit Tests
-        run: node --test image-tracker/tests/unit.test.js
+        run: node --test image-tracker/tests/*.test.js shared/tests/pr-number.test.js
 
       - name: Validate action.yml
         run: |
           test -f image-tracker/action.yml
           pip install pyyaml -q
           python3 -c "import yaml; yaml.safe_load(open('image-tracker/action.yml'))"
+
+      # PR-only mode: no packages, no checkout of the target repo, no packages:read needed.
+      # Step duration vs the digest "Resolve via image-tracker action" step is the timing evidence.
+      - id: pr_only
+        if: matrix.repo == 'bcgov/quickstart-openshift' && matrix.package == 'frontend'
+        name: Resolve PR number without packages
+        uses: $/image-tracker
+
+      - name: Check PR-only output
+        if: matrix.repo == 'bcgov/quickstart-openshift' && matrix.package == 'frontend'
+        run: |
+          set -euo pipefail
+          expected="${{ github.event.pull_request.number }}"
+          actual="${{ steps.pr_only.outputs.pr }}"
+          echo "PR-only output: '${actual}' (expected '${expected}')"
+          [ -n "${actual}" ] || { echo "::error::image-tracker PR-only mode returned no PR number"; exit 1; }
+          [ "${actual}" = "${expected}" ] || { echo "::error::image-tracker PR-only mode returned ${actual}, not ${expected}"; exit 1; }
+          [ -z "${{ steps.pr_only.outputs.digest }}" ] || { echo "::error::PR-only mode should not resolve a digest"; exit 1; }
+          [ -z "${{ steps.pr_only.outputs.image }}" ] || { echo "::error::PR-only mode should not resolve an image"; exit 1; }
 
       - name: Checkout target repo
         uses: actions/checkout@v7

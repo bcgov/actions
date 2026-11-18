@@ -31,3 +31,4 @@ CLI commands: `list <name>`, `users <name>`, `bool <name> [default]`, `enum <nam
 Every action fails on inputs its `action.yml` does not declare (GitHub only warns). The check is the [input-enforcer](../input-enforcer/README.md) action; Node actions require its `enforce.js` directly.
 
 - `pr-description.js`: append markdown to a PR description once (pr-description-add, pr-validate `markdown`). Resolves the PR from the `pr` input or the event, so it works outside `pull_request`.
+- `pr-number.js`: resolve a PR number from the event payload or `GET /repos/{repo}/commits/{sha}/pulls`. Used by image-tracker (`outputs.pr`, and when `packages` is omitted).

@@ -5,7 +5,7 @@ Resolve immutable GHCR image **digests** for a given git commit by reading the
 
 ## Permissions
 
-To run this action, the calling workflow job must have the following minimum permissions:
+Digest resolution (`packages` set) needs:
 
 ```yaml
 permissions:
@@ -16,6 +16,14 @@ permissions:
 
 Setting the `tags` input writes to the registry, so that job needs
 `packages: write` instead of `packages: read`.
+
+When `packages` is omitted (PR number only), `packages: read` is not needed:
+
+```yaml
+permissions:
+  contents: read
+  pull-requests: read
+```
 
 
 ## How it works
@@ -166,11 +174,63 @@ The action fetches the SHA from origin first, then the workflow PR ref when it
 applies, then the GitHub API against the **source** repo. If the revision cannot
 be resolved, or no image exists for that revision, the action fails (`exit 1`).
 
+## Replacing get-pr
+
+`bcgov/action-get-pr` (and the old suite `get-pr`) only returned the PR
+number associated with the current event or commit. image-tracker already
+exposes that as `outputs.pr`. Omit `packages` to get the same number without a
+registry scan or `packages: read`:
+
+- `pull_request` / `pull_request_target`: the event's PR number (no API call)
+- `merge_group`: the PR number parsed from the merge-queue ref
+- `push` / `release`: the merged PR associated with the commit
+  (`GET /repos/{repo}/commits/{sha}/pulls`)
+- any other event: `outputs.pr` is empty (the step still succeeds)
+
+`bcgov/quickstart-openshift` `merge.yml` today:
+
+```yaml
+jobs:
+  init:
+    name: Initialize
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      pr: ${{ steps.pr.outputs.pr }}
+    runs-on: ubuntu-26.04
+    steps:
+      # Get PR number for squash merges to main
+      - id: pr
+        uses: bcgov/action-get-pr@v0.3.1
+```
+
+With image-tracker:
+
+```yaml
+jobs:
+  init:
+    name: Initialize
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      pr: ${{ steps.pr.outputs.pr }}
+    runs-on: ubuntu-26.04
+    steps:
+      - id: pr
+        uses: bcgov/actions/image-tracker@vX.Y.Z
+```
+
+No checkout is required. This still only returns a PR number. Deploying a
+mutable `:<pr>` tag is not the image-tracker promotion contract; use
+`packages` and deploy the digest when you are ready.
+
 ## Inputs
 
 | Input        | Required | Default              | Description                                                                    |
 | ------------ | -------- | -------------------- | ------------------------------------------------------------------------------ |
-| `packages`   | ✔        | —                    | One or more package names (one per line, or a single name).                    |
+| `packages`   |          | —                    | Package names (one per line, or a single name). Omit to return only the PR number, with no registry access. |
 | `revision`   |          | `HEAD`               | Git revision (SHA, branch, or tag) to resolve against.                         |
 | `repository` |          | current repo         | Repository owning the images.                                                  |
 | `working_directory` |          | `.`                  | Working directory containing the git repository.                               |
@@ -228,7 +288,7 @@ steps:
 | `digests` | JSON object: `{"<pkg>": "sha256:..."}`. Bare digests only.                                        |
 | `image`   | Convenience — the fully-qualified digest reference for the first package. Empty on failure.       |
 | `digest`  | Convenience — the bare digest for the first package. Empty on failure.                            |
-| `pr`      | Convenience — resolved PR number (e.g. `123`) for the first resolved package/commit. Empty if unassociated. |
+| `pr`      | Pull request number (e.g. `123`). On `pull_request` / `pull_request_target` this is the event number and does not wait on the tag scan. When `packages` is omitted this is the only output of interest. Empty if unassociated. |
 
 Using a digest in a Dockerfile:
 
