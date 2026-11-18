@@ -179,7 +179,13 @@ test('runMain PR-only: push queries /commits/{sha}/pulls and picks the merged PR
     delete process.env.PACKAGES;
     global.fetch = async (url) => {
       urls.push(url);
-      assert.ok(!String(url).includes('ghcr.io'), `registry must not be contacted: ${url}`);
+      let host = '';
+      try {
+        host = new URL(url).hostname;
+      } catch {
+        host = '';
+      }
+      assert.notStrictEqual(host, 'ghcr.io', `registry must not be contacted: ${url}`);
       return {
         status: 200,
         json: async () => [

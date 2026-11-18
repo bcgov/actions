@@ -2148,13 +2148,23 @@ test('runMain resolves PR image when running on PR head commit checkout', async 
       return { ok: false, status: 404, headers: { get: () => null }, json: async () => ({}) };
     };
 
+    const eventPath = path.join(repoDir, 'event.json');
+    fs.writeFileSync(
+      eventPath,
+      JSON.stringify({
+        pull_request: { number: 400, head: { sha: headSha }, title: 'feature PR' }
+      })
+    );
+
     const out = path.join(repoDir, 'github_output');
     process.env.GITHUB_ACTIONS = 'true';
     process.env.GITHUB_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
     process.env.GITHUB_OUTPUT = out;
+    process.env.GITHUB_EVENT_PATH = eventPath;
     process.env.GITHUB_EVENT_NAME = 'pull_request';
     process.env.GITHUB_REF = 'refs/pull/400/head';
     process.env.GITHUB_SHA = headSha;
+    delete process.env.GITHUB_EVENT_NUMBER;
     process.env.INPUT_PACKAGES = 'frontend';
     process.env.PACKAGES = 'frontend';
     process.env.INPUT_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
