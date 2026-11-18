@@ -703,13 +703,24 @@ const ENV_KEYS = [
 function snapshotEnv() {
   const saved = {};
   for (const k of ENV_KEYS) saved[k] = process.env[k];
+  saved._consoleLog = console.log;
+  // Suppress GitHub Actions workflow commands in unit tests unless a test explicitly captures console.log.
+  console.log = (...args) => {
+    const line = args.join(' ');
+    if (/^::(error|warning|group|endgroup)::/i.test(line)) return;
+    saved._consoleLog(...args);
+  };
   // Never write mocked test summaries into the live CI runner's GITHUB_STEP_SUMMARY.
   delete process.env.GITHUB_STEP_SUMMARY;
   return saved;
 }
 
 function restoreEnv(saved) {
+  if (saved._consoleLog) {
+    console.log = saved._consoleLog;
+  }
   for (const [k, v] of Object.entries(saved)) {
+    if (k === '_consoleLog') continue;
     if (v === undefined) delete process.env[k];
     else process.env[k] = v;
   }
