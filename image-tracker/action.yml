@@ -62,11 +62,10 @@ outputs:
       Empty if nothing was resolved.
   pr:
     description: |
-      Pull request number (e.g. 123). On pull_request and pull_request_target,
-      this is the event number and is set before any tag scan. When packages is
-      omitted, this is the only output of interest (merge_group parses the
-      queue ref; push and release use the merged PR for the commit). Empty if
-      no PR number could be resolved.
+      Pull request number (e.g. 123). On pull_request and pull_request_target
+      with packages set, this is the event number and is set before any tag
+      scan. When packages is omitted, this is the get-pr lookup; the step
+      fails if no PR number can be resolved.
 
 runs:
   using: 'node24'

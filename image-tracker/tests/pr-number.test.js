@@ -58,12 +58,12 @@ function restoreEnv(saved) {
 }
 
 function parseOutputs(file) {
+  if (!fs.existsSync(file)) return {};
   const out = {};
   for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
     if (!line) continue;
     const i = line.indexOf('=');
     if (i === -1) continue;
-    // Last assignment wins, matching GitHub's GITHUB_OUTPUT behaviour
     out[line.slice(0, i)] = line.slice(i + 1);
   }
   return out;
@@ -81,7 +81,7 @@ async function withRunMain(setup) {
   };
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tracker-pr-'));
   try {
-    const result = await setup({ dir, saved });
+    const result = await setup({ dir });
     return { ...result, exitCode, dir };
   } finally {
     process.exit = origExit;
@@ -98,21 +98,27 @@ function writeEvent(dir, event) {
   return eventPath;
 }
 
+function repoWithCommit(dir, subject) {
+  execFileSync('git', ['init', '-q'], { cwd: dir });
+  execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', subject], {
+    cwd: dir
+  });
+}
+
 test('runMain PR-only: pull_request returns the event number with no registry or git repo', async () => {
   const fetches = [];
   const { exitCode, outputs } = await withRunMain(async ({ dir }) => {
     const out = path.join(dir, 'github_output');
-    // Empty scratch directory — no .git — and no packages
     process.env.GITHUB_ACTIONS = 'true';
     process.env.GITHUB_OUTPUT = out;
     process.env.GITHUB_EVENT_PATH = writeEvent(dir, { pull_request: { number: 475 } });
     process.env.GITHUB_EVENT_NAME = 'pull_request';
     process.env.GITHUB_REPOSITORY = 'bcgov/nr-epd-organics-info';
+    process.env.DIR = dir;
+    process.env.INPUT_WORKING_DIRECTORY = dir;
     delete process.env.INPUT_PACKAGES;
     delete process.env.PACKAGES;
     delete process.env.INPUT_TAGS;
-    delete process.env.INPUT_WORKING_DIRECTORY;
-    delete process.env.DIR;
     delete process.env.INPUT_TOKEN;
     global.fetch = async (url) => {
       fetches.push(url);
@@ -121,7 +127,7 @@ test('runMain PR-only: pull_request returns the event number with no registry or
     await runMain();
     return { outputs: parseOutputs(out) };
   });
-  assert.strictEqual(exitCode, undefined, 'PR-only mode should not exit');
+  assert.strictEqual(exitCode, undefined, 'PR-only pull_request should succeed');
   assert.strictEqual(outputs.pr, '475');
   assert.strictEqual(outputs.image, '');
   assert.strictEqual(outputs.digest, '');
@@ -129,24 +135,8 @@ test('runMain PR-only: pull_request returns the event number with no registry or
   assert.deepStrictEqual(fetches, []);
 });
 
-test('runMain PR-only: pull_request_target and merge_group', async () => {
-  await withRunMain(async ({ dir }) => {
-    const out = path.join(dir, 'github_output');
-    process.env.GITHUB_ACTIONS = 'true';
-    process.env.GITHUB_OUTPUT = out;
-    process.env.GITHUB_EVENT_PATH = writeEvent(dir, { pull_request: { number: 1240 } });
-    process.env.GITHUB_EVENT_NAME = 'pull_request_target';
-    process.env.GITHUB_REPOSITORY = 'bcgov/foo';
-    delete process.env.INPUT_PACKAGES;
-    delete process.env.PACKAGES;
-    global.fetch = async () => {
-      throw new Error('no fetch');
-    };
-    await runMain();
-    assert.strictEqual(parseOutputs(out).pr, '1240');
-  });
-
-  await withRunMain(async ({ dir }) => {
+test('runMain PR-only: merge_group parses the queue ref', async () => {
+  const { outputs, exitCode } = await withRunMain(async ({ dir }) => {
     const out = path.join(dir, 'github_output');
     process.env.GITHUB_ACTIONS = 'true';
     process.env.GITHUB_OUTPUT = out;
@@ -155,17 +145,41 @@ test('runMain PR-only: pull_request_target and merge_group', async () => {
     });
     process.env.GITHUB_EVENT_NAME = 'merge_group';
     process.env.GITHUB_REPOSITORY = 'bcgov/foo';
+    process.env.DIR = dir;
     delete process.env.INPUT_PACKAGES;
     delete process.env.PACKAGES;
     global.fetch = async () => {
       throw new Error('no fetch');
     };
     await runMain();
-    assert.strictEqual(parseOutputs(out).pr, '2904');
+    return { outputs: parseOutputs(out) };
   });
+  assert.strictEqual(exitCode, undefined);
+  assert.strictEqual(outputs.pr, '2904');
 });
 
-test('runMain PR-only: push queries /commits/{sha}/pulls and picks the merged PR', async () => {
+test('runMain PR-only: pull_request_target is not a get-pr event and fails', async () => {
+  const { exitCode, outputs } = await withRunMain(async ({ dir }) => {
+    const out = path.join(dir, 'github_output');
+    process.env.GITHUB_ACTIONS = 'true';
+    process.env.GITHUB_OUTPUT = out;
+    process.env.GITHUB_EVENT_PATH = writeEvent(dir, { pull_request: { number: 1240 } });
+    process.env.GITHUB_EVENT_NAME = 'pull_request_target';
+    process.env.GITHUB_REPOSITORY = 'bcgov/foo';
+    process.env.DIR = dir;
+    delete process.env.INPUT_PACKAGES;
+    delete process.env.PACKAGES;
+    global.fetch = async () => {
+      throw new Error('no fetch');
+    };
+    await assert.rejects(() => runMain(), /__exit__/);
+    return { outputs: parseOutputs(out) };
+  });
+  assert.strictEqual(exitCode, 1);
+  assert.strictEqual(outputs.pr, undefined);
+});
+
+test('runMain PR-only: push queries /commits/{sha}/pulls and uses body[0]', async () => {
   const urls = [];
   const { outputs } = await withRunMain(async ({ dir }) => {
     const out = path.join(dir, 'github_output');
@@ -175,6 +189,7 @@ test('runMain PR-only: push queries /commits/{sha}/pulls and picks the merged PR
     process.env.GITHUB_EVENT_NAME = 'push';
     process.env.GITHUB_REPOSITORY = 'bcgov/quickstart-openshift';
     process.env.INPUT_TOKEN = 'test-token';
+    process.env.DIR = dir;
     delete process.env.INPUT_PACKAGES;
     delete process.env.PACKAGES;
     global.fetch = async (url) => {
@@ -200,35 +215,123 @@ test('runMain PR-only: push queries /commits/{sha}/pulls and picks the merged PR
   assert.deepStrictEqual(urls, [
     `https://api.github.com/repos/bcgov/quickstart-openshift/commits/${SHA}/pulls`
   ]);
-  assert.strictEqual(outputs.pr, '31');
+  assert.strictEqual(outputs.pr, '1');
 });
 
-test('runMain PR-only: unknown event leaves pr empty and does not fail', async () => {
-  const logs = [];
-  const { exitCode, outputs } = await withRunMain(async ({ dir }) => {
+test('runMain PR-only: push squash subject from local git when there is no token', async () => {
+  const { outputs, exitCode } = await withRunMain(async ({ dir }) => {
+    repoWithCommit(dir, 'feat: thing (#88)');
+    const out = path.join(dir, 'github_output');
+    process.env.GITHUB_ACTIONS = 'true';
+    process.env.GITHUB_OUTPUT = out;
+    process.env.GITHUB_EVENT_PATH = writeEvent(dir, { after: 'abc123' });
+    process.env.GITHUB_EVENT_NAME = 'push';
+    process.env.GITHUB_REPOSITORY = 'bcgov/example';
+    process.env.DIR = dir;
+    process.env.INPUT_WORKING_DIRECTORY = dir;
+    delete process.env.INPUT_PACKAGES;
+    delete process.env.PACKAGES;
+    delete process.env.INPUT_TOKEN;
+    global.fetch = async () => {
+      throw new Error('no fetch without a token');
+    };
+    await runMain();
+    return { outputs: parseOutputs(out) };
+  });
+  assert.strictEqual(exitCode, undefined);
+  assert.strictEqual(outputs.pr, '88');
+});
+
+test('runMain PR-only: workflow_dispatch reads a PR mention from git history', async () => {
+  const { outputs, exitCode } = await withRunMain(async ({ dir }) => {
+    repoWithCommit(dir, 'chore: follow-up to PR #31');
     const out = path.join(dir, 'github_output');
     process.env.GITHUB_ACTIONS = 'true';
     process.env.GITHUB_OUTPUT = out;
     process.env.GITHUB_EVENT_PATH = writeEvent(dir, {});
     process.env.GITHUB_EVENT_NAME = 'workflow_dispatch';
-    process.env.GITHUB_REPOSITORY = 'bcgov/foo';
+    process.env.GITHUB_REPOSITORY = 'bcgov/example';
+    process.env.GITHUB_SHA = 'abc123';
+    process.env.DIR = dir;
     delete process.env.INPUT_PACKAGES;
     delete process.env.PACKAGES;
-    const origError = console.error;
-    console.error = (...args) => logs.push(args.join(' '));
-    try {
-      await runMain();
-    } finally {
-      console.error = origError;
-    }
+    delete process.env.INPUT_TOKEN;
+    await runMain();
     return { outputs: parseOutputs(out) };
   });
   assert.strictEqual(exitCode, undefined);
-  assert.strictEqual(outputs.pr, '');
-  assert.ok(
-    logs.some((l) => /No pull request number for event 'workflow_dispatch'/.test(l)),
-    `expected a clear message, got: ${logs.join('\n')}`
-  );
+  assert.strictEqual(outputs.pr, '31');
+});
+
+test('runMain PR-only: push with no PR fails and writes no output', async () => {
+  const { exitCode, outputs } = await withRunMain(async ({ dir }) => {
+    repoWithCommit(dir, 'chore: direct push');
+    const out = path.join(dir, 'github_output');
+    process.env.GITHUB_ACTIONS = 'true';
+    process.env.GITHUB_OUTPUT = out;
+    process.env.GITHUB_EVENT_PATH = writeEvent(dir, { after: 'abc123' });
+    process.env.GITHUB_EVENT_NAME = 'push';
+    process.env.GITHUB_REPOSITORY = 'bcgov/example';
+    process.env.DIR = dir;
+    delete process.env.INPUT_PACKAGES;
+    delete process.env.PACKAGES;
+    delete process.env.INPUT_TOKEN;
+    await assert.rejects(() => runMain(), /__exit__/);
+    return { outputs: parseOutputs(out) };
+  });
+  assert.strictEqual(exitCode, 1);
+  assert.deepStrictEqual(outputs, {});
+});
+
+test('runMain PR-only: unknown event fails', async () => {
+  const { exitCode, outputs } = await withRunMain(async ({ dir }) => {
+    const out = path.join(dir, 'github_output');
+    process.env.GITHUB_ACTIONS = 'true';
+    process.env.GITHUB_OUTPUT = out;
+    process.env.GITHUB_EVENT_PATH = writeEvent(dir, {});
+    process.env.GITHUB_EVENT_NAME = 'schedule';
+    process.env.GITHUB_REPOSITORY = 'bcgov/foo';
+    process.env.DIR = dir;
+    delete process.env.INPUT_PACKAGES;
+    delete process.env.PACKAGES;
+    await assert.rejects(() => runMain(), /__exit__/);
+    return { outputs: parseOutputs(out) };
+  });
+  assert.strictEqual(exitCode, 1);
+  assert.deepStrictEqual(outputs, {});
+});
+
+test('runMain PR-only: ignored issue title exits 0 with no output', async () => {
+  const { exitCode, outputs } = await withRunMain(async ({ dir }) => {
+    const out = path.join(dir, 'github_output');
+    process.env.GITHUB_ACTIONS = 'true';
+    process.env.GITHUB_OUTPUT = out;
+    process.env.GITHUB_EVENT_PATH = writeEvent(dir, { issue: { title: 'Dependency Dashboard' } });
+    process.env.GITHUB_EVENT_NAME = 'issues';
+    process.env.GITHUB_REPOSITORY = 'bcgov/foo';
+    process.env.DIR = dir;
+    delete process.env.INPUT_PACKAGES;
+    delete process.env.PACKAGES;
+    await runMain();
+    return { outputs: parseOutputs(out) };
+  });
+  assert.strictEqual(exitCode, undefined);
+  assert.deepStrictEqual(outputs, {});
+});
+
+test('runMain PR-only: other issues fail', async () => {
+  const { exitCode } = await withRunMain(async ({ dir }) => {
+    process.env.GITHUB_ACTIONS = 'true';
+    process.env.GITHUB_OUTPUT = path.join(dir, 'github_output');
+    process.env.GITHUB_EVENT_PATH = writeEvent(dir, { issue: { title: 'Bug report' } });
+    process.env.GITHUB_EVENT_NAME = 'issues';
+    process.env.GITHUB_REPOSITORY = 'bcgov/foo';
+    process.env.DIR = dir;
+    delete process.env.INPUT_PACKAGES;
+    delete process.env.PACKAGES;
+    await assert.rejects(() => runMain(), /__exit__/);
+  });
+  assert.strictEqual(exitCode, 1);
 });
 
 test('runMain PR-only: tags without packages exits 1', async () => {

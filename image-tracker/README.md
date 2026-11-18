@@ -176,16 +176,24 @@ be resolved, or no image exists for that revision, the action fails (`exit 1`).
 
 ## Replacing get-pr
 
-`bcgov/action-get-pr` (and the old suite `get-pr`) only returned the PR
-number associated with the current event or commit. image-tracker already
-exposes that as `outputs.pr`. Omit `packages` to get the same number without a
-registry scan or `packages: read`:
+`bcgov/action-get-pr` @ v0.3.1 only returned the PR number associated with the
+current event or commit. Omit `packages` to get the same number, with the same
+event handling and the same failures, without a registry scan or
+`packages: read`. Cases, mapped from get-pr:
 
-- `pull_request` / `pull_request_target`: the event's PR number (no API call)
-- `merge_group`: the PR number parsed from the merge-queue ref
-- `push` / `release`: the merged PR associated with the commit
-  (`GET /repos/{repo}/commits/{sha}/pulls`)
-- any other event: `outputs.pr` is empty (the step still succeeds)
+| Event | How the PR is resolved | If none is found |
+| --- | --- | --- |
+| `pull_request` | Event payload (`pull_request.number`, then `number`) | Step fails |
+| `issues` | Ignored titles in `rules.yml` (or the defaults "Dependency Dashboard" and "ZAP Security Report") exit 0 with no output. Any other issue | Step fails |
+| `merge_group` | PR number parsed from the merge-queue ref (`…/pr-<n>` or `…/pr-<n>-<sha>`) | Step fails |
+| `push` | `GET /repos/{repo}/commits/{sha}/pulls` (the first associated PR). If that misses: the commit message, then `git log` (one commit) | Step fails |
+| `release` | Same lookup as `push`, using `GITHUB_SHA` | Step fails |
+| `workflow_dispatch` | Same lookup as `push`, except `git log` walks 10 commits | Step fails |
+| any other event | — | Step fails |
+
+The pulls API is tried up to three times (get-pr's indexing-lag retry). A
+checkout is only needed for the local `git log` fallback; PR events need
+neither a checkout nor a token.
 
 `bcgov/quickstart-openshift` `merge.yml` today:
 
@@ -222,9 +230,11 @@ jobs:
         uses: bcgov/actions/image-tracker@vX.Y.Z
 ```
 
-No checkout is required. This still only returns a PR number. Deploying a
-mutable `:<pr>` tag is not the image-tracker promotion contract; use
-`packages` and deploy the digest when you are ready.
+This still only returns a PR number. Deploying a mutable `:<pr>` tag is not
+the image-tracker promotion contract; use `packages` and deploy the digest
+when you are ready. When `packages` is set, `outputs.pr` on `pull_request`
+and `pull_request_target` still comes from the event payload before the tag
+scan; a miss there does not fail the step (digest resolution is unchanged).
 
 ## Inputs
 
@@ -288,7 +298,7 @@ steps:
 | `digests` | JSON object: `{"<pkg>": "sha256:..."}`. Bare digests only.                                        |
 | `image`   | Convenience — the fully-qualified digest reference for the first package. Empty on failure.       |
 | `digest`  | Convenience — the bare digest for the first package. Empty on failure.                            |
-| `pr`      | Pull request number (e.g. `123`). On `pull_request` / `pull_request_target` this is the event number and does not wait on the tag scan. When `packages` is omitted this is the only output of interest. Empty if unassociated. |
+| `pr`      | Pull request number (e.g. `123`). On `pull_request` / `pull_request_target` with `packages` set, this is the event number and does not wait on the tag scan. When `packages` is omitted, this is the get-pr lookup (and the step fails if no PR is found). |
 
 Using a digest in a Dockerfile:
 

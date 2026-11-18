@@ -1701,22 +1701,30 @@ async function runMain() {
       logError('The tags input requires packages.');
       process.exit(1);
     }
+    // Match get-pr cwd so Tier 3 can read local git history when a checkout exists.
+    const prCwd =
+      fs.existsSync(dir) && fs.statSync(dir).isDirectory() ? path.resolve(dir) : process.cwd();
     const result = await resolvePrNumber({
       eventName,
       event,
       env,
       repository: normalizeRepo(ghRepository),
-      token
+      token,
+      cwd: prCwd
     });
-    if (result.pr) {
-      logInfo(`PR: ${result.pr}`);
-    } else {
-      logInfo(result.message || 'No pull request number could be resolved.');
+    if (result.ignore) {
+      logInfo(result.message || 'Ignored issue; no pull request number.');
+      return;
     }
+    if (result.error || !/^\d+$/.test(result.pr || '')) {
+      logError(result.error || 'No valid PR number could be resolved for this event.');
+      process.exit(result.exitCode || 1);
+    }
+    logInfo(`PR: ${result.pr}`);
     if (env.GITHUB_ACTIONS === 'true' && env.GITHUB_OUTPUT) {
-      fs.appendFileSync(env.GITHUB_OUTPUT, ['image=', 'digest=', 'digests={}', `pr=${result.pr || ''}`, ''].join('\n'));
+      fs.appendFileSync(env.GITHUB_OUTPUT, ['image=', 'digest=', 'digests={}', `pr=${result.pr}`, ''].join('\n'));
     } else {
-      console.log(`pr=${result.pr || ''}`);
+      console.log(`pr=${result.pr}`);
     }
     return;
   }
