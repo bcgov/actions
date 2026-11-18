@@ -10,8 +10,9 @@ inputs:
       One or more package names: one per line, or a single name.
       Each resolves to `<registry>/<owner>/<repo>/<package>`, except when the
       package name matches the repo name, in which case it resolves to
-      `<registry>/<owner>/<repo>`.
-    required: true
+      `<registry>/<owner>/<repo>`. Omit to return only the PR number, with no
+      registry access.
+    required: false
   revision:
     description: 'Git revision (SHA, branch, or tag) to resolve against.'
     default: 'HEAD'
@@ -61,8 +62,10 @@ outputs:
       Empty if nothing was resolved.
   pr:
     description: |
-      Convenience — resolved PR number (e.g. 123) for the first resolved package/commit.
-      Empty if no PR number could be resolved.
+      Pull request number (e.g. 123). On pull_request and pull_request_target
+      with packages set, this is the event number and is set before any tag
+      scan. When packages is omitted, this is the get-pr lookup; the step
+      fails if no PR number can be resolved.
 
 runs:
   using: 'node24'
