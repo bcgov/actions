@@ -825,7 +825,7 @@ jobs:
           TARGET_REPO: ${{ matrix.repo }}
           PACKAGE: ${{ matrix.package }}
           EXPECTED_DIGEST: ${{ steps.discover.outputs.digest }}
-          EXPECTED_PR: ${{ steps.discover.outputs.pr }}
+          EXPECTED_PR: ${{ github.event.pull_request.number }}
           GOT_DIGEST: ${{ steps.track.outputs.digest }}
           GOT_IMAGE: ${{ steps.track.outputs.image }}
           GOT_PR: ${{ steps.track.outputs.pr }}
@@ -837,7 +837,8 @@ jobs:
           echo "Got digest:  ${GOT_DIGEST}"
           echo "Got image:   ${GOT_IMAGE}"
           echo "Got pr:      ${GOT_PR}"
-          echo "Expected:    ${EXPECTED_DIGEST}"
+          echo "Expected digest: ${EXPECTED_DIGEST}"
+          echo "Expected pr (event): ${EXPECTED_PR}"
 
           if [[ "$GOT_DIGEST" != "$EXPECTED_DIGEST" ]]; then
             echo "::error::${PACKAGE}: digest mismatch: got ${GOT_DIGEST} expected ${EXPECTED_DIGEST}"
@@ -847,8 +848,9 @@ jobs:
             echo "::error::${PACKAGE}: image ref wrong: got ${GOT_IMAGE}"
             exit 1
           fi
-          if [[ -n "$EXPECTED_PR" && "$GOT_PR" != "$EXPECTED_PR" ]]; then
-            echo "::error::${PACKAGE}: pr mismatch: got '${GOT_PR}' expected '${EXPECTED_PR}'"
+          # On pull_request, outputs.pr is the event number, not the PR that built the image.
+          if [[ "$GOT_PR" != "$EXPECTED_PR" ]]; then
+            echo "::error::${PACKAGE}: pr mismatch: got '${GOT_PR}' expected event PR '${EXPECTED_PR}'"
             exit 1
           fi
           echo "✅ ${PACKAGE}: resolved correctly"
