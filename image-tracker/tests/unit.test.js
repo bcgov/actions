@@ -703,6 +703,8 @@ const ENV_KEYS = [
 function snapshotEnv() {
   const saved = {};
   for (const k of ENV_KEYS) saved[k] = process.env[k];
+  // Never write mocked test summaries into the live CI runner's GITHUB_STEP_SUMMARY.
+  delete process.env.GITHUB_STEP_SUMMARY;
   return saved;
 }
 
@@ -1151,6 +1153,7 @@ test('runMain resolves PR image when git HEAD is a synthetic merge commit', asyn
 
     const out = path.join(repoDir, 'github_output');
     process.env.GITHUB_ACTIONS = 'true';
+    process.env.GITHUB_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
     process.env.GITHUB_OUTPUT = out;
     process.env.GITHUB_EVENT_PATH = eventPath;
     process.env.GITHUB_EVENT_NAME = 'pull_request';
@@ -1282,6 +1285,7 @@ test('runMain resolves PR image using GITHUB_EVENT_PATH merge_commit_sha without
 
     const out = path.join(repoDir, 'github_output');
     process.env.GITHUB_ACTIONS = 'true';
+    process.env.GITHUB_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
     process.env.GITHUB_OUTPUT = out;
     process.env.GITHUB_EVENT_PATH = eventPath;
     process.env.GITHUB_EVENT_NAME = 'pull_request';
@@ -1409,6 +1413,7 @@ test('runMain rejects two-parent merge commit on push event to prevent non-PR an
 
     const out = path.join(repoDir, 'github_output');
     process.env.GITHUB_ACTIONS = 'true';
+    process.env.GITHUB_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
     process.env.GITHUB_OUTPUT = out;
     process.env.GITHUB_EVENT_NAME = 'push';
     process.env.GITHUB_REF = 'refs/heads/main';
@@ -1526,6 +1531,7 @@ test('runMain ignores GITHUB_SHA fallback when GITHUB_REF is not synthetic merge
 
     const out = path.join(repoDir, 'github_output');
     process.env.GITHUB_ACTIONS = 'true';
+    process.env.GITHUB_REPOSITORY = 'bcgov/nr-hydrometric-rating-curve';
     process.env.GITHUB_OUTPUT = out;
     process.env.GITHUB_EVENT_PATH = eventPath;
     process.env.GITHUB_EVENT_NAME = 'pull_request_target';
