@@ -1089,7 +1089,8 @@ jobs:
           fi
 
       - name: Reset mock gh log before cancelled notify test
-        run: : > "${RUNNER_TEMP}/mock-gh.log"
+        run: |
+          : > "${RUNNER_TEMP}/mock-gh.log"
 
       - name: Test Workflow Results Self Action (Skip Notify on Cancelled Only)
         id: self_check_cancel_notify
