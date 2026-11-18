@@ -249,9 +249,16 @@ function run(opts = {}) {
   }
 
   // 4. Write Output Variables
+  const cancelledOnly =
+    evaluation.cancelled.length > 0 &&
+    evaluation.failed.length === 0 &&
+    evaluation.unknown.length === 0
   if (outputPath) {
     try {
-      const outputLines = [`passed=${evaluation.passed}`]
+      const outputLines = [
+        `passed=${evaluation.passed}`,
+        `cancelled_only=${cancelledOnly}`
+      ]
       fs.appendFileSync(outputPath, outputLines.join('\n') + '\n', 'utf8')
     } catch (err) {
       logger.warn(`::warning::Failed to write outputs: ${err.message}`)

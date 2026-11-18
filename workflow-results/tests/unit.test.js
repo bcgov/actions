@@ -534,3 +534,46 @@ test('resolveNotify: explicit true/false overrides the default', () => {
     /must be true, false or empty/
   )
 })
+
+test('run: sets cancelled_only=true only when all non-passing jobs are cancelled', () => {
+  const os = require('os')
+  const path = require('path')
+  const fs = require('fs')
+  const silentLogger = {log: () => {}, error: () => {}, warn: () => {}}
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-results-'))
+  try {
+    const cancelOut = path.join(tmpDir, 'cancel.out')
+    const {exitCode: cancelExit} = run({
+      needsInput: JSON.stringify({
+        build: {result: 'success'},
+        deploy: {result: 'cancelled'}
+      }),
+      summary: 'false',
+      annotations: 'false',
+      outputPath: cancelOut,
+      logger: silentLogger
+    })
+    assert.equal(cancelExit, 1)
+    const cancelContent = fs.readFileSync(cancelOut, 'utf8')
+    assert.match(cancelContent, /^passed=false$/m)
+    assert.match(cancelContent, /^cancelled_only=true$/m)
+
+    const mixedOut = path.join(tmpDir, 'mixed.out')
+    const {exitCode: mixedExit} = run({
+      needsInput: JSON.stringify({
+        test: {result: 'failure'},
+        deploy: {result: 'cancelled'}
+      }),
+      summary: 'false',
+      annotations: 'false',
+      outputPath: mixedOut,
+      logger: silentLogger
+    })
+    assert.equal(mixedExit, 1)
+    const mixedContent = fs.readFileSync(mixedOut, 'utf8')
+    assert.match(mixedContent, /^passed=false$/m)
+    assert.match(mixedContent, /^cancelled_only=false$/m)
+  } finally {
+    fs.rmSync(tmpDir, {recursive: true, force: true})
+  }
+})

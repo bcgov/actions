@@ -12,7 +12,7 @@ Often consumed as the final required status check in GitHub Actions workflows ac
 - ✅ **Path-Filter Friendly**: Treats `skipped` jobs as passing by default, allowing workflows using [`diff-triggers`](../diff-triggers/) to merge smoothly.
 - ✅ **Zero Silent Merges**: Correctly flags `failure`, `cancelled` (double _l_), and unexpected statuses.
 - ✅ **Fail-Fast Safety**: Prevents hollow gates from passing if the `needs` context is empty or missing upstream job definitions.
-- ✅ **Built-in Notify**: On failure, opens or comments on a [`workflow-notifier`](../workflow-notifier/) issue. On by default except for `pull_request` / `pull_request_target`.
+- ✅ **Built-in Notify**: On failure, opens or comments on a [`workflow-notifier`](../workflow-notifier/) issue. On by default except for `pull_request` / `pull_request_target`, and skips runs whose only non-passing jobs are `cancelled`.
 - ✅ **Zero Dependencies**: Pure Node 24 standard library gate inside a thin composite wrapper.
 
 ## Permissions
