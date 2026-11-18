@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const process = require('node:process');
 const { InputError, getInput, isDebug, parseBool, parseList } = require('../shared/inputs.js');
+const { prNumberFromEvent, resolvePrNumber } = require('../shared/pr-number.js');
 
 // ---- Logging Helpers -------------------------------------------------------
 function logError(msg) {
@@ -1694,9 +1695,38 @@ async function runMain() {
     process.exit(1);
   }
 
-  if (!packageInput) {
-    logError('Missing required package names. Usage: node index.js pkg1 [pkg2 ...]');
-    process.exit(1);
+  const packagesOmitted = !String(packageInput || '').trim();
+  if (packagesOmitted) {
+    if (tags.length > 0) {
+      logError('The tags input requires packages.');
+      process.exit(1);
+    }
+    // Match get-pr cwd so Tier 3 can read local git history when a checkout exists.
+    const prCwd =
+      fs.existsSync(dir) && fs.statSync(dir).isDirectory() ? path.resolve(dir) : process.cwd();
+    const result = await resolvePrNumber({
+      eventName,
+      event,
+      env,
+      repository: normalizeRepo(ghRepository),
+      token,
+      cwd: prCwd
+    });
+    if (result.ignore) {
+      logInfo(result.message || 'Ignored issue; no pull request number.');
+      return;
+    }
+    if (result.error || !/^\d+$/.test(result.pr || '')) {
+      logError(result.error || 'No valid PR number could be resolved for this event.');
+      process.exit(result.exitCode || 1);
+    }
+    logInfo(`PR: ${result.pr}`);
+    if (env.GITHUB_ACTIONS === 'true' && env.GITHUB_OUTPUT) {
+      fs.appendFileSync(env.GITHUB_OUTPUT, ['image=', 'digest=', 'digests={}', `pr=${result.pr}`, ''].join('\n'));
+    } else {
+      console.log(`pr=${result.pr}`);
+    }
+    return;
   }
   if (!repository) {
     logError('No repository detected. Set REPOSITORY or run from a git repo.');
@@ -1710,6 +1740,13 @@ async function runMain() {
   process.chdir(dir);
 
   const sourceRepository = normalizeRepo(sourceRepositoryFromOrigin() || ghRepository || repository);
+
+  // On pull_request / pull_request_target / merge_group, publish the event PR
+  // number before the tag scan so outputs.pr does not wait on digest resolution.
+  const eventPrNumber = prNumberFromEvent(eventName, event, env);
+  if (eventPrNumber && env.GITHUB_ACTIONS === 'true' && env.GITHUB_OUTPUT) {
+    fs.appendFileSync(env.GITHUB_OUTPUT, `pr=${eventPrNumber}\n`);
+  }
 
   // ---- State -----------------------------------------------------------------
   const prMap = {};
@@ -2115,13 +2152,13 @@ async function runMain() {
       const outputLines = [];
 
       const firstPkg = pkgOrder[0];
-      let rPr = '';
+      let rPr = eventPrNumber || '';
       if (firstPkg && images[firstPkg]) {
         const firstHit = images[firstPkg];
         const fPath = imagePaths[firstPkg];
         outputLines.push(`image=${registry}/${fPath}@${firstHit.digest}`);
         outputLines.push(`digest=${firstHit.digest}`);
-        if (firstHit.prNum && firstHit.prNum !== 'null') {
+        if (!rPr && firstHit.prNum && firstHit.prNum !== 'null') {
           rPr = firstHit.prNum;
         }
 

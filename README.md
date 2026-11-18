@@ -114,7 +114,7 @@ Refer to each action's directory for its exact minimum required permissions bloc
 - **[builder](./builder/)**: `contents: read`, `packages: write`, plus `id-token: write` and `attestations: write` (optional, for build provenance attestations)
 - **[diff-triggers](./diff-triggers/)**: `contents: read`
 - **[ghcr-cleanup](./ghcr-cleanup/)**: `contents: read`, `packages: write`, `pull-requests: read` (`packages: read` for a dry run)
-- **[image-tracker](./image-tracker/)**: `contents: read`, `pull-requests: read`, `packages: read`
+- **[image-tracker](./image-tracker/)**: `contents: read`, `pull-requests: read`, plus `packages: read` when `packages` is set
 - **[pr-description-add](./pr-description-add/)**: `pull-requests: write`
 - **[pr-validate](./pr-validate/)**: `contents: read`, `pull-requests: read`, plus `pull-requests: write` when `markdown` is set
 - **[scan-url](./scan-url/)**: `contents: read`, `issues: write`, `security-events: write`

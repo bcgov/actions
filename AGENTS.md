@@ -10,7 +10,7 @@ Pipeline: build, then `image-tracker`, then deploy by digest (`outputs.digest` /
 - A squash merge `HEAD` was never built. Merge/promote must walk far enough to find the last OCI-labeled image per package; `max_depth` defaults to `100`. `max_depth: 1` only asks "was this SHA built?"; it is not merge promotion.
 - A miss is `exit 1`. Forks don't change that: no empty-digest skip, no fork `if:`.
 - Don't reject a digest because it was built on a different PR (unchanged package).
-- Don't re-add `get-pr` (removed; image-tracker replaces it) or retag-by-PR-number as the deploy identity.
+- Don't re-add `get-pr` (removed; image-tracker replaces it) or retag-by-PR-number as the deploy identity. On `pull_request` / `pull_request_target`, `outputs.pr` comes from the event payload and does not wait on the tag scan. Omit `packages` to resolve only a PR number (no registry access) with the same events, lookup order, and failures as `bcgov/action-get-pr` @ v0.3.1. That is not a reason to deploy by PR tag.
 
 ## Release ncc bundles
 

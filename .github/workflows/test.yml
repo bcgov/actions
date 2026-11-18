@@ -644,15 +644,25 @@ jobs:
           packages: builder-selftest
           keep_digests: latest
 
+      # Do not interpolate outputs.selected into env or the script: the list
+      # for builder-selftest can exceed Linux MAX_ARG_STRLEN (131072).
       - name: Verify outcomes
         env:
-          SELECTED: ${{ steps.dry_run.outputs.selected }}
+          DRY_RUN_OK: ${{ steps.dry_run.outcome }}
+          SELECTED_OK: ${{ steps.dry_run.outputs.selected != '' && startsWith(steps.dry_run.outputs.selected, '[') }}
+          INVALID_DRY_RUN: ${{ steps.invalid_dry_run.outcome }}
+          INVALID_KEEP: ${{ steps.invalid_keep.outcome }}
         run: |
           set -euo pipefail
-          jq -e 'type == "array"' <<<"${SELECTED}" >/dev/null || { echo "::error::selected is not a JSON array"; exit 1; }
-          echo "Dry run selected $(jq length <<<"${SELECTED}") version(s)"
-          if [ "${{ steps.invalid_dry_run.outcome }}" != "failure" ] || \
-             [ "${{ steps.invalid_keep.outcome }}" != "failure" ]; then
+          if [ "$DRY_RUN_OK" != "success" ]; then
+            echo "::error::ghcr-cleanup dry run failed"
+            exit 1
+          fi
+          if [ "$SELECTED_OK" != "true" ]; then
+            echo "::error::selected is missing or is not a JSON array"
+            exit 1
+          fi
+          if [ "$INVALID_DRY_RUN" != "failure" ] || [ "$INVALID_KEEP" != "failure" ]; then
             echo "::error::ghcr-cleanup must fail on an invalid dry_run or keep_digests"
             exit 1
           fi
@@ -686,13 +696,32 @@ jobs:
           node-version: 26
 
       - name: Run Unit Tests
-        run: node --test image-tracker/tests/unit.test.js
+        run: node --test image-tracker/tests/*.test.js shared/tests/pr-number.test.js
 
       - name: Validate action.yml
         run: |
           test -f image-tracker/action.yml
           pip install pyyaml -q
           python3 -c "import yaml; yaml.safe_load(open('image-tracker/action.yml'))"
+
+      # PR-only mode: no packages, no checkout of the target repo, no packages:read needed.
+      # Step duration vs the digest "Resolve via image-tracker action" step is the timing evidence.
+      - id: pr_only
+        if: matrix.repo == 'bcgov/quickstart-openshift' && matrix.package == 'frontend'
+        name: Resolve PR number without packages
+        uses: $/image-tracker
+
+      - name: Check PR-only output
+        if: matrix.repo == 'bcgov/quickstart-openshift' && matrix.package == 'frontend'
+        run: |
+          set -euo pipefail
+          expected="${{ github.event.pull_request.number }}"
+          actual="${{ steps.pr_only.outputs.pr }}"
+          echo "PR-only output: '${actual}' (expected '${expected}')"
+          [ -n "${actual}" ] || { echo "::error::image-tracker PR-only mode returned no PR number"; exit 1; }
+          [ "${actual}" = "${expected}" ] || { echo "::error::image-tracker PR-only mode returned ${actual}, not ${expected}"; exit 1; }
+          [ -z "${{ steps.pr_only.outputs.digest }}" ] || { echo "::error::PR-only mode should not resolve a digest"; exit 1; }
+          [ -z "${{ steps.pr_only.outputs.image }}" ] || { echo "::error::PR-only mode should not resolve an image"; exit 1; }
 
       - name: Checkout target repo
         uses: actions/checkout@v7
@@ -806,7 +835,7 @@ jobs:
           TARGET_REPO: ${{ matrix.repo }}
           PACKAGE: ${{ matrix.package }}
           EXPECTED_DIGEST: ${{ steps.discover.outputs.digest }}
-          EXPECTED_PR: ${{ steps.discover.outputs.pr }}
+          EXPECTED_PR: ${{ github.event.pull_request.number }}
           GOT_DIGEST: ${{ steps.track.outputs.digest }}
           GOT_IMAGE: ${{ steps.track.outputs.image }}
           GOT_PR: ${{ steps.track.outputs.pr }}
@@ -818,7 +847,8 @@ jobs:
           echo "Got digest:  ${GOT_DIGEST}"
           echo "Got image:   ${GOT_IMAGE}"
           echo "Got pr:      ${GOT_PR}"
-          echo "Expected:    ${EXPECTED_DIGEST}"
+          echo "Expected digest: ${EXPECTED_DIGEST}"
+          echo "Expected pr (event): ${EXPECTED_PR}"
 
           if [[ "$GOT_DIGEST" != "$EXPECTED_DIGEST" ]]; then
             echo "::error::${PACKAGE}: digest mismatch: got ${GOT_DIGEST} expected ${EXPECTED_DIGEST}"
@@ -828,8 +858,9 @@ jobs:
             echo "::error::${PACKAGE}: image ref wrong: got ${GOT_IMAGE}"
             exit 1
           fi
-          if [[ -n "$EXPECTED_PR" && "$GOT_PR" != "$EXPECTED_PR" ]]; then
-            echo "::error::${PACKAGE}: pr mismatch: got '${GOT_PR}' expected '${EXPECTED_PR}'"
+          # On pull_request, outputs.pr is the event number, not the PR that built the image.
+          if [[ "$GOT_PR" != "$EXPECTED_PR" ]]; then
+            echo "::error::${PACKAGE}: pr mismatch: got '${GOT_PR}' expected event PR '${EXPECTED_PR}'"
             exit 1
           fi
           echo "✅ ${PACKAGE}: resolved correctly"

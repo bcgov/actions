@@ -11,7 +11,7 @@ Each action will live in its own subdirectory within the appropriate repository.
 
 **Status (2026-09):** The general suite in `bcgov/actions` is feature-complete for the
 `v1.0.0` stabilization epic (#209): `builder/` (renamed from `builder-ghcr`),
-`diff-triggers`, `image-tracker` (replaces `get-pr`, removed in v0.11.0), and the other
+`diff-triggers`, `image-tracker` (replaces `get-pr`, removed in v0.11.0; omit `packages` to resolve only the PR number), and the other
 actions listed below. **`bcgov/actions-openshift`** exists and holds the OpenShift
 actions, including `deployer/` (formerly `action-deployer-openshift`). `action-postgres`
 was not migrated.
