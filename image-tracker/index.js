@@ -870,6 +870,7 @@ async function probeTag(
           return {
             sha: cand,
             digest: finalDigest,
+            tag: tag && !tag.startsWith('sha256:') ? tag : '',
             created,
             prNum: pn || digestPrMap[finalDigest] || '',
             msg: title,
@@ -1036,6 +1037,18 @@ async function fetchPackageVersions({ imagePath, repository, registry = 'ghcr.io
   };
 }
 
+function enrichHitFromPackageVersions(hit, rawData) {
+  if (!hit || !Array.isArray(rawData)) return hit;
+  const match = rawData.find((item) => item?.name === hit.digest);
+  if (!match) return hit;
+  if (match.id && !hit.versionId) hit.versionId = match.id;
+  if (!hit.tag) {
+    const firstTag = (match.metadata?.container?.tags || []).find((t) => t && !t.startsWith('sha256:'));
+    if (firstTag) hit.tag = firstTag;
+  }
+  return hit;
+}
+
 // ---- Iterative Digest Resolution -------------------------------------------
 async function resolveDigestIterative({
   imagePath,
@@ -1096,7 +1109,7 @@ async function resolveDigestIterative({
         token,
         sourceRepository
       );
-      if (res) return { hit: res, code: 0 };
+      if (res) return { hit: enrichHitFromPackageVersions(res, rawData), code: 0 };
     }
   } else {
     // Standard OCI /v2/<name>/tags/list
@@ -1130,7 +1143,7 @@ async function resolveDigestIterative({
           token,
           sourceRepository
         );
-        if (res) return { hit: res, code: 0 };
+        if (res) return { hit: enrichHitFromPackageVersions(res, rawData), code: 0 };
       }
     }
   }
@@ -1151,9 +1164,42 @@ function escapeMarkdownCell(str) {
   return String(str || '').replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
 }
 
+function sanitizeMarkdownUrl(url) {
+  return String(url || '').replace(/\(/g, '%28').replace(/\)/g, '%29');
+}
+
+function formatMarkdownLink(label, url) {
+  return url ? `[${label}](${sanitizeMarkdownUrl(url)})` : label;
+}
+
+function buildPackageUrl({ registry = 'ghcr.io', imagePath = '', repository = '', tag = '', versionId = '' }) {
+  if (registry !== 'ghcr.io' || !imagePath) return '';
+  const repo = normalizeRepo(repository) || imagePath.split('/').slice(0, 2).join('/');
+  if (!repo || !repo.includes('/')) return '';
+  const pkgName = imagePath.split('/').slice(1).join('/') || imagePath;
+  let url = `https://github.com/${repo}/pkgs/container/${encodeURIComponent(pkgName)}`;
+  if (versionId) url += `/${encodeURIComponent(String(versionId))}`;
+  if (tag && !String(tag).startsWith('sha256:')) url += `?tag=${encodeURIComponent(tag)}`;
+  return url;
+}
+
+function buildPrUrl(sourceRepository, prNum) {
+  const repo = normalizeRepo(sourceRepository);
+  if (!repo || !prNum || prNum === 'null') return '';
+  return `https://github.com/${repo}/pull/${encodeURIComponent(String(prNum))}`;
+}
+
+function buildCommitUrl(sourceRepository, sha) {
+  const repo = normalizeRepo(sourceRepository);
+  if (!repo || !sha || !/^[0-9a-f]{7,40}$/i.test(sha)) return '';
+  return `https://github.com/${repo}/commit/${sha}`;
+}
+
 // ---- Step Summary Renderer ------------------------------------------------
 function renderStepSummary({
   registry = 'ghcr.io',
+  repository = '',
+  sourceRepository = '',
   revision = 'HEAD',
   pivotSha = '',
   candidates = [],
@@ -1161,12 +1207,20 @@ function renderStepSummary({
   imagePaths = {},
   images = {}
 }) {
+  const firstImagePath = pkgOrder.map((p) => imagePaths[p]).find(Boolean) || '';
+  const fallbackRepo = registry === 'ghcr.io' && firstImagePath ? firstImagePath.split('/').slice(0, 2).join('/') : '';
+  const sourceRepo = normalizeRepo(sourceRepository) || normalizeRepo(repository) || fallbackRepo;
+
   const revisionDisplay = escapeMarkdownCell(revision);
-  let targetStr = '';
+  const pivotCommitLink = formatMarkdownLink(
+    `\`${pivotSha.slice(0, 7)}\``,
+    buildCommitUrl(sourceRepo, pivotSha)
+  );
+  let targetStr;
   if (pivotSha && (revision.startsWith(pivotSha.slice(0, 7)) || pivotSha.startsWith(revision))) {
-    targetStr = `\`${pivotSha.slice(0, 7)}\``;
+    targetStr = pivotCommitLink;
   } else if (pivotSha) {
-    targetStr = `\`${pivotSha.slice(0, 7)}\` (${revisionDisplay})`;
+    targetStr = `${pivotCommitLink} (${revisionDisplay})`;
   } else {
     targetStr = `\`${revisionDisplay}\``;
   }
@@ -1174,8 +1228,8 @@ function renderStepSummary({
   const lines = [
     '### 📦 Image Tracker',
     '',
-    '| Package | Target Commit | Resolved Commit | Search Depth | Image Reference / Digest |',
-    '| :--- | :--- | :--- | :--- | :--- |'
+    '| Package | Target Commit | Resolved Commit | PR | Search Depth | Image Reference / Digest |',
+    '| :--- | :--- | :--- | :--- | :--- | :--- |'
   ];
 
   for (const pkg of pkgOrder) {
@@ -1187,7 +1241,17 @@ function renderStepSummary({
       const sha = hitObj.sha || '';
       const digest = hitObj.digest || '';
       const ref = `${registry}/${path}@${digest}`;
-      const resolvedStr = `\`${sha.slice(0, 7)}\``;
+      const pkgUrl = buildPackageUrl({
+        registry,
+        imagePath: path,
+        repository,
+        tag: hitObj.tag || '',
+        versionId: hitObj.versionId || ''
+      });
+      const pkgCell = formatMarkdownLink(`\`${pkgDisplay}\``, pkgUrl);
+      const resolvedStr = formatMarkdownLink(`\`${sha.slice(0, 7)}\``, buildCommitUrl(sourceRepo, sha));
+      const prNum = hitObj.prNum && hitObj.prNum !== 'null' ? String(hitObj.prNum) : '';
+      const prCell = prNum ? formatMarkdownLink(`#${prNum}`, buildPrUrl(sourceRepo, prNum)) : '—';
 
       let depth = 0;
       for (let i = 0; i < candidates.length; i++) {
@@ -1204,9 +1268,9 @@ function renderStepSummary({
         depthStr = `${depth} (walked)`;
       }
 
-      lines.push(`| \`${pkgDisplay}\` | ${targetStr} | ${resolvedStr} | ${depthStr} | \`${ref}\` |`);
+      lines.push(`| ${pkgCell} | ${targetStr} | ${resolvedStr} | ${prCell} | ${depthStr} | \`${ref}\` |`);
     } else {
-      lines.push(`| \`${pkgDisplay}\` | ${targetStr} | — | — | *Not resolved* |`);
+      lines.push(`| \`${pkgDisplay}\` | ${targetStr} | — | — | — | *Not resolved* |`);
     }
   }
 
@@ -1939,7 +2003,10 @@ async function runMain() {
           }
 
           st.res = await probeTagBatch(st, batchTags);
-          if (st.res) break;
+          if (st.res) {
+            enrichHitFromPackageVersions(st.res, pkgVersions?.rawData);
+            break;
+          }
         }
 
         if (!st.res && skippedTags.length > 0) {
@@ -2008,6 +2075,16 @@ async function runMain() {
     }
     const ref = `${registry}/${st.path}@${st.res.digest}`;
     console.error(`  [✓] HIT: ${pkg} -> ${ref}`);
+    const pkgUrl = buildPackageUrl({
+      registry,
+      imagePath: st.path,
+      repository,
+      tag: st.res.tag || '',
+      versionId: st.res.versionId || ''
+    });
+    const prUrl = buildPrUrl(sourceRepository, st.res.prNum);
+    if (pkgUrl) logInfo(`Package: ${pkgUrl}`);
+    if (prUrl) logInfo(`PR: ${prUrl}`);
 
     images[pkg] = st.res;
     imagesJson[pkg] = ref;
@@ -2017,6 +2094,8 @@ async function runMain() {
 
   const summaryMarkdown = renderStepSummary({
     registry,
+    repository,
+    sourceRepository,
     revision,
     pivotSha,
     candidates,
@@ -2131,6 +2210,10 @@ module.exports = {
   resolveDigestIterative,
   renderStepSummary,
   escapeMarkdownCell,
+  buildPackageUrl,
+  buildPrUrl,
+  buildCommitUrl,
+  enrichHitFromPackageVersions,
   renderDiagnosticMarkdown,
   renderDiagnosticConsole,
   renderDiagnosticSummary,

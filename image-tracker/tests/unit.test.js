@@ -6,7 +6,10 @@ const {
   parseAuthHeader,
   matchesCandidate,
   renderStepSummary,
-  extractPrNumber
+  extractPrNumber,
+  buildPackageUrl,
+  buildPrUrl,
+  buildCommitUrl
 } = require('../index.js');
 
 test('Package mapping - single package nested', () => {
@@ -170,7 +173,7 @@ test('Step summary rendering - HEAD and walked', () => {
   const candidates = [
     'a1b2c3d4e5f67890123456789012345678901234',
     'b2c3d4e5f67890123456789012345678901234a1',
-    'e4f5g6h789012345678901234567890123456789'
+    'e4f5a6b789012345678901234567890123456789'
   ];
   const pkgOrder = ['backend', 'frontend'];
   const imagePaths = {
@@ -181,13 +184,16 @@ test('Step summary rendering - HEAD and walked', () => {
     backend: {
       sha: 'a1b2c3d4e5f67890123456789012345678901234',
       digest: 'sha256:7f83b1...',
+      tag: 'sha-a1b2c3d',
       created: '2026-01-01T00:00:00Z',
       prNum: '10',
       msg: 'Backend commit'
     },
     frontend: {
-      sha: 'e4f5g6h789012345678901234567890123456789',
+      sha: 'e4f5a6b789012345678901234567890123456789',
       digest: 'sha256:39ac21...',
+      tag: 'pr-11',
+      versionId: 987654,
       created: '2026-01-01T00:00:00Z',
       prNum: '11',
       msg: 'Frontend commit'
@@ -196,6 +202,8 @@ test('Step summary rendering - HEAD and walked', () => {
 
   const output = renderStepSummary({
     registry: 'ghcr.io',
+    repository: 'bcgov/quickstart-openshift',
+    sourceRepository: 'bcgov/quickstart-openshift',
     revision,
     pivotSha,
     candidates,
@@ -207,14 +215,14 @@ test('Step summary rendering - HEAD and walked', () => {
   const expected = [
     '### 📦 Image Tracker',
     '',
-    '| Package | Target Commit | Resolved Commit | Search Depth | Image Reference / Digest |',
-    '| :--- | :--- | :--- | :--- | :--- |',
-    '| `backend` | `a1b2c3d` (HEAD) | `a1b2c3d` | 1 | `ghcr.io/bcgov/quickstart-openshift/backend@sha256:7f83b1...` |',
-    '| `frontend` | `a1b2c3d` (HEAD) | `e4f5g6h` | 3 (walked) | `ghcr.io/bcgov/quickstart-openshift/frontend@sha256:39ac21...` |',
+    '| Package | Target Commit | Resolved Commit | PR | Search Depth | Image Reference / Digest |',
+    '| :--- | :--- | :--- | :--- | :--- | :--- |',
+    '| [`backend`](https://github.com/bcgov/quickstart-openshift/pkgs/container/quickstart-openshift%2Fbackend?tag=sha-a1b2c3d) | [`a1b2c3d`](https://github.com/bcgov/quickstart-openshift/commit/a1b2c3d4e5f67890123456789012345678901234) (HEAD) | [`a1b2c3d`](https://github.com/bcgov/quickstart-openshift/commit/a1b2c3d4e5f67890123456789012345678901234) | [#10](https://github.com/bcgov/quickstart-openshift/pull/10) | 1 | `ghcr.io/bcgov/quickstart-openshift/backend@sha256:7f83b1...` |',
+    '| [`frontend`](https://github.com/bcgov/quickstart-openshift/pkgs/container/quickstart-openshift%2Ffrontend/987654?tag=pr-11) | [`a1b2c3d`](https://github.com/bcgov/quickstart-openshift/commit/a1b2c3d4e5f67890123456789012345678901234) (HEAD) | [`e4f5a6b`](https://github.com/bcgov/quickstart-openshift/commit/e4f5a6b789012345678901234567890123456789) | [#11](https://github.com/bcgov/quickstart-openshift/pull/11) | 3 (walked) | `ghcr.io/bcgov/quickstart-openshift/frontend@sha256:39ac21...` |',
     ''
   ].join('\n');
 
-  assert.strictEqual(output, expected, 'step summary matches proposed provenance audit table format');
+  assert.strictEqual(output, expected, 'step summary matches provenance audit table with package, commit, and PR links');
 });
 
 test('Step summary rendering - missing and SHA revision', () => {
@@ -249,10 +257,10 @@ test('Step summary rendering - missing and SHA revision', () => {
   const expected = [
     '### 📦 Image Tracker',
     '',
-    '| Package | Target Commit | Resolved Commit | Search Depth | Image Reference / Digest |',
-    '| :--- | :--- | :--- | :--- | :--- |',
-    '| `api` | `a1b2c3d` | `a1b2c3d` | 1 | `ghcr.io/bcgov/myapp/api@sha256:111111` |',
-    '| `db` | `a1b2c3d` | — | — | *Not resolved* |',
+    '| Package | Target Commit | Resolved Commit | PR | Search Depth | Image Reference / Digest |',
+    '| :--- | :--- | :--- | :--- | :--- | :--- |',
+    '| [`api`](https://github.com/bcgov/myapp/pkgs/container/myapp%2Fapi) | [`a1b2c3d`](https://github.com/bcgov/myapp/commit/a1b2c3d4e5f67890123456789012345678901234) | [`a1b2c3d`](https://github.com/bcgov/myapp/commit/a1b2c3d4e5f67890123456789012345678901234) | — | 1 | `ghcr.io/bcgov/myapp/api@sha256:111111` |',
+    '| `db` | [`a1b2c3d`](https://github.com/bcgov/myapp/commit/a1b2c3d4e5f67890123456789012345678901234) | — | — | — | *Not resolved* |',
     ''
   ].join('\n');
 
@@ -290,9 +298,9 @@ test('Step summary rendering - pipe escaping', () => {
   const expected = [
     '### 📦 Image Tracker',
     '',
-    '| Package | Target Commit | Resolved Commit | Search Depth | Image Reference / Digest |',
-    '| :--- | :--- | :--- | :--- | :--- |',
-    '| `app\\|service` | `a1b2c3d` (feature\\|branch) | `a1b2c3d` | 1 | `ghcr.io/bcgov/myapp/app_service@sha256:222222` |',
+    '| Package | Target Commit | Resolved Commit | PR | Search Depth | Image Reference / Digest |',
+    '| :--- | :--- | :--- | :--- | :--- | :--- |',
+    '| [`app\\|service`](https://github.com/bcgov/myapp/pkgs/container/myapp%2Fapp_service) | [`a1b2c3d`](https://github.com/bcgov/myapp/commit/a1b2c3d4e5f67890123456789012345678901234) (feature\\|branch) | [`a1b2c3d`](https://github.com/bcgov/myapp/commit/a1b2c3d4e5f67890123456789012345678901234) | — | 1 | `ghcr.io/bcgov/myapp/app_service@sha256:222222` |',
     ''
   ].join('\n');
 
@@ -331,13 +339,87 @@ test('Step summary rendering - custom registry host', () => {
   const expected = [
     '### 📦 Image Tracker',
     '',
-    '| Package | Target Commit | Resolved Commit | Search Depth | Image Reference / Digest |',
-    '| :--- | :--- | :--- | :--- | :--- |',
-    '| `backend` | `a1b2c3d` (HEAD) | `a1b2c3d` | 1 | `registry-1.docker.io/bcgov/quickstart-openshift/backend@sha256:7f83b1...` |',
+    '| Package | Target Commit | Resolved Commit | PR | Search Depth | Image Reference / Digest |',
+    '| :--- | :--- | :--- | :--- | :--- | :--- |',
+    '| `backend` | `a1b2c3d` (HEAD) | `a1b2c3d` | #10 | 1 | `registry-1.docker.io/bcgov/quickstart-openshift/backend@sha256:7f83b1...` |',
     ''
   ].join('\n');
 
-  assert.strictEqual(output, expected, 'step summary uses custom registry host in image reference');
+  assert.strictEqual(output, expected, 'step summary uses custom registry host in image reference without ghcr links');
+});
+
+test('URL builders - package, PR, and commit links', () => {
+  assert.strictEqual(
+    buildPackageUrl({
+      registry: 'ghcr.io',
+      imagePath: 'bcgov/quickstart-openshift/backend',
+      repository: 'bcgov/quickstart-openshift',
+      tag: '2942',
+      versionId: 1531672773
+    }),
+    'https://github.com/bcgov/quickstart-openshift/pkgs/container/quickstart-openshift%2Fbackend/1531672773?tag=2942'
+  );
+  assert.strictEqual(
+    buildPackageUrl({
+      registry: 'ghcr.io',
+      imagePath: 'miniontech/vexilon',
+      repository: 'MinionTech/vexilon',
+      tag: 'pr-42'
+    }),
+    'https://github.com/miniontech/vexilon/pkgs/container/vexilon?tag=pr-42'
+  );
+  assert.strictEqual(
+    buildPackageUrl({
+      registry: 'ghcr.io',
+      imagePath: 'bcgov/app/api',
+      tag: 'sha256:' + 'a'.repeat(64)
+    }),
+    'https://github.com/bcgov/app/pkgs/container/app%2Fapi'
+  );
+  assert.strictEqual(
+    buildPackageUrl({
+      registry: 'registry-1.docker.io',
+      imagePath: 'bcgov/app/api',
+      tag: 'latest'
+    }),
+    ''
+  );
+  assert.strictEqual(buildPrUrl('bcgov/quickstart-openshift', '10'), 'https://github.com/bcgov/quickstart-openshift/pull/10');
+  assert.strictEqual(buildPrUrl('bcgov/quickstart-openshift', ''), '');
+  assert.strictEqual(buildPrUrl('bcgov/quickstart-openshift', 'null'), '');
+  assert.strictEqual(
+    buildCommitUrl('bcgov/quickstart-openshift', 'a1b2c3d4e5f67890123456789012345678901234'),
+    'https://github.com/bcgov/quickstart-openshift/commit/a1b2c3d4e5f67890123456789012345678901234'
+  );
+  assert.strictEqual(buildCommitUrl('bcgov/quickstart-openshift', 'not-a-sha'), '');
+});
+
+test('Step summary rendering - fork PR links package to fork and PR/commits to source repo', () => {
+  const pivotSha = 'a1b2c3d4e5f67890123456789012345678901234';
+  const output = renderStepSummary({
+    registry: 'ghcr.io',
+    repository: 'contributor/app',
+    sourceRepository: 'bcgov/app',
+    revision: pivotSha,
+    pivotSha,
+    candidates: [pivotSha],
+    pkgOrder: ['backend'],
+    imagePaths: { backend: 'contributor/app/backend' },
+    images: {
+      backend: {
+        sha: pivotSha,
+        digest: 'sha256:abc',
+        tag: 'pr-77',
+        prNum: '77'
+      }
+    }
+  });
+  assert.match(
+    output,
+    /\[`backend`\]\(https:\/\/github\.com\/contributor\/app\/pkgs\/container\/app%2Fbackend\?tag=pr-77\)/
+  );
+  assert.match(output, /\[#77\]\(https:\/\/github\.com\/bcgov\/app\/pull\/77\)/);
+  assert.match(output, /\[`a1b2c3d`\]\(https:\/\/github\.com\/bcgov\/app\/commit\/a1b2c3d4e5f67890123456789012345678901234\)/);
 });
 
 test('isForkPr - fork and same-repo', () => {
@@ -3531,6 +3613,143 @@ test('runMain ignores truncated 100-entry GHCR versions page so newer unindexed 
     const output = fs.readFileSync(out, 'utf8');
     assert.match(output, new RegExp(`digest=${newerDigest}`), 'must resolve newer ancestor instead of older rebuilt digest');
   } finally {
+    global.fetch = origFetch;
+    process.exit = origExit;
+    process.chdir(cwd);
+    restoreEnv(saved);
+    fs.rmSync(repoDir, { recursive: true, force: true });
+  }
+});
+
+test('runMain writes package version and PR links to step summary and logs', async () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const { runMain } = require('../index.js');
+  const origFetch = global.fetch;
+  const origExit = process.exit;
+  const origConsoleError = console.error;
+  const saved = snapshotEnv();
+  const cwd = process.cwd();
+  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'links-test-'));
+  const loggedLines = [];
+  try {
+    process.exit = (code) => {
+      throw new Error(`process.exit called with code ${code}`);
+    };
+    console.error = (...args) => {
+      loggedLines.push(args.join(' '));
+    };
+    process.chdir(repoDir);
+    execFileSync('git', ['init', '-b', 'main'], { stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.name', 'Test'], { stdio: 'ignore' });
+    execFileSync('git', ['config', 'user.email', 'test@example.com'], { stdio: 'ignore' });
+    execFileSync('git', ['remote', 'add', 'origin', 'https://github.com/bcgov/demo.git'], { stdio: 'ignore' });
+
+    fs.writeFileSync(path.join(repoDir, 'f.txt'), 'v1\n');
+    execFileSync('git', ['add', '.'], { stdio: 'ignore' });
+    execFileSync('git', ['commit', '-m', 'feat: build (#42)'], { stdio: 'ignore' });
+    const buildSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+
+    fs.writeFileSync(path.join(repoDir, 'f.txt'), 'v2\n');
+    execFileSync('git', ['add', '.'], { stdio: 'ignore' });
+    execFileSync('git', ['commit', '-m', 'docs: update (#43)'], { stdio: 'ignore' });
+
+    fs.writeFileSync(path.join(repoDir, 'f.txt'), 'v3\n');
+    execFileSync('git', ['add', '.'], { stdio: 'ignore' });
+    execFileSync('git', ['commit', '-m', 'chore: bump (#44)'], { stdio: 'ignore' });
+    const headSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    const digest = 'sha256:' + 'e'.repeat(64);
+
+    global.fetch = async (url) => {
+      if (url.includes('/commits/') && url.endsWith('/pulls')) {
+        return { ok: false, status: 403, headers: { get: () => null }, json: async () => ({}) };
+      }
+      if (url.includes('/orgs/bcgov/packages/container/demo%2Fbackend/versions')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          json: async () => [
+            { id: 1531672773, name: digest, metadata: { container: { tags: ['pr-42'] } } }
+          ]
+        };
+      }
+      if (url.endsWith('/manifests/latest')) {
+        return {
+          ok: false,
+          status: 401,
+          headers: { get: (h) => (h.toLowerCase() === 'www-authenticate' ? 'Bearer realm="https://ghcr.io/token",service="ghcr.io"' : null) },
+          json: async () => ({})
+        };
+      }
+      if (url.includes('/token?')) {
+        return { ok: true, status: 200, headers: { get: () => null }, json: async () => ({ token: 'pull' }) };
+      }
+      if (url.endsWith('/backend/manifests/pr-42')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: (h) => (h.toLowerCase() === 'docker-content-digest' ? digest : null) },
+          json: async () => ({
+            mediaType: 'application/vnd.oci.image.manifest.v1+json',
+            annotations: {
+              'org.opencontainers.image.revision': buildSha,
+              'org.opencontainers.image.version': 'pr-42',
+              'org.opencontainers.image.source': 'https://github.com/bcgov/demo'
+            }
+          })
+        };
+      }
+      return { ok: false, status: 404, headers: { get: () => null }, json: async () => ({}) };
+    };
+
+    const out = path.join(repoDir, 'out');
+    const summaryFile = path.join(repoDir, 'summary.md');
+    process.env.GITHUB_ACTIONS = 'true';
+    process.env.GITHUB_OUTPUT = out;
+    process.env.GITHUB_STEP_SUMMARY = summaryFile;
+    delete process.env.GITHUB_EVENT_PATH;
+    process.env.GITHUB_EVENT_NAME = 'push';
+    process.env.GITHUB_REPOSITORY = 'bcgov/demo';
+    process.env.INPUT_PACKAGES = 'backend';
+    delete process.env.PACKAGES;
+    process.env.INPUT_REPOSITORY = 'bcgov/demo';
+    delete process.env.REPOSITORY;
+    process.env.INPUT_REVISION = headSha;
+    delete process.env.REVISION;
+    process.env.INPUT_WORKING_DIRECTORY = repoDir;
+    delete process.env.DIR;
+    process.env.INPUT_TOKEN = 'gh-token';
+
+    await runMain();
+
+    const summary = fs.readFileSync(summaryFile, 'utf8');
+    assert.match(
+      summary,
+      /\[`backend`\]\(https:\/\/github\.com\/bcgov\/demo\/pkgs\/container\/demo%2Fbackend\/1531672773\?tag=pr-42\)/,
+      'step summary must link package to exact version and tag'
+    );
+    assert.match(
+      summary,
+      /\[#42\]\(https:\/\/github\.com\/bcgov\/demo\/pull\/42\)/,
+      'step summary must link to PR built in'
+    );
+    assert.match(
+      summary,
+      new RegExp(`\\[\`${buildSha.slice(0, 7)}\`\\]\\(https://github\\.com/bcgov/demo/commit/${buildSha}\\)`),
+      'step summary must link to resolved commit'
+    );
+
+    const logText = loggedLines.join('\n');
+    assert.match(
+      logText,
+      /Package: https:\/\/github\.com\/bcgov\/demo\/pkgs\/container\/demo%2Fbackend\/1531672773\?tag=pr-42/,
+      'logs must include package link'
+    );
+    assert.match(logText, /PR: https:\/\/github\.com\/bcgov\/demo\/pull\/42/, 'logs must include PR link');
+  } finally {
+    console.error = origConsoleError;
     global.fetch = origFetch;
     process.exit = origExit;
     process.chdir(cwd);
