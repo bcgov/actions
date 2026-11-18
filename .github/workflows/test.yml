@@ -644,15 +644,25 @@ jobs:
           packages: builder-selftest
           keep_digests: latest
 
+      # Do not interpolate outputs.selected into env or the script: the list
+      # for builder-selftest can exceed Linux MAX_ARG_STRLEN (131072).
       - name: Verify outcomes
         env:
-          SELECTED: ${{ steps.dry_run.outputs.selected }}
+          DRY_RUN_OK: ${{ steps.dry_run.outcome }}
+          SELECTED_OK: ${{ steps.dry_run.outputs.selected != '' && startsWith(steps.dry_run.outputs.selected, '[') }}
+          INVALID_DRY_RUN: ${{ steps.invalid_dry_run.outcome }}
+          INVALID_KEEP: ${{ steps.invalid_keep.outcome }}
         run: |
           set -euo pipefail
-          jq -e 'type == "array"' <<<"${SELECTED}" >/dev/null || { echo "::error::selected is not a JSON array"; exit 1; }
-          echo "Dry run selected $(jq length <<<"${SELECTED}") version(s)"
-          if [ "${{ steps.invalid_dry_run.outcome }}" != "failure" ] || \
-             [ "${{ steps.invalid_keep.outcome }}" != "failure" ]; then
+          if [ "$DRY_RUN_OK" != "success" ]; then
+            echo "::error::ghcr-cleanup dry run failed"
+            exit 1
+          fi
+          if [ "$SELECTED_OK" != "true" ]; then
+            echo "::error::selected is missing or is not a JSON array"
+            exit 1
+          fi
+          if [ "$INVALID_DRY_RUN" != "failure" ] || [ "$INVALID_KEEP" != "failure" ]; then
             echo "::error::ghcr-cleanup must fail on an invalid dry_run or keep_digests"
             exit 1
           fi
