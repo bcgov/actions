@@ -1528,6 +1528,33 @@ jobs:
           fi
           echo "✅ Deepened in place, caller's checkout intact."
 
+      - name: Multi-line commands fail fast on first failure
+        id: multiline_fail
+        continue-on-error: true
+        uses: $/test-and-analyse
+        with:
+          commands: |
+            false
+            touch should-not-exist
+          working_directory: .
+          cache: none
+          unused_deps: off
+          supply_scan: 'false'
+
+      - name: Verify fail-fast and failure propagation
+        env:
+          FAIL_OUTCOME: ${{ steps.multiline_fail.outcome }}
+        run: |
+          if [ "$FAIL_OUTCOME" != "failure" ]; then
+            echo "❌ Expected multi-line failing commands to fail action, got $FAIL_OUTCOME"
+            exit 1
+          fi
+          if [ -e should-not-exist ]; then
+            echo "❌ Second command ran after first command failed"
+            exit 1
+          fi
+          echo "✅ Multi-line commands failed fast and propagated failure."
+
   test-test-and-analyse-semgrep:
     name: Test Test and Analyse (Semgrep)
     needs: [filter]
