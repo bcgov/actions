@@ -299,23 +299,27 @@ runs:
           ${{ inputs.working_directory }}/**/Pipfile.lock
 
     # Run tests
-    - if: steps.final_triggered.outputs.triggered == 'true'
+    - name: Run commands
+      id: run_tests
+      if: steps.final_triggered.outputs.triggered == 'true'
       shell: bash
       working-directory: ${{ inputs.working_directory }}
       env:
+        INPUT_COMMANDS: ${{ inputs.commands }}
         SONAR_TOKEN: ${{ inputs.sonar_token }}
         MAVEN_OPTS: "-Xmx2048m -Xss2m -XX:MaxMetaspaceSize=512m -Djava.awt.headless=true -XX:+HeapDumpOnOutOfMemoryError"
         _JAVA_OPTIONS: "-Xmx2048m -Xss2m"
       run: |
         set +e
-        ${{ inputs.commands }} > test_output.log 2>&1
+        bash -eo pipefail -c "$INPUT_COMMANDS"
         CMD_EXIT_CODE=$?
-        cat test_output.log
         set -e
-        if [ $CMD_EXIT_CODE -ne 0 ]; then
-          echo "TEST_FAIL_SIGNAL=true" >> $GITHUB_ENV
+        if [ "$CMD_EXIT_CODE" -ne 0 ]; then
+          echo "failed=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "failed=false" >> "$GITHUB_OUTPUT"
         fi
-        exit 0 # Allow the next step (reporter) to run
+        exit 0 # Allow Sonar, dependency analysis, and reporter to run
 
     ### Optional SonarCloud
     - if: inputs.sonar_token != '' && steps.final_triggered.outputs.triggered == 'true' && steps.inputs.outputs.language != 'java'
@@ -413,7 +417,6 @@ runs:
         # Run knip using npx
         set +e
         npx -y knip --dependencies --exports --reporter json --no-progress ${KNIP_CONFIG} > knip-output.json
-        KNIP_EXIT_CODE=$?
         npx -y knip --dependencies --exports ${KNIP_CONFIG} | sed 's/\u001b\[[0-9;]*[a-zA-Z]//g' > knip-summary.txt 2>&1
         set -e
 
@@ -465,6 +468,8 @@ runs:
       id: reporter_logic
       if: steps.final_triggered.outputs.triggered == 'true' && (success() || failure())
       uses: $/test-and-analyse/reporter
+      env:
+        TEST_FAIL_SIGNAL: ${{ steps.run_tests.outputs.failed }}
       with:
         dir: ${{ inputs.working_directory }}
         unused_deps: ${{ steps.inputs.outputs.unused_deps }}

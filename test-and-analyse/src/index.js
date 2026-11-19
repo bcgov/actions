@@ -244,7 +244,9 @@ async function run() {
 
     if (hasTestFailures) {
       failures.push(
-        `${testResults.failed} tests failed in the ${language} project.`
+        testResults.failed > 0
+          ? `${testResults.failed} tests failed in the ${language} project.`
+          : `Test commands failed in the ${language} project.`
       )
     }
 
