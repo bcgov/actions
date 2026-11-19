@@ -1119,6 +1119,35 @@ jobs:
             exit 1
           fi
 
+      - name: Reset mock gh log before cancelled notify test
+        run: |
+          : > "${RUNNER_TEMP}/mock-gh.log"
+
+      - name: Test Workflow Results Self Action (Skip Notify on Cancelled Only)
+        id: self_check_cancel_notify
+        continue-on-error: true
+        uses: $/workflow-results
+        with:
+          needs: '{"build":{"result":"success"},"deploy":{"result":"cancelled"}}'
+          title: 'Cancelled Notify Simulation Gate'
+          notify: 'true'
+
+      - name: Verify Cancelled-Only Run Skipped Notify
+        run: |
+          if [ "${{ steps.self_check_cancel_notify.outcome }}" != "failure" ]; then
+            echo "::error::Cancelled-only simulation should still fail the step"
+            exit 1
+          fi
+          if [ "${{ steps.self_check_cancel_notify.outputs.passed }}" != "false" ]; then
+            echo "::error::passed output should be false on cancellation"
+            exit 1
+          fi
+          if [ -s "${RUNNER_TEMP}/mock-gh.log" ]; then
+            echo "::error::Notifier should not run for cancelled-only jobs"
+            cat "${RUNNER_TEMP}/mock-gh.log"
+            exit 1
+          fi
+
       - name: Test Workflow Results Self Action (Simulate Empty Needs Guard)
         id: self_check_empty
         continue-on-error: true
