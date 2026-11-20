@@ -14,10 +14,12 @@ function run(eventName, payload, {cwd, env = {}} = {}) {
   const outputPath = path.join(dir, 'output')
   fs.writeFileSync(eventPath, JSON.stringify(payload))
   fs.writeFileSync(outputPath, '')
-  const childEnv = {...process.env, ...env}
+  // Strip inherited credentials first so a test's own env (e.g. INPUT_GITHUB_TOKEN) still applies
+  const childEnv = {...process.env}
   delete childEnv.GITHUB_TOKEN
   delete childEnv.INPUT_TOKEN
   delete childEnv.INPUT_GITHUB_TOKEN
+  Object.assign(childEnv, env)
   const res = spawnSync('node', [ACTION], {
     cwd: cwd || dir,
     encoding: 'utf8',
