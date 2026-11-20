@@ -229,20 +229,29 @@ if [ -n "$CODEOWNERS_PATH" ]; then
   log_debug "CODEOWNERS handles: ${CODEOWNERS_HANDLES}"
 fi
 
-# No CODEOWNERS in the workspace: names from .github/CODEOWNERS at this commit, or nothing
-codeowners_names() {
-  GH_TOKEN="${INPUT_TOKEN}" gh api -H "Accept: application/vnd.github.raw" \
-    "/repos/${GITHUB_REPOSITORY:-}/contents/.github/CODEOWNERS${GITHUB_SHA:+?ref=${GITHUB_SHA}}" 2>/dev/null \
-    | node "$CODEOWNERS_JS" /dev/stdin all | sed -n 's/^users=//p'
+# No CODEOWNERS in the workspace: fetch first matching path from GitHub search order
+fetch_codeowners() {
+  local path raw selected
+  while IFS= read -r path; do
+    if raw="$(GH_TOKEN="${INPUT_TOKEN}" gh api -H "Accept: application/vnd.github.raw" \
+      "/repos/${GITHUB_REPOSITORY:-}/contents/${path}${GITHUB_SHA:+?ref=${GITHUB_SHA}}" 2>/dev/null)"; then
+      selected="$(printf '%s\n' "$raw" | node "$CODEOWNERS_JS" /dev/stdin all)"
+      CODEOWNERS_PATH="$path"
+      CODEOWNERS_HANDLES="$(sed -n 's/^users=//p' <<< "$selected")"
+      CODEOWNERS_TEAMS="$(sed -n 's/^teams=//p' <<< "$selected")"
+      CODEOWNERS_EMAILS="$(sed -n 's/^emails=//p' <<< "$selected")"
+      return 0
+    fi
+  done < <(node "$CODEOWNERS_JS" search-order)
+  return 1
 }
 # Fetch only when CODEOWNERS is required (always, or fallback with no author/merger)
 if [ -z "$CODEOWNERS_PATH" ] && [ "$INCLUDE_CODEOWNERS" == "true" ]; then
-  CODEOWNERS_HANDLES="$(codeowners_names || true)"
+  fetch_codeowners || true
   if [ -z "$CODEOWNERS_HANDLES" ]; then
     echo "::error::No names returned from codeowners"
     exit 1
   fi
-  CODEOWNERS_PATH=".github/CODEOWNERS"
 fi
 
 # Log and summarize which CODEOWNERS file, handles and why

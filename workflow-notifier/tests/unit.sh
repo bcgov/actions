@@ -191,6 +191,18 @@ if [[ "$*" == *"/pulls/"*"/files"* ]]; then
   exit 0
 fi
 
+if [[ "$*" == *"/contents/"* ]] && [ -n "${MOCK_CODEOWNERS_API_PATH:-}" ]; then
+  if [ "${MOCK_CODEOWNERS_API_EMPTY_FIRST:-}" = "1" ] && [[ "$*" == *"/contents/.github/CODEOWNERS"* ]]; then
+    exit 0
+  fi
+  if [[ "$*" == *"/contents/${MOCK_CODEOWNERS_API_PATH}"* ]]; then
+    printf '%s\n' "${MOCK_CODEOWNERS_API_BODY-* @apiowner}"
+    exit 0
+  fi
+  echo "HTTP 404: Not Found" >&2
+  exit 1
+fi
+
 # Fallback for unexpected calls
 echo "mock-gh: $*" >&2
 exit 1
@@ -1086,6 +1098,56 @@ test_notify_users_rejects_bad_entries() {
   done
 }
 
+test_api_fallback_search_order() {
+  local dir="${TMP_DIR}/api_empty"
+  mkdir -p "$dir"
+  local out rc
+  for path in ".github/CODEOWNERS" "CODEOWNERS" "docs/CODEOWNERS" ".github/codeowners"; do
+    out=$(run_action "$dir" \
+      INPUT_TITLE="API fallback ${path}" \
+      INPUT_TOKEN="dummy-token" \
+      INPUT_DRY_RUN="true" \
+      INPUT_NOTIFY_AUTHOR="false" \
+      INPUT_NOTIFY_CODEOWNERS="always" \
+      MOCK_CODEOWNERS_API_PATH="$path" \
+      MOCK_CODEOWNERS_API_BODY="* @api-alice @bcgov/team-x" \
+      GITHUB_REPOSITORY="bcgov/actions" \
+      GITHUB_SHA="abc123")
+    assert_contains "$out" "CODEOWNERS: ${path}, mode=all" "api fallback: finds ${path}"
+    assert_contains "$out" "Assignees: api-alice" "api fallback: assigns users from ${path}"
+    assert_contains "$out" "CODEOWNERS teams skipped" "api fallback: logs skipped teams from ${path}"
+  done
+
+  rc=0
+  out=$(run_action "$dir" \
+    INPUT_TITLE="API fallback empty higher priority" \
+    INPUT_TOKEN="dummy-token" \
+    INPUT_DRY_RUN="true" \
+    INPUT_NOTIFY_AUTHOR="false" \
+    INPUT_NOTIFY_CODEOWNERS="always" \
+    MOCK_CODEOWNERS_API_EMPTY_FIRST="1" \
+    MOCK_CODEOWNERS_API_PATH="CODEOWNERS" \
+    MOCK_CODEOWNERS_API_BODY="* @lower-owner" \
+    GITHUB_REPOSITORY="bcgov/actions" \
+    GITHUB_SHA="abc123" 2>&1) || rc=$?
+  assert_eq "$rc" "1" "api fallback: empty higher-priority file stops fallback"
+  assert_not_contains "$out" "lower-owner" "api fallback: does not fall through to lower-priority CODEOWNERS"
+  assert_contains "$out" "::error::No names returned from codeowners" "api fallback: empty higher-priority file prints exact error"
+
+  rc=0
+  out=$(run_action "$dir" \
+    INPUT_TITLE="API fallback missing" \
+    INPUT_TOKEN="dummy-token" \
+    INPUT_DRY_RUN="true" \
+    INPUT_NOTIFY_AUTHOR="false" \
+    INPUT_NOTIFY_CODEOWNERS="always" \
+    MOCK_CODEOWNERS_API_PATH="nonexistent" \
+    GITHUB_REPOSITORY="bcgov/actions" \
+    GITHUB_SHA="abc123" 2>&1) || rc=$?
+  assert_eq "$rc" "1" "api fallback: exits 1 when no search-order path exists"
+  assert_contains "$out" "::error::No names returned from codeowners" "api fallback: prints exact missing error"
+}
+
 test_notify_users_rejects_bad_entries
 test_notify_users_users_and_teams
 test_notify_users_fallback_with_author_skips_codeowners
@@ -1093,6 +1155,7 @@ test_notify_users_never_needs_no_codeowners
 test_notify_users_ten_assignee_limit
 test_notify_users_create_body_mentions_teams
 test_notify_users_comment_mentions_teams
+test_api_fallback_search_order
 
 echo ""
 echo "Unit tests finished: ${passed} passed, ${failed} failed."
