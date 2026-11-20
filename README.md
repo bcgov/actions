@@ -149,4 +149,6 @@ Publish from the [Releases page](../../releases/new); automation does the rest. 
 - **First release:** delete the old draft `v0.11.0` on the Releases page before the first cut, so nobody publishes it by habit, then publish a fresh `v0.11.0`.
 - **Failed run:** a release whose run failed (no `dist/`, or an orphan `vX.Y.Z-src`) is not reused. Fix the cause and publish the next patch version ([ADR 0001](./docs/adr/0001-double-tag-release.md)).
 
+See [docs/MAINTAINING.md](./docs/MAINTAINING.md) for rollout order and common pitfalls, and [docs/adr/](./docs/adr/) for architecture decision records.
+
 Usage examples use `@vX.Y.Z` — a placeholder that will not resolve — so copy-paste fails until you pick a real tag. All actions are versioned and released together as a single suite.
