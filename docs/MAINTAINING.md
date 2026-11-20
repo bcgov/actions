@@ -7,7 +7,7 @@ Guide for repository maintainers covering releases, downstream rollout, and comm
 All actions in this repository share one SemVer release tag (`vX.Y.Z`). Never push release tags (`vX.Y.Z` or `vX.Y.Z-src`) by hand; [`.github/workflows/release.yml`](../.github/workflows/release.yml) builds and tags the `ncc` bundle automatically ([ADR 0001](adr/0001-double-tag-release.md)).
 
 1. Confirm `main` is green (`CodeQL` and the PR checks on the last merged PR).
-2. Open the [New Release page](../../releases/new).
+2. Open the [New Release page](../../../releases/new).
 3. Enter a new `vX.Y.Z` tag targeting `main` (tip of `main`) and publish the release.
 4. Wait for the **Release** workflow run to finish before pinning or announcing the tag:
    - It tags the `main` commit permanently as `vX.Y.Z-src`.
@@ -23,7 +23,7 @@ Rollout order across the suite:
 
 1. **Release `bcgov/actions`** (`vX.Y.Z` workflow completes and `vX.Y.Z` points to the `dist/` commit).
 2. **Update `bcgov/actions-openshift`**: bump all `bcgov/actions/*` pins (in `deployer`, `crunchy`, `oc-runner`, `.github/workflows/`) to the new `bcgov/actions` release SHA, then release `bcgov/actions-openshift`.
-3. **Canaries and Renovate consumers**: Renovate opens SHA-pin bump PRs (using `bcgov/renovate-config`) for canary repositories first, followed by remaining adopters once canary runs stay green.
+3. **Canaries and Renovate consumers**: Update canary repositories to both suite releases first and verify their runs before rolling out to remaining adopters. Renovate opens SHA-pin bump PRs (using `bcgov/renovate-config`), but maintainers coordinate that rollout order manually—the shared preset does not gate updates on canary results.
 
 ## Common pitfalls
 

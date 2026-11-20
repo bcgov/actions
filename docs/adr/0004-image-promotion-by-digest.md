@@ -20,4 +20,4 @@ The legacy promotion pattern resolved a pull request number (`get-pr`), tagged i
 ## Consequences
 
 - Every deployment is tied to an immutable image digest and traceable git revision.
-- Unbuilt commits (such as merged external forks that skipped registry push) fail fast rather than deploying stale or missing tags and are resolved by triggering a same-repo build.
+- Resolution fails (`exit 1`) only when no matching image is found for a requested package within the searched ancestry. An unbuilt `HEAD` (such as a merged external fork that skipped registry push) can still resolve an older ancestor's image without verifying package changes, so build missing package images before promotion when that fallback would omit changes.

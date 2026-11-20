@@ -20,5 +20,5 @@ GitHub Actions and reusable workflows for `bcgov` were previously spread across 
 ## Consequences
 
 - Shared helpers (`shared/inputs.js`, `input-enforcer`) and CI standards apply across all suite actions at once.
-- A breaking change to any action requires a suite major bump (or an explicit deprecation bridge such as [ADR 0002](0002-restore-get-pr-until-v2.md)).
+- A breaking change to any action requires a suite major bump (a minor bump while pre-1.0), unless compatibility is preserved through an explicit deprecation bridge such as [ADR 0002](0002-restore-get-pr-until-v2.md).
 - `bcgov/actions` releases precede `bcgov/actions-openshift` pin bumps so OpenShift actions stay aligned on one `bcgov/actions` release SHA.
