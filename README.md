@@ -24,6 +24,15 @@ Checks git diff for file and path changes to conditionally trigger workflow jobs
   uses: bcgov/actions/diff-triggers@vX.Y.Z # Replace with latest release tag
 ```
 
+### [get-pr](./get-pr/) (deprecated)
+Drop-in replacement for `bcgov/action-get-pr`: resolves the PR number for PRs, merge queues, pushes, and releases. Deprecated; removed in `v2.0.0`. Use `image-tracker` without `packages` instead ([ADR 0002](./docs/adr/0002-restore-get-pr-until-v2.md)).
+
+```yaml
+- name: Get PR Number
+  id: pr
+  uses: bcgov/actions/get-pr@vX.Y.Z # Replace with latest release tag
+```
+
 ### [ghcr-cleanup](./ghcr-cleanup/)
 Opt-in deletion of closed-PR and unreferenced untagged GHCR versions of the repository's own packages. Dry-run by default.
 
@@ -113,6 +122,7 @@ In alignment with security best practices, you should always declare minimum exp
 Refer to each action's directory for its exact minimum required permissions block:
 - **[builder](./builder/)**: `contents: read`, `packages: write`, plus `id-token: write` and `attestations: write` (optional, for build provenance attestations)
 - **[diff-triggers](./diff-triggers/)**: `contents: read`
+- **[get-pr](./get-pr/)**: `contents: read`, `pull-requests: read`
 - **[ghcr-cleanup](./ghcr-cleanup/)**: `contents: read`, `packages: write`, `pull-requests: read` (`packages: read` for a dry run)
 - **[image-tracker](./image-tracker/)**: `contents: read`, `pull-requests: read`, plus `packages: read` when `packages` is set
 - **[pr-description-add](./pr-description-add/)**: `pull-requests: write`
