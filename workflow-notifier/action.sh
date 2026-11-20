@@ -234,7 +234,7 @@ fetch_codeowners() {
   local path raw selected
   while IFS= read -r path; do
     if raw="$(GH_TOKEN="${INPUT_TOKEN}" gh api -H "Accept: application/vnd.github.raw" \
-      "/repos/${GITHUB_REPOSITORY:-}/contents/${path}${GITHUB_SHA:+?ref=${GITHUB_SHA}}" 2>/dev/null)" && [ -n "$raw" ]; then
+      "/repos/${GITHUB_REPOSITORY:-}/contents/${path}${GITHUB_SHA:+?ref=${GITHUB_SHA}}" 2>/dev/null)"; then
       selected="$(printf '%s\n' "$raw" | node "$CODEOWNERS_JS" /dev/stdin all)"
       CODEOWNERS_PATH="$path"
       CODEOWNERS_HANDLES="$(sed -n 's/^users=//p' <<< "$selected")"

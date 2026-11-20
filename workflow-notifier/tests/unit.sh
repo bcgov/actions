@@ -192,8 +192,11 @@ if [[ "$*" == *"/pulls/"*"/files"* ]]; then
 fi
 
 if [[ "$*" == *"/contents/"* ]] && [ -n "${MOCK_CODEOWNERS_API_PATH:-}" ]; then
+  if [ "${MOCK_CODEOWNERS_API_EMPTY_FIRST:-}" = "1" ] && [[ "$*" == *"/contents/.github/CODEOWNERS"* ]]; then
+    exit 0
+  fi
   if [[ "$*" == *"/contents/${MOCK_CODEOWNERS_API_PATH}"* ]]; then
-    printf '%s\n' "${MOCK_CODEOWNERS_API_BODY:-* @apiowner}"
+    printf '%s\n' "${MOCK_CODEOWNERS_API_BODY-* @apiowner}"
     exit 0
   fi
   echo "HTTP 404: Not Found" >&2
@@ -1114,6 +1117,22 @@ test_api_fallback_search_order() {
     assert_contains "$out" "Assignees: api-alice" "api fallback: assigns users from ${path}"
     assert_contains "$out" "CODEOWNERS teams skipped" "api fallback: logs skipped teams from ${path}"
   done
+
+  rc=0
+  out=$(run_action "$dir" \
+    INPUT_TITLE="API fallback empty higher priority" \
+    INPUT_TOKEN="dummy-token" \
+    INPUT_DRY_RUN="true" \
+    INPUT_NOTIFY_AUTHOR="false" \
+    INPUT_NOTIFY_CODEOWNERS="always" \
+    MOCK_CODEOWNERS_API_EMPTY_FIRST="1" \
+    MOCK_CODEOWNERS_API_PATH="CODEOWNERS" \
+    MOCK_CODEOWNERS_API_BODY="* @lower-owner" \
+    GITHUB_REPOSITORY="bcgov/actions" \
+    GITHUB_SHA="abc123" 2>&1) || rc=$?
+  assert_eq "$rc" "1" "api fallback: empty higher-priority file stops fallback"
+  assert_not_contains "$out" "lower-owner" "api fallback: does not fall through to lower-priority CODEOWNERS"
+  assert_contains "$out" "::error::No names returned from codeowners" "api fallback: empty higher-priority file prints exact error"
 
   rc=0
   out=$(run_action "$dir" \
