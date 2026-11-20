@@ -13,7 +13,7 @@ permissions:
   pull-requests: read  # Optional: required to resolve author from pull request metadata on merge commits
 ```
 
-The action reads `CODEOWNERS` from the **job workspace** first. When none is there and CODEOWNERS is required (`always`, or `fallback` when no author or merger was found), it reads the `@user` names from `.github/CODEOWNERS` at the run's commit through the contents API (needs `contents: read`; every rule, so `codeowners_match` only applies to a workspace file), so no prior `actions/checkout` is required. If that returns no names, the job fails with `No names returned from codeowners`. With `fallback` and an author or merger found, the lookup is skipped. `never` also skips the lookup.
+The action reads `CODEOWNERS` from the **job workspace** first. When none is there and CODEOWNERS is required (`always`, or `fallback` when no author or merger was found), it reads the `@user` names from the first matching path in search order (`.github/CODEOWNERS`, `CODEOWNERS`, `docs/CODEOWNERS`, `.github/codeowners`) at the run's commit through the contents API (needs `contents: read`; every rule, so `codeowners_match` only applies to a workspace file), so no prior `actions/checkout` is required. If that returns no names, the job fails with `No names returned from codeowners`. With `fallback` and an author or merger found, the lookup is skipped. `never` also skips the lookup.
 
 ## Inputs
 
