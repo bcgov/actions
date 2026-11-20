@@ -44,6 +44,11 @@ jobs:
               - 'shared/**'
               - 'input-enforcer/**'
               - '!*.md'
+            get-pr:
+              - 'get-pr/**'
+              - 'shared/**'
+              - 'input-enforcer/**'
+              - '!*.md'
             ghcr-cleanup:
               - 'ghcr-cleanup/**'
               - 'shared/**'
@@ -1668,6 +1673,59 @@ jobs:
           echo "✅ Semgrep: clean passes, test paths excluded, semantic rules match, semgrep_fail fails, off by default"
 
   # ─── GET PR ────────────────────────────────────────────────────────────────
+  test-get-pr:
+    name: Test Get PR
+    needs: [filter]
+    if: contains(fromJSON(needs.filter.outputs.changes), 'get-pr') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      pull-requests: read
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Run Unit Tests
+        run: node --test get-pr/tests/unit.test.js
+
+      - name: Get PR number
+        id: pr
+        uses: $/get-pr
+
+      - name: Verify PR number
+        env:
+          GOT: ${{ steps.pr.outputs.pr }}
+          WANT: ${{ github.event.pull_request.number }}
+        run: |
+          [ "${GOT}" = "${WANT}" ] || { echo "::error::get-pr returned '${GOT}', expected '${WANT}'"; exit 1; }
+          echo "✅ get-pr returned PR ${GOT}"
+
+      # bcgov/action-get-pr callers pass github_token and debug. Replay a push of
+      # a known squash merge so the API lookup runs with github_token.
+      - name: Write push event fixture
+        run: echo '{"after":"bfbe2bbff1595a92d7791fd478a2601cbde391c4"}' > "${RUNNER_TEMP}/push-event.json"
+
+      - name: Get PR number (push, github_token)
+        id: push
+        uses: $/get-pr
+        env:
+          TEST_EVENT_NAME: push
+          TEST_EVENT_PATH: ${{ runner.temp }}/push-event.json
+        with:
+          debug: true
+          github_token: ${{ github.token }}
+
+      - name: Verify push PR number
+        env:
+          GOT: ${{ steps.push.outputs.pr }}
+        run: |
+          [ "${GOT}" = "370" ] || { echo "::error::get-pr returned '${GOT}' for the push replay, expected '370'"; exit 1; }
+          echo "✅ get-pr returned PR ${GOT} for the push replay"
 
   # ─── UNKNOWN INPUTS ────────────────────────────────────────────────────────
   # GitHub only warns on undeclared `with:` keys. These steps pass undeclared
@@ -1755,6 +1813,7 @@ jobs:
       - test-scan-url-live
       - test-scan-url-matrix
       - test-diff-triggers
+      - test-get-pr
       - test-ghcr-cleanup
       - test-image-tracker
       - test-pr-description-add
