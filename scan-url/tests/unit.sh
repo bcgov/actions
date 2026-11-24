@@ -60,5 +60,42 @@ assert_eq "$(ZAP_ENABLED=false verify_rc skipped failure nuclei-results.jsonl)" 
 ACTION_YML="${SCRIPT_DIR}/../action.yml"
 assert_eq "$(grep -c 'allow_issue_writing: false' "$ACTION_YML")" "1" "action.yml disables duplicate ZAP issue writing"
 
+# nuclei-sarif.sh: fixes executionSuccessful=false and creates empty SARIF on clean scan
+NUCLEI_SARIF="${SCRIPT_DIR}/../nuclei-sarif.sh"
+run_nuclei_sarif() {
+  (cd "$WORK" && bash "$NUCLEI_SARIF")
+}
+
+rm -f "$WORK"/*
+cat > "$WORK/nuclei-results.sarif" <<'EOF'
+{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"Nuclei"}},"invocations":[{"commandLine":"nuclei","executionSuccessful":false}],"results":[{"ruleId":"r1"}]}]}
+EOF
+run_nuclei_sarif
+assert_eq "$(jq -r '.runs[0].invocations[0].executionSuccessful' "$WORK/nuclei-results.sarif")" "true" "nuclei-sarif: flips executionSuccessful false to true"
+assert_eq "$(jq -r '.runs[0].results[0].ruleId' "$WORK/nuclei-results.sarif")" "r1" "nuclei-sarif: preserves results"
+
+rm -f "$WORK"/*
+cat > "$WORK/nuclei-results.sarif" <<'EOF'
+{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"Nuclei"}},"invocations":[{"executionSuccessful":true}],"results":[]}]}
+EOF
+run_nuclei_sarif
+assert_eq "$(jq -r '.runs[0].invocations[0].executionSuccessful' "$WORK/nuclei-results.sarif")" "true" "nuclei-sarif: keeps executionSuccessful true unchanged"
+
+rm -f "$WORK"/*
+cat > "$WORK/nuclei-results.sarif" <<'EOF'
+{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"Nuclei"}},"results":[]}]}
+EOF
+run_nuclei_sarif
+assert_eq "$(jq -c '.runs[0] | has("invocations")' "$WORK/nuclei-results.sarif")" "false" "nuclei-sarif: leaves SARIF without invocations unchanged"
+
+rm -f "$WORK"/*
+touch "$WORK/nuclei-results.jsonl"
+run_nuclei_sarif
+assert_eq "$(jq -c '.runs[0].results' "$WORK/nuclei-results.sarif")" "[]" "nuclei-sarif: creates empty SARIF on clean scan"
+
+rm -f "$WORK"/*
+run_nuclei_sarif
+assert_eq "$([[ -f "$WORK/nuclei-results.sarif" ]] && echo present || echo missing)" "missing" "nuclei-sarif: no files means no SARIF"
+
 echo "Passed: $passed, Failed: $failed"
 [[ "$failed" -eq 0 ]]
