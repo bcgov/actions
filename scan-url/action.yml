@@ -103,14 +103,12 @@ runs:
         sarif_file: zap-results.sarif
         category: zap-${{ steps.preflight.outputs.slug }}
 
-    # Nuclei writes SARIF only when it has findings; an empty run closes stale alerts
-    - name: Empty Nuclei SARIF for a Clean Scan
+    # Nuclei writes SARIF only when it has findings; an empty run closes stale alerts.
+    # Nuclei <= v3.11.1 also omits ExecutionSuccessful on the invocation, serializing false.
+    - name: Prepare Nuclei SARIF
       if: ${{ !cancelled() && steps.preflight.outputs.nuclei == 'true' && steps.nuclei.outcome == 'success' }}
       shell: bash
-      run: |
-        if [[ -f nuclei-results.jsonl && ! -f nuclei-results.sarif ]]; then
-          echo '{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"Nuclei"}},"results":[]}]}' > nuclei-results.sarif
-        fi
+      run: bash "${GITHUB_ACTION_PATH}/nuclei-sarif.sh"
 
     - name: Upload Nuclei SARIF
       if: ${{ !cancelled() && steps.preflight.outputs.nuclei == 'true' && steps.preflight.outcome == 'success' && hashFiles('nuclei-results.sarif') != '' }}
