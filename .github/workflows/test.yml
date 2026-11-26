@@ -1409,7 +1409,7 @@ jobs:
           - name: java-basic
             working_directory: backend
             language: java
-            java_version: '17'
+            java_version: '21'
             triggers: ''
             expected_triggered: true
             repository: bcgov/nr-forest-client
