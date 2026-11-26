@@ -39,7 +39,7 @@ minutes() {
   printf -v "$name" '%s' "$value"
 }
 
-list nuclei_tags '^[A-Za-z0-9][A-Za-z0-9_.-]*$' 'tag names (letters, digits, . _ -)'
+list nuclei_tags '^[A-Za-z0-9_.][A-Za-z0-9_.-]*$' 'tag names (letters, digits, . _ -)'
 list nuclei_templates '^[A-Za-z0-9_./][A-Za-z0-9_./-]*$' 'template or directory paths (letters, digits, . _ / -)'
 minutes zap_spider_minutes "${INPUT_ZAP_SPIDER_MINUTES:-}"
 minutes zap_scan_minutes "${INPUT_ZAP_SCAN_MINUTES:-}"
