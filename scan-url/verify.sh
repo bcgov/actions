@@ -21,9 +21,11 @@ check Nuclei "$NUCLEI_ENABLED" "$NUCLEI_OUTCOME" nuclei-results.jsonl
 
 # Nuclei drops a host:port after timeouts ("unresponsive permanently" or
 # "unresponsive N times"), skips its remaining templates and still exits 0.
-# The scanned port failing means the scan is incomplete; another port (a
-# template probing e.g. :8443) only warns.
+# The scanned host:port (or an IP on that port, when Nuclei logs the resolved
+# address) failing means the scan is incomplete. Another port or host (a
+# template probing :8443 or a third-party site) only warns.
 if [[ "$NUCLEI_ENABLED" == true && -f nuclei.log ]]; then
+  host="$(sed -nE 's#^[a-zA-Z]+://([^/:]+).*#\1#p' <<<"${URL:-}" | tr '[:upper:]' '[:lower:]')"
   port="$(sed -nE 's#^[a-zA-Z]+://[^/:]+:([0-9]+).*#\1#p' <<<"${URL:-}")"
   [[ -n "$port" ]] || { [[ "${URL:-}" == http://* ]] && port=80 || port=443; }
   skipped="$(sed 's/\x1b\[[0-9;]*m//g' nuclei.log \
@@ -31,12 +33,12 @@ if [[ "$NUCLEI_ENABLED" == true && -f nuclei.log ]]; then
     | awk '!seen[$2]++' || true)"
   while IFS= read -r line; do
     [[ -n "$line" ]] || continue
-    address="$(cut -d' ' -f2 <<<"$line")"
-    if [[ "$address" == *":${port}" ]]; then
+    address="$(cut -d' ' -f2 <<<"$line" | tr '[:upper:]' '[:lower:]')"
+    if [[ "$address" == "${host}:${port}" || "$address" =~ ^[0-9.]+:${port}$ ]]; then
       echo "::error::Nuclei did not complete: ${line}; its remaining templates did not run. Lower nuclei_rate_limit or nuclei_concurrency, or raise nuclei_timeout"
       rc=1
     else
-      echo "::warning::Nuclei ${line}; port ${port} was still scanned"
+      echo "::warning::Nuclei ${line}; ${host}:${port} was still scanned"
     fi
   done <<<"$skipped"
 fi
