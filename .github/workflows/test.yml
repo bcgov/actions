@@ -1035,6 +1035,43 @@ jobs:
             exit 1
           fi
 
+      # Azure and other custom runners (#383): unknown without runner_labels, accepted with it.
+      - name: Seed custom runner workflow
+        run: |
+          cat > .github/workflows/broken.yml <<'EOF'
+          name: azure
+          on: push
+          jobs:
+            deploy:
+              runs-on: bcgov-azure-lz-live-github-managed-runner
+              steps:
+                - run: echo ok
+          EOF
+
+      - name: Custom runner label should fail without runner_labels
+        id: lint_runner_default
+        continue-on-error: true
+        uses: $/pr-validate
+
+      - name: Assert custom runner label failed
+        env:
+          OUTCOME: ${{ steps.lint_runner_default.outcome }}
+        run: |
+          if [ "$OUTCOME" != "failure" ]; then
+            echo "::error::pr-validate accepted an unknown runner label without runner_labels"
+            exit 1
+          fi
+          if ! grep -q '"bcgov-azure-lz-live-github-managed-runner" is unknown' "$RUNNER_TEMP/pr-validate-actionlint-out"; then
+            echo "::error::actionlint did not report the unknown runner label"
+            exit 1
+          fi
+
+      - name: Custom runner label passes with runner_labels
+        uses: $/pr-validate
+        with:
+          runner_labels: |
+            bcgov-azure-lz-live-github-managed-runner
+
   # ─── WORKFLOW RESULTS ───────────────────────────────────────────────────────
   test-workflow-results:
     name: Test Workflow Results
