@@ -82,6 +82,13 @@ assert_eq "$(skipped_rc http://scan-url.example nuclei-clean.txt)" "0" "nuclei-s
 assert_eq "$(grep -c '^::warning::Nuclei Skipped scan-url.example:5814' "$WORK/skipped.out")" "1" "nuclei-skipped: another port's skip only warns"
 assert_eq "$(grep -c '^::error::' "$WORK/skipped.out")" "0" "nuclei-skipped: normal log has no errors"
 assert_eq "$(skipped_rc http://scan-url.example:5814 nuclei-clean.txt)" "1" "nuclei-skipped: explicit URL port is the one checked"
+APP=https://app.example.gov.bc.ca
+assert_eq "$(skipped_rc "$APP" nuclei-unresponsive-other-ip.txt)" "0" "nuclei-skipped: third-party IPv4/IPv6 on the scanned port only warns"
+assert_eq "$(grep -c '^::warning::' "$WORK/skipped.out")" "2" "nuclei-skipped: one warning per third-party IP"
+assert_eq "$(skipped_rc "$APP" nuclei-unresponsive-target-ip.txt)" "1" "nuclei-skipped: IP skip whose line names the scanned host fails"
+assert_eq "$(grep -c '^::error::Nuclei did not complete: Skipped 198.51.100.7:443' "$WORK/skipped.out")" "1" "nuclei-skipped: error names the IP key"
+assert_eq "$(grep -c '^::warning::Nuclei Skipped \[2001:db8::7\]:443' "$WORK/skipped.out")" "1" "nuclei-skipped: IPv6 skip not naming the host only warns"
+assert_eq "$(skipped_rc http://app.example.gov.bc.ca nuclei-unresponsive-target-ip.txt)" "0" "nuclei-skipped: IP skip on another port only warns"
 rm -f "$WORK"/*
 assert_eq "$( (cd "$WORK" && URL="$QS" bash "$SKIPPED" >/dev/null) && echo 0 || echo 1)" "0" "nuclei-skipped: no nuclei.log passes"
 assert_eq "$(grep -cF 'nuclei-skipped.sh"' "${SCRIPT_DIR}/../action.yml")" "1" "action.yml runs nuclei-skipped.sh in the Nuclei Scan step"
