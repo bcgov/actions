@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Unit tests for zap-sarif.jq (ZAP JSON -> SARIF), verify.sh, nuclei-skipped.sh and nuclei-sarif.sh. No network.
+# Unit tests for zap-sarif.jq (ZAP JSON -> SARIF), verify.sh, nuclei-skipped.sh, options.sh and nuclei-sarif.sh. No network.
 
 set -euo pipefail
 
@@ -95,6 +95,52 @@ assert_eq "$(grep -cF 'nuclei-skipped.sh"' "${SCRIPT_DIR}/../action.yml")" "1" "
 
 ACTION_YML="${SCRIPT_DIR}/../action.yml"
 assert_eq "$(grep -c 'allow_issue_writing: false' "$ACTION_YML")" "1" "action.yml disables duplicate ZAP issue writing"
+
+# options.sh: optional scan-depth inputs. Unset adds no scanner flags; bad values fail.
+OPTIONS="${SCRIPT_DIR}/../options.sh"
+SHARED="${SCRIPT_DIR}/../../shared/inputs.js"
+options() {
+  # Args: tags templates spider_minutes scan_minutes; prints outputs, then rc=<exit>
+  local rc=0
+  INPUT_NUCLEI_TAGS="$1" INPUT_NUCLEI_TEMPLATES="$2" INPUT_ZAP_SPIDER_MINUTES="$3" \
+    INPUT_ZAP_SCAN_MINUTES="$4" SHARED_INPUTS="$SHARED" bash "$OPTIONS" 2>/dev/null || rc=$?
+  echo "rc=${rc}"
+}
+out() { grep "^$1=" <<<"$2" | cut -d= -f2-; }
+o="$(options '' '' '' '')"
+assert_eq "$(out rc "$o")" "0" "options: all unset passes"
+assert_eq "$(grep -c '^[a-z_]*=$' <<<"$o")" "5" "options: unset prints only empty values (no scanner flags)"
+o="$(options tech '' '' '')"
+assert_eq "$(out nuclei_tags "$o")" "tech" "options: single tag"
+o="$(options _internal '' '' '')"
+assert_eq "$(out nuclei_tags "$o")" "_internal" "options: tag may start with _ or ."
+o="$(options $'tech\n\ncve\n' '' '' '')"
+assert_eq "$(out nuclei_tags "$o")" "tech,cve" "options: tags one per line, blank lines skipped, comma-joined for -tags"
+o="$(options '' $'http/technologies/\ndns/caa-fingerprint.yaml' '' '')"
+assert_eq "$(out nuclei_templates "$o")" "http/technologies/,dns/caa-fingerprint.yaml" "options: templates one per line, comma-joined for -t"
+o="$(options '' '' 1 5)"
+assert_eq "$(out zap_cmd_options "$o")" '-m 1 -z "-config scanner.maxScanDurationInMins=5"' "options: ZAP spider and active scan caps"
+o="$(options '' '' 2 '')"
+assert_eq "$(out zap_cmd_options "$o")" "-m 2" "options: ZAP spider cap only"
+o="$(options '' '' '' 9999)"
+assert_eq "$(out zap_cmd_options "$o")" '-z "-config scanner.maxScanDurationInMins=9999"' "options: ZAP active scan cap only"
+assert_eq "$(out rc "$(options 'tech, cve' '' '' '')")" "1" "options: comma-separated tags fail (one per line)"
+assert_eq "$(out rc "$(options 'tech;id' '' '' '')")" "1" "options: tag with ; fails"
+assert_eq "$(out rc "$(options '-silent' '' '' '')")" "1" "options: tag that looks like a flag fails"
+# shellcheck disable=SC2016 # literal shell syntax is the input under test
+assert_eq "$(out rc "$(options '$(id)' '' '' '')")" "1" "options: tag with shell syntax fails"
+assert_eq "$(out rc "$(options '' '-u' '' '')")" "1" "options: template that looks like a flag fails"
+# shellcheck disable=SC2016 # literal shell syntax is the input under test
+assert_eq "$(out rc "$(options '' 'a`id`' '' '')")" "1" "options: template with backticks fails"
+for bad in 0 01 10000 -1 1.5 '5;id' '5 -z x' abc; do
+  assert_eq "$(out rc "$(options '' '' "$bad" '')")" "1" "options: zap_spider_minutes '${bad}' fails"
+  assert_eq "$(out rc "$(options '' '' '' "$bad")")" "1" "options: zap_scan_minutes '${bad}' fails"
+done
+# shellcheck disable=SC2016 # literal action.yml text, not shell
+assert_eq "$(grep -c 'cmd_options: ${{ steps.preflight.outputs.zap_cmd_options }}' "$ACTION_YML")" "1" "action.yml passes ZAP caps as cmd_options"
+# shellcheck disable=SC2016 # literal action.yml text, not shell
+assert_eq "$(grep -cE '\[\[ -z "\$(TAGS|TEMPLATES)" \]\] \|\| args\+=\(-(tags|t) "\$(TAGS|TEMPLATES)"\)' "$ACTION_YML")" "2" "action.yml adds -tags/-t as arguments only when set"
+assert_eq "$(grep -cE 'inputs\.(nuclei_tags|nuclei_templates|zap_spider_minutes|zap_scan_minutes) \}\}' "$ACTION_YML")" "4" "action.yml reads the new inputs only through env"
 
 # nuclei-sarif.sh: fixes executionSuccessful=false and creates empty SARIF on clean scan
 NUCLEI_SARIF="${SCRIPT_DIR}/../nuclei-sarif.sh"
