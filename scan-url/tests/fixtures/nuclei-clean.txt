@@ -1,0 +1,21 @@
+
+                     __     _
+   ____  __  _______/ /__  (_)
+  / __ \/ / / / ___/ / _ \/ /
+ / / / / /_/ / /__/ /  __/ /
+/_/ /_/\__,_/\___/_/\___/_/   v3.11.1
+
+		projectdiscovery.io
+
+[[34mINF[0m] Current nuclei version: v3.11.1 ([93munknown[0m) - remove '-duc' flag to enable update checks
+[[34mINF[0m] Current nuclei-templates version: v10.5.2 ([93munknown[0m) - remove '-duc' flag to enable update checks
+[[34mINF[0m] New templates added in latest release: 121
+[[34mINF[0m] Templates loaded for current scan: 2729
+[[34mINF[0m] Executing 2729 signed templates from projectdiscovery/nuclei-templates
+[[34mINF[0m] Targets loaded for current scan: 1
+[[34mINF[0m] Templates clustered: 1103 (Reduced 1048 Requests)
+[[34mINF[0m] Skipped scan-url.example:5814 from target list as found unresponsive permanently: Get "https://scan-url.example:5814/autopass": cause="port closed or filtered" address=scan-url.example:5814 chain="connection refused"
+[[92mtech-detect[0m:[1;92msimplehttp[0m] [[94mhttp[0m] [[34minfo[0m] http://scan-url.example
+[[92mtech-detect[0m:[1;92mpython[0m] [[94mhttp[0m] [[34minfo[0m] http://scan-url.example
+[[34mINF[0m] Scan completed in 1m. 2 matches found.
+[[34mINF[0m] HTTP connections: 4674 total, 4674 new, 0 reused (0.0%)

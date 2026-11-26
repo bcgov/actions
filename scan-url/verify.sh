@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Findings never fail the action; a failed scanner step or missing report does.
+# Findings never fail the action; a failed scanner step, a missing report, or
+# Nuclei skipping an unresponsive target does.
 # Env: ZAP_ENABLED, NUCLEI_ENABLED ('true'/'false'), ZAP_OUTCOME, NUCLEI_OUTCOME
-# (step outcomes). Disabled scanners are not checked. Reads reports from the cwd.
+# (step outcomes), URL (the scanned URL). Disabled scanners are not checked.
+# Reads reports and nuclei.log (the Nuclei Scan step's output) from the cwd.
 
 set -euo pipefail
 
@@ -16,4 +18,26 @@ check() {
 }
 check ZAP "$ZAP_ENABLED" "$ZAP_OUTCOME" report_json.json
 check Nuclei "$NUCLEI_ENABLED" "$NUCLEI_OUTCOME" nuclei-results.jsonl
+
+# Nuclei drops a host:port after timeouts ("unresponsive permanently" or
+# "unresponsive N times"), skips its remaining templates and still exits 0.
+# The scanned port failing means the scan is incomplete; another port (a
+# template probing e.g. :8443) only warns.
+if [[ "$NUCLEI_ENABLED" == true && -f nuclei.log ]]; then
+  port="$(sed -nE 's#^[a-zA-Z]+://[^/:]+:([0-9]+).*#\1#p' <<<"${URL:-}")"
+  [[ -n "$port" ]] || { [[ "${URL:-}" == http://* ]] && port=80 || port=443; }
+  skipped="$(sed 's/\x1b\[[0-9;]*m//g' nuclei.log \
+    | grep -oE 'Skipped [^ ]+ from target list as found unresponsive( permanently| [0-9]+ times)' \
+    | sort -u || true)"
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    address="$(cut -d' ' -f2 <<<"$line")"
+    if [[ "$address" == *":${port}" ]]; then
+      echo "::error::Nuclei did not complete: ${line}; its remaining templates did not run. Lower nuclei_rate_limit or nuclei_concurrency, or raise nuclei_timeout"
+      rc=1
+    else
+      echo "::warning::Nuclei ${line}; port ${port} was still scanned"
+    fi
+  done <<<"$skipped"
+fi
 exit "$rc"

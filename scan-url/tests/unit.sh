@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Unit tests for zap-sarif.jq (ZAP JSON -> SARIF) and verify.sh. No network.
+# Unit tests for zap-sarif.jq (ZAP JSON -> SARIF), verify.sh and nuclei-sarif.sh. No network.
 
 set -euo pipefail
 
@@ -56,6 +56,30 @@ assert_eq "$(verify_rc success success report_json.json)" "1" "verify: Nuclei JS
 assert_eq "$(NUCLEI_ENABLED=false verify_rc success skipped report_json.json)" "0" "verify: Nuclei disabled is not checked"
 assert_eq "$(ZAP_ENABLED=false verify_rc skipped success nuclei-results.jsonl)" "0" "verify: ZAP disabled is not checked"
 assert_eq "$(ZAP_ENABLED=false verify_rc skipped failure nuclei-results.jsonl)" "1" "verify: enabled Nuclei still checked"
+
+# verify.sh: Nuclei skipping the scanned host:port fails; another port only warns.
+# nuclei-unresponsive-permanently.txt is the Nuclei Scan output from
+# bcgov/quickstart-openshift run 44897163143 (2026-11-21), timestamps removed.
+# The other two are nuclei v3.11.1 runs against local servers (a server that
+# never answers, and python http.server), with 127.0.0.1 renamed scan-url.example.
+FIXTURES="${SCRIPT_DIR}/fixtures"
+verify_log() {
+  local url="$1" log="$2"
+  rm -f "$WORK"/*
+  touch "$WORK/report_json.json" "$WORK/nuclei-results.jsonl"
+  cp "${FIXTURES}/${log}" "$WORK/nuclei.log"
+  (cd "$WORK" && URL="$url" ZAP_ENABLED=true NUCLEI_ENABLED="${NUCLEI_ENABLED:-true}" \
+    ZAP_OUTCOME=success NUCLEI_OUTCOME=success bash "$VERIFY" > "$WORK/verify.out") && echo 0 || echo 1
+}
+QS=https://quickstart-openshift-test.apps.silver.devops.gov.bc.ca
+assert_eq "$(verify_log "$QS" nuclei-unresponsive-permanently.txt)" "1" "verify: Nuclei 'unresponsive permanently' fails"
+assert_eq "$(grep -c '^::error::Nuclei did not complete: Skipped quickstart-openshift-test.apps.silver.devops.gov.bc.ca:443 from target list as found unresponsive permanently' "$WORK/verify.out")" "1" "verify: one error per skipped host:port"
+assert_eq "$(verify_log "${QS}/api" nuclei-unresponsive-permanently.txt)" "1" "verify: URL path still maps to port 443"
+assert_eq "$(verify_log https://scan-url.example nuclei-unresponsive-times.txt)" "1" "verify: Nuclei 'unresponsive N times' fails"
+assert_eq "$(verify_log http://scan-url.example nuclei-clean.txt)" "0" "verify: normal Nuclei log passes"
+assert_eq "$(grep -c '^::warning::Nuclei Skipped scan-url.example:5814' "$WORK/verify.out")" "1" "verify: another port's skip only warns"
+assert_eq "$(verify_log http://scan-url.example:5814 nuclei-clean.txt)" "1" "verify: explicit URL port is the one checked"
+assert_eq "$(NUCLEI_ENABLED=false verify_log "$QS" nuclei-unresponsive-permanently.txt)" "0" "verify: Nuclei disabled ignores nuclei.log"
 
 ACTION_YML="${SCRIPT_DIR}/../action.yml"
 assert_eq "$(grep -c 'allow_issue_writing: false' "$ACTION_YML")" "1" "action.yml disables duplicate ZAP issue writing"

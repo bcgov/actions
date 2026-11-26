@@ -369,14 +369,23 @@ jobs:
           url: https://example.com
           zap: 'yes'
 
+      - name: Invalid Nuclei tuning fails fast
+        id: invalid_tuning
+        continue-on-error: true
+        uses: $/scan-url
+        with:
+          url: https://example.com
+          nuclei_rate_limit: '0'
+
       - name: Verify input guards failed
         run: |
           if [ "${{ steps.empty_url.outcome }}" != "failure" ] || \
              [ "${{ steps.invalid_url.outcome }}" != "failure" ] || \
              [ "${{ steps.unreachable_url.outcome }}" != "failure" ] || \
              [ "${{ steps.no_scanners.outcome }}" != "failure" ] || \
-             [ "${{ steps.invalid_toggle.outcome }}" != "failure" ]; then
-            echo "::error::scan-url must fail on an empty, invalid or unreachable url, an invalid toggle, or both scanners off"
+             [ "${{ steps.invalid_toggle.outcome }}" != "failure" ] || \
+             [ "${{ steps.invalid_tuning.outcome }}" != "failure" ]; then
+            echo "::error::scan-url must fail on an empty, invalid or unreachable url, an invalid toggle or Nuclei tuning value, or both scanners off"
             exit 1
           fi
           echo "Input guards failed fast as expected."
