@@ -7,6 +7,7 @@ const {
   NotPermittedError,
   buildSummary,
   collectFindings,
+  escapeProperty,
   isFinding,
   run
 } = require('../annotations.js')
@@ -204,7 +205,7 @@ test('run: findings fail with annotations, summary and JSON output', async () =>
   assert.equal(logger.lines.error.length, 2)
   assert.match(
     logger.lines.error[0],
-    /^::error title=PR Results: Fixture::Job 'Fixture' concluded success/
+    /^::error title=PR Results%3A Fixture::Job 'Fixture' concluded success/
   )
   assert.match(logger.lines.error[0], /Unexpected input\(s\)/)
   const out = fs.readFileSync(t.out, 'utf8')
@@ -250,7 +251,7 @@ test('run: no permission warns and skips with empty output', async () => {
   assert.equal(r.findings, null)
   assert.match(
     logger.lines.warn[0],
-    /^::warning title=PR Results: annotations not checked::/
+    /^::warning title=PR Results%3A annotations not checked::/
   )
   assert.match(logger.lines.warn[0], /actions: read and checks: read/)
   assert.equal(fs.readFileSync(t.out, 'utf8'), 'annotations=\n')
@@ -291,4 +292,8 @@ test('buildSummary: escapes pipes and newlines', () => {
   ])
   assert.match(md, /`a\\\|b`/)
   assert.match(md, /x y\\\|z/)
+})
+
+test('escapeProperty: escapes command property separators', () => {
+  assert.equal(escapeProperty('Test (a, b): x%\n'), 'Test (a%2C b)%3A x%25%0A')
 })

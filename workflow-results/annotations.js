@@ -116,6 +116,15 @@ function escapeData(s) {
 }
 
 /**
+ * Escape a value for a workflow command property such as title.
+ * @param {string} s
+ * @returns {string}
+ */
+function escapeProperty(s) {
+  return escapeData(s).replace(/:/g, '%3A').replace(/,/g, '%2C')
+}
+
+/**
  * Markdown section for GITHUB_STEP_SUMMARY.
  * @param {string} title
  * @param {ReturnType<typeof collectFindings> extends Promise<infer T> ? T : never} findings
@@ -183,7 +192,7 @@ async function run(opts = {}) {
         ? `${err.message}. Grant the results job actions: read and checks: read`
         : err.message
     logger.warn(
-      `::warning title=${title}: annotations not checked::Skipped the annotation check: ${escapeData(why)}`
+      `::warning title=${escapeProperty(`${title}: annotations not checked`)}::Skipped the annotation check: ${escapeData(why)}`
     )
     writeOutput('')
     return {exitCode: 0, findings: null}
@@ -195,7 +204,7 @@ async function run(opts = {}) {
   for (const f of findings) {
     const where = f.path ? ` (${f.path}${f.line ? `:${f.line}` : ''})` : ''
     logger.error(
-      `::error title=${title}: ${escapeData(f.job)}::Job '${escapeData(f.job)}' concluded success but has a ${f.level} annotation${escapeData(where)}: ${escapeData(f.message)}`
+      `::error title=${escapeProperty(`${title}: ${f.job}`)}::Job '${escapeData(f.job)}' concluded success but has a ${f.level} annotation${escapeData(where)}: ${escapeData(f.message)}`
     )
   }
   if (summaryPath) {
@@ -226,6 +235,7 @@ module.exports = {
   NotPermittedError,
   buildSummary,
   collectFindings,
+  escapeProperty,
   isFinding,
   run
 }
