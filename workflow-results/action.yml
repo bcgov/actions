@@ -34,7 +34,9 @@ inputs:
 
 outputs:
   passed:
-    description: Whether all upstream jobs passed or were skipped ('true' or 'false')
+    description: >-
+      'true' only when all upstream jobs passed or were skipped and the annotation check didn't fail;
+      'false' otherwise, including when a job that concluded success has an error or 'Unexpected input(s)' annotation
     value: ${{ steps.gate.outputs.passed == 'true' && steps.annotations.outcome != 'failure' }}
   annotations:
     description: >-

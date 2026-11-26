@@ -147,5 +147,5 @@ The standalone [`workflow-notifier`](../workflow-notifier/) remains for workflow
 
 | Output        | Description                                                                          |
 | :------------ | :----------------------------------------------------------------------------------- |
-| `passed` | Boolean string indicating if all jobs passed or were skipped (`'true'` or `'false'`) |
+| `passed` | `'true'` only when all upstream jobs passed or were skipped and the [annotation check](#annotation-check) didn't fail; `'false'` otherwise, including when a job that concluded success has an error or `Unexpected input(s)` annotation |
 | `annotations` | JSON array of findings from the [annotation check](#annotation-check) (`job`, `level`, `message`, `path`, `line`); `[]` when none, empty when the check is off or skipped |

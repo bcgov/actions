@@ -88,6 +88,7 @@ jobs:
           echo "unreadable: passed=${UNREADABLE_PASSED} annotations=${UNREADABLE_ANNOTATIONS}"
           fail=0
           [ "${PASSED}" = "true" ] || { echo "::error::Gate without permissions should pass"; fail=1; }
+          [ "${ANNOTATIONS}" = "[]" ] || { echo "::error::Public repo should read annotations without permissions (annotations=[]; empty means the check was skipped)"; fail=1; }
           [ "${UNREADABLE_PASSED}" = "true" ] || { echo "::error::Unreadable annotations should warn and skip, not fail"; fail=1; }
           [ -z "${UNREADABLE_ANNOTATIONS}" ] || { echo "::error::Skipped check should leave annotations empty"; fail=1; }
           exit $fail
