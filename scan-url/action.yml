@@ -26,6 +26,15 @@ inputs:
   nuclei_timeout:
     description: Nuclei seconds to wait for a connection or response (-timeout)
     default: '30'
+  # Scan depth: unset runs the full scans; set these only to trade coverage for time
+  nuclei_tags:
+    description: Run only Nuclei templates with these tags (-tags), one per line. Unset runs every template
+  nuclei_templates:
+    description: Run only these Nuclei templates or template directories (-t), one per line. Unset runs every template
+  zap_spider_minutes:
+    description: Minutes the ZAP spider may run (zap-full-scan.py -m). Unset has no limit
+  zap_scan_minutes:
+    description: Minutes the ZAP active scan may run (ZAP scanner.maxScanDurationInMins). Unset has no limit
 
 outputs:
   zap_json:
@@ -55,6 +64,10 @@ runs:
         NUCLEI_RATE_LIMIT: ${{ inputs.nuclei_rate_limit }}
         NUCLEI_CONCURRENCY: ${{ inputs.nuclei_concurrency }}
         NUCLEI_TIMEOUT: ${{ inputs.nuclei_timeout }}
+        INPUT_NUCLEI_TAGS: ${{ inputs.nuclei_tags }}
+        INPUT_NUCLEI_TEMPLATES: ${{ inputs.nuclei_templates }}
+        INPUT_ZAP_SPIDER_MINUTES: ${{ inputs.zap_spider_minutes }}
+        INPUT_ZAP_SCAN_MINUTES: ${{ inputs.zap_scan_minutes }}
         SHARED_INPUTS: ${{ github.action_path }}/../shared/inputs.js
       run: |
         # Shared boolean rules (shared/README.md); a bad value fails here
@@ -73,6 +86,8 @@ runs:
             exit 1
           fi
         done
+        # Optional scan-depth inputs; empty ones add no scanner flags
+        bash "${GITHUB_ACTION_PATH}/options.sh" >> "$GITHUB_OUTPUT"
         if [[ ! "$URL" =~ ^https?://[[:alnum:]][[:alnum:].-]*(:[0-9]+)?(/[^[:space:]]*)?$ ]]; then
           echo "::error::url must be http(s)://host[:port][/path], got '${URL}'"
           exit 1
@@ -101,6 +116,7 @@ runs:
       with:
         target: ${{ inputs.url }}
         rules_file_name: ${{ steps.preflight.outputs.zap_rules }}
+        cmd_options: ${{ steps.preflight.outputs.zap_cmd_options }}
         artifact_name: zap_scan-${{ steps.preflight.outputs.slug }}
         allow_issue_writing: false
 
@@ -123,11 +139,16 @@ runs:
         RATE_LIMIT: ${{ inputs.nuclei_rate_limit }}
         CONCURRENCY: ${{ inputs.nuclei_concurrency }}
         TIMEOUT: ${{ inputs.nuclei_timeout }}
+        TAGS: ${{ steps.preflight.outputs.nuclei_tags }}
+        TEMPLATES: ${{ steps.preflight.outputs.nuclei_templates }}
         SHARED_INPUTS: ${{ github.action_path }}/../shared/inputs.js
       run: |
         set -o pipefail
         args=(-u "$URL" -jsonl-export nuclei-results.jsonl -sarif-export nuclei-results.sarif
           -rl "$RATE_LIMIT" -c "$CONCURRENCY" -timeout "$TIMEOUT")
+        # Optional narrowing (options.sh); unset runs every template
+        [[ -z "$TAGS" ]] || args+=(-tags "$TAGS")
+        [[ -z "$TEMPLATES" ]] || args+=(-t "$TEMPLATES")
         # Same debug flags nuclei-action adds on a debug re-run
         if [[ "$(node "$SHARED_INPUTS" debug)" == true ]]; then
           args+=(-debug -verbose)

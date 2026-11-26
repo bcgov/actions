@@ -369,14 +369,32 @@ jobs:
           url: https://example.com
           zap: 'yes'
 
+      - name: Invalid nuclei_tags fails fast
+        id: invalid_tags
+        continue-on-error: true
+        uses: $/scan-url
+        with:
+          url: https://example.com
+          nuclei_tags: 'tech, cve'
+
+      - name: Invalid zap_scan_minutes fails fast
+        id: invalid_minutes
+        continue-on-error: true
+        uses: $/scan-url
+        with:
+          url: https://example.com
+          zap_scan_minutes: '5; id'
+
       - name: Verify input guards failed
         run: |
           if [ "${{ steps.empty_url.outcome }}" != "failure" ] || \
              [ "${{ steps.invalid_url.outcome }}" != "failure" ] || \
              [ "${{ steps.unreachable_url.outcome }}" != "failure" ] || \
              [ "${{ steps.no_scanners.outcome }}" != "failure" ] || \
-             [ "${{ steps.invalid_toggle.outcome }}" != "failure" ]; then
-            echo "::error::scan-url must fail on an empty, invalid or unreachable url, an invalid toggle, or both scanners off"
+             [ "${{ steps.invalid_toggle.outcome }}" != "failure" ] || \
+             [ "${{ steps.invalid_tags.outcome }}" != "failure" ] || \
+             [ "${{ steps.invalid_minutes.outcome }}" != "failure" ]; then
+            echo "::error::scan-url must fail on an empty, invalid or unreachable url, an invalid toggle, both scanners off, or an invalid scan-depth input"
             exit 1
           fi
           echo "Input guards failed fast as expected."
@@ -384,16 +402,19 @@ jobs:
   # Real scans of public test beds for automated scanners: Google's Firing Range
   # over HTTPS and ProjectDiscovery's scanme.sh over plain HTTP (its HTTPS
   # certificate is self-signed). GitHub runners are throttled at
-  # quickstart-openshift TEST's edge (bcgov/quickstart-openshift#2972). ZAP crawls
-  # all of Firing Range (~470 URLs), so that leg takes ~55 minutes. A down site
-  # fails that matrix leg on purpose. Duplicate ZAP issue creation is disabled
-  # in scan-url so findings upload via SARIF only. Slugs keep artifacts and SARIF apart.
+  # quickstart-openshift TEST's edge (bcgov/quickstart-openshift#2972). Full scans
+  # took ~25 (scanme.sh) and ~55 (Firing Range) minutes, so each leg narrows
+  # Nuclei (tags on one leg, templates on the other) and caps the ZAP spider and
+  # active scan; the legs prove the action runs end to end and uploads SARIF, not
+  # scan depth. A down site fails that matrix leg on purpose. Duplicate ZAP issue
+  # creation is disabled in scan-url so findings upload via SARIF only. Slugs keep
+  # artifacts and SARIF apart.
   test-scan-url-live:
     name: Test Scan URL (Live) (${{ matrix.name }})
     needs: [filter]
     if: contains(fromJSON(needs.filter.outputs.changes), 'scan-url') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
     runs-on: ubuntu-26.04
-    timeout-minutes: 90
+    timeout-minutes: 20
     permissions:
       actions: read
       contents: read
@@ -405,9 +426,13 @@ jobs:
           - name: https
             url: https://public-firing-range.appspot.com/cors/
             slug: public-firing-range-appspot-com-cors
+            nuclei_tags: ''
+            nuclei_templates: http/technologies/
           - name: http
             url: http://scanme.sh/
             slug: scanme-sh
+            nuclei_tags: tech
+            nuclei_templates: ''
     steps:
       - uses: actions/checkout@v7
 
@@ -416,6 +441,10 @@ jobs:
         uses: $/scan-url
         with:
           url: ${{ matrix.url }}
+          nuclei_tags: ${{ matrix.nuclei_tags }}
+          nuclei_templates: ${{ matrix.nuclei_templates }}
+          zap_spider_minutes: '1'
+          zap_scan_minutes: '5'
 
       - name: Verify reports, SARIF and artifact
         env:
@@ -428,6 +457,7 @@ jobs:
           done
           echo "ZAP results: $(jq '.runs[0].results | length' zap-results.sarif)"
           echo "Nuclei findings: $(wc -l < nuclei-results.jsonl)"
+          grep -m1 'Templates loaded for current scan' nuclei.log || true
           gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts" \
             --jq '.artifacts[].name' | grep -qx "zap_scan-${SLUG}" \
             || { echo "::error::artifact zap_scan-${SLUG} not uploaded"; exit 1; }
