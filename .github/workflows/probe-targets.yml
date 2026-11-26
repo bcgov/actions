@@ -1,0 +1,12 @@
+name: Probe scan targets
+on: pull_request
+permissions: {}
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          for u in https://public-firing-range.appspot.com/ https://public-firing-range.appspot.com/clickjacking/ http://scanme.sh/ https://scanme.sh/ https://ginandjuice.shop/ http://testphp.vulnweb.com/; do
+            echo "== $u"
+            curl -sS -o /dev/null --connect-timeout 10 --max-time 20 -w '%{http_code} %{time_total}s %{ssl_verify_result}\n' "$u" || echo "curl exit $?"
+          done
