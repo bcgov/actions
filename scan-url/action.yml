@@ -19,10 +19,10 @@ inputs:
   # leave OpenShift routes unresponsive, and Nuclei then skips the rest of the scan
   nuclei_rate_limit:
     description: Nuclei maximum requests per second (-rl)
-    default: '50'
+    default: '25'
   nuclei_concurrency:
     description: Nuclei templates run in parallel (-c)
-    default: '10'
+    default: '5'
   nuclei_timeout:
     description: Nuclei seconds to wait for a connection or response (-timeout)
     default: '30'

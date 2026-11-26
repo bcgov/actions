@@ -33,8 +33,8 @@ permissions:
 | `url` | URL to scan. Preflight fails if it gets no HTTP response (any status passes) | | **Yes** |
 | `zap` | What to scan: run the ZAP full scan (`'true'` or `'false'`) | `'true'` | No |
 | `nuclei` | What to scan: run the Nuclei scan (`'true'` or `'false'`) | `'true'` | No |
-| `nuclei_rate_limit` | Nuclei maximum requests per second (`-rl`) | `'50'` | No |
-| `nuclei_concurrency` | Nuclei templates run in parallel (`-c`) | `'10'` | No |
+| `nuclei_rate_limit` | Nuclei maximum requests per second (`-rl`) | `'25'` | No |
+| `nuclei_concurrency` | Nuclei templates run in parallel (`-c`) | `'5'` | No |
 | `nuclei_timeout` | Nuclei seconds to wait for a connection or response (`-timeout`) | `'30'` | No |
 
 `zap` and `nuclei` are "what to scan" toggles. Each gates its scanner's scan, SARIF conversion and upload. Any other value fails the action, and setting both to `'false'` fails it too, so a run never passes without scanning. Future scanners (e.g. accessibility) will get their own toggle, on by default.

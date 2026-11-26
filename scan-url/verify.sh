@@ -28,7 +28,7 @@ if [[ "$NUCLEI_ENABLED" == true && -f nuclei.log ]]; then
   [[ -n "$port" ]] || { [[ "${URL:-}" == http://* ]] && port=80 || port=443; }
   skipped="$(sed 's/\x1b\[[0-9;]*m//g' nuclei.log \
     | grep -oE 'Skipped [^ ]+ from target list as found unresponsive( permanently| [0-9]+ times)' \
-    | sort -u || true)"
+    | awk '!seen[$2]++' || true)"
   while IFS= read -r line; do
     [[ -n "$line" ]] || continue
     address="$(cut -d' ' -f2 <<<"$line")"
