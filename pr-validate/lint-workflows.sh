@@ -119,11 +119,13 @@ done
 if (( ${#labels[@]} > 0 )); then
   merged="${RUNNER_TEMP:-/tmp}/pr-validate-actionlint.yaml"
   extra=""
-  # Single-quoted YAML keeps glob patterns (private-linux-*) and other characters literal.
+  # Single-quoted YAML (quotes doubled) keeps glob patterns (private-linux-*) and
+  # backslashes literal. EXTRA goes through ENVIRON: awk -v would turn \n or \047
+  # in a label into real characters and could break out of the quoted scalar.
   for label in "${labels[@]}"; do
     extra+="    - '${label//\'/\'\'}'"$'\n'
   done
-  awk -v extra="$extra" '{ print } /^  labels:$/ { printf "%s", extra }' "$config" > "$merged"
+  EXTRA="$extra" awk '{ print } /^  labels:$/ { printf "%s", ENVIRON["EXTRA"] }' "$config" > "$merged"
   config="$merged"
 fi
 

@@ -236,6 +236,27 @@ else
 fi
 rm -f "$fixture/pr-validate-actionlint.yaml"
 
+# Backslash sequences in labels stay literal: awk -v would turn \n into a line
+# break and \047 into a quote that ends the YAML scalar.
+printf 'self-hosted-runner:\n  labels:\n    - c\\nd\n' > "$fixture/.github/actionlint.yml"
+set +e
+INPUT_RUNNER_LABELS=$'bcgov-azure-lz-live-github-managed-runner\na\\nb\n\\047' ACTIONLINT_CONFIG="$config" ACTIONLINT_WORKSPACE="$fixture" RUNNER_TEMP="$fixture" bash "$lint" >/tmp/pr-validate-labels.txt 2>&1
+status=$?
+set -e
+merged="$fixture/pr-validate-actionlint.yaml"
+if [[ "$status" -eq 0 ]] &&
+  grep -qxF "    - 'a\nb'" "$merged" && grep -qxF "    - '\047'" "$merged" && grep -qxF "    - 'c\nd'" "$merged" &&
+  [[ "$(grep -c '^    - ' "$merged")" -eq $(( $(grep -c '^    - ' "$config") + 4 )) ]] &&
+  [[ "$(grep -E '^[^ #]' "$merged")" == "$(grep -E '^[^ #]' "$config")" ]]; then
+  echo "ok  backslash sequences in runner_labels and caller labels stay literal"
+  passed=$((passed + 1))
+else
+  echo "FAIL  backslash sequences in runner_labels and caller labels stay literal"
+  cat /tmp/pr-validate-labels.txt "$merged"
+  failed=$((failed + 1))
+fi
+rm -f "$merged" "$fixture/.github/actionlint.yml"
+
 # Shared list inputs for bcgov/actions* callers: old formats fail, one per line passes.
 list_fail() { # label input-line(s)
   local label="$1" body="$2" status
