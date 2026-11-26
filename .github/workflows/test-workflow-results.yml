@@ -1,0 +1,143 @@
+name: Workflow Results Annotations
+
+# workflow-results reads every job in its own run, and the Test Suite run has
+# jobs that log errors on purpose. This run holds only the fixture jobs, chained
+# so each check sees exactly the jobs before it.
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/test-workflow-results.yml'
+      - 'workflow-results/**'
+      - 'workflow-notifier/**'
+      - 'shared/**'
+      - 'input-enforcer/**'
+      - '!**/*.md'
+
+concurrency:
+  group: test-workflow-results-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  clean-fixture:
+    name: Clean Fixture
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - run: echo "No errors or unexpected inputs here"
+
+  check-clean:
+    name: Check Clean Run
+    needs: [clean-fixture]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      checks: read
+    steps:
+      - id: results
+        uses: $/workflow-results
+        with:
+          needs: ${{ toJson(needs) }}
+          title: Clean Run
+          notify: 'false'
+
+      - name: Verify clean run passed after a real check
+        env:
+          PASSED: ${{ steps.results.outputs.passed }}
+          ANNOTATIONS: ${{ steps.results.outputs.annotations }}
+        run: |
+          echo "passed=${PASSED} annotations=${ANNOTATIONS}"
+          if [ "${PASSED}" != "true" ] || [ "${ANNOTATIONS}" != "[]" ]; then
+            echo "::error::Clean run should pass with annotations=[] (empty means the check was skipped)"
+            exit 1
+          fi
+
+  check-no-permission:
+    name: Check Without Permissions
+    needs: [clean-fixture]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - id: results
+        uses: $/workflow-results
+        with:
+          needs: ${{ toJson(needs) }}
+          title: No Permissions
+          notify: 'false'
+
+      - name: Verify the gate still passed
+        env:
+          PASSED: ${{ steps.results.outputs.passed }}
+          ANNOTATIONS: ${{ steps.results.outputs.annotations }}
+        run: |
+          echo "passed=${PASSED} annotations=${ANNOTATIONS}"
+          if [ "${PASSED}" != "true" ]; then
+            echo "::error::Without actions: read and checks: read the check should warn and skip, not fail"
+            exit 1
+          fi
+
+  dirty-fixture:
+    name: Dirty Fixture
+    needs: [check-clean, check-no-permission]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      # not_an_input draws GitHub's "Unexpected input(s)" warning; the fixture logs ::error:: and exits 0
+      - uses: $/workflow-results/tests/fixture
+        with:
+          message: Fixture error in a job that concludes success
+          not_an_input: x
+
+  check-dirty:
+    name: Check Dirty Run
+    needs: [dirty-fixture]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+    steps:
+      - name: Mock gh for notify path
+        run: |
+          mock="${RUNNER_TEMP}/mock-gh-bin"
+          mkdir -p "$mock"
+          cat > "$mock/gh" <<'MOCK'
+          #!/usr/bin/env bash
+          echo "$*" >> "${RUNNER_TEMP}/mock-gh.log"
+          case "$1 $2" in
+            "issue create") echo "https://github.com/example/repo/issues/1" ;;
+          esac
+          exit 0
+          MOCK
+          chmod +x "$mock/gh"
+          echo "$mock" >> "$GITHUB_PATH"
+
+      - id: results
+        continue-on-error: true
+        uses: $/workflow-results
+        with:
+          needs: ${{ toJson(needs) }}
+          title: Dirty Run
+          notify: 'true'
+
+      - name: Verify both annotations were caught and notify fired
+        env:
+          OUTCOME: ${{ steps.results.outcome }}
+          PASSED: ${{ steps.results.outputs.passed }}
+          ANNOTATIONS: ${{ steps.results.outputs.annotations }}
+        run: |
+          echo "outcome=${OUTCOME} passed=${PASSED}"
+          echo "${ANNOTATIONS}" | jq .
+          fail=0
+          [ "${OUTCOME}" = "failure" ] || { echo "::error::Gate should fail"; fail=1; }
+          [ "${PASSED}" = "false" ] || { echo "::error::passed should be false"; fail=1; }
+          echo "${ANNOTATIONS}" | jq -e 'any(.[]; .job == "Dirty Fixture" and (.message | contains("Unexpected input(s)")) and (.message | contains("not_an_input")))' >/dev/null \
+            || { echo "::error::Unexpected input(s) warning not caught"; fail=1; }
+          echo "${ANNOTATIONS}" | jq -e 'any(.[]; .job == "Dirty Fixture" and .level == "failure" and .message == "Fixture error in a job that concludes success")' >/dev/null \
+            || { echo "::error::Error annotation not caught"; fail=1; }
+          grep -q "^issue create" "${RUNNER_TEMP}/mock-gh.log" \
+            || { echo "::error::Notifier did not attempt to create an issue"; fail=1; }
+          exit $fail

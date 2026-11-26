@@ -1024,10 +1024,12 @@ jobs:
           assert action['inputs']['notify'].get('default', '') == '', 'notify must default to empty (event-based)'
           assert action['inputs']['needs'].get('required') is True, 'needs must be required'
           assert 'passed' in action['outputs'], 'missing passed output'
+          assert 'annotations' in action['outputs'], 'missing annotations output'
+          assert str(action['inputs']['check_annotations'].get('default')) == 'true', 'check_annotations must default to true'
           "
 
       - name: Run Unit Tests
-        run: node --test workflow-results/tests/unit.test.js
+        run: node --test workflow-results/tests/unit.test.js workflow-results/tests/annotations.test.js
 
       - name: Test Workflow Results Self Action (All Succeeded & Skipped)
         id: self_check_pass
@@ -1832,3 +1834,5 @@ jobs:
         uses: $/workflow-results
         with:
           needs: ${{ toJson(needs) }}
+          # Test jobs here log errors on purpose and still pass; the annotation check is tested in test-workflow-results.yml
+          check_annotations: 'false'

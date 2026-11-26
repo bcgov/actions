@@ -130,7 +130,7 @@ Refer to each action's directory for its exact minimum required permissions bloc
 - **[scan-url](./scan-url/)**: `contents: read`, `issues: write`, `security-events: write`
 - **[test-and-analyse](./test-and-analyse/)**: `contents: read`, `actions: write` (optional, for caching)
 - **[workflow-notifier](./workflow-notifier/)**: `contents: read`, `issues: write`, `pull-requests: read` (optional, for PR merge author resolution)
-- **[workflow-results](./workflow-results/)**: `permissions: {}` (no permissions required)
+- **[workflow-results](./workflow-results/)**: `actions: read`, `checks: read` for the annotation check (skipped with a warning without them), plus `contents: read`, `issues: write`, `pull-requests: read` when notify is on
 
 ## Releases and Version Pinning
 

@@ -1,0 +1,15 @@
+name: Workflow Results Annotation Fixture
+description: Test fixture. Logs an error annotation and exits 0, so its job concludes success.
+
+inputs:
+  message:
+    description: Error annotation text
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        MESSAGE: ${{ inputs.message }}
+      run: echo "::error::${MESSAGE}"
