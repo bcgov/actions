@@ -89,6 +89,11 @@ test('isFinding: errors and Unexpected input(s) only', () => {
   assert.equal(isFinding(notice), false)
   assert.equal(isFinding(deprecation), false)
   assert.equal(isFinding({}), false)
+  assert.equal(
+    isFinding({annotation_level: 'notice', message: unexpected.message}),
+    false,
+    'a notice quoting the warning is not a finding'
+  )
 })
 
 test('collectFindings: reads only completed jobs that concluded success', async () => {

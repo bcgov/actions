@@ -64,7 +64,10 @@ async function getAll(url, key, ctx) {
  */
 function isFinding(annotation) {
   if (annotation.annotation_level === 'failure') return true
-  return String(annotation.message ?? '').includes(UNEXPECTED_INPUT)
+  return (
+    annotation.annotation_level === 'warning' &&
+    String(annotation.message ?? '').includes(UNEXPECTED_INPUT)
+  )
 }
 
 /**
