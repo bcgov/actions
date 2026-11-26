@@ -13,9 +13,9 @@ const { InputError, parseList } = require(path.join(__dirname, '..', 'shared', '
 // Every shared input read with parseList (diff-triggers, ghcr-cleanup,
 // image-tracker, and the builder/test-and-analyse callers) or with
 // actions-openshift's shared/inputs.sh input_list (cert-expiry, cleanup-pr,
-// sysdig-monitor).
+// sysdig-monitor), plus pr-validate's runner_labels.
 const LIST_INPUTS = new Set([
-  'triggers', 'packages', 'package', 'tags', 'keep_digests',
+  'triggers', 'packages', 'package', 'tags', 'keep_digests', 'runner_labels',
   'components', 'hosts', 'cleanup_name', 'remove_pvc',
 ]);
 const BCGOV = /bcgov\/actions(-openshift)?[/@]/;

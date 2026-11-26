@@ -190,7 +190,72 @@ lint_fixture pass "caller glob pattern label matches"
 
 printf 'self-hosted-runner:\n  labels:\n    - other-runner\n' > "$fixture/.github/actionlint.yml"
 lint_fixture fail "caller config without the label still fails"
-rm "$fixture/.github/actionlint.yml"
+
+# runner_labels input: Azure and other custom runners (issue #383).
+INPUT_RUNNER_LABELS=$'quoted-runner\nmy-runner' lint_fixture pass "runner_labels input adds labels with a caller config present"
+rm "$fixture/.github/actionlint.yml" "$fixture/pr-validate-actionlint.yaml"
+
+cat > "$fixture/.github/workflows/ok.yml" <<'EOF'
+name: azure
+on: push
+jobs:
+  deploy:
+    runs-on: bcgov-azure-lz-live-github-managed-runner
+    steps:
+      - run: echo ok
+  default:
+    runs-on: ubuntu-26.04
+    steps:
+      - run: echo ok
+EOF
+lint_fixture fail "Azure runner label fails without runner_labels"
+INPUT_RUNNER_LABELS=ubuntu-26.04 lint_fixture fail "Azure runner label fails with the default runner_labels"
+if [[ ! -e "$fixture/pr-validate-actionlint.yaml" ]]; then
+  echo "ok  default runner_labels lints with the bundled config unchanged"
+  passed=$((passed + 1))
+else
+  echo "FAIL  default runner_labels lints with the bundled config unchanged"
+  cat "$fixture/pr-validate-actionlint.yaml"
+  failed=$((failed + 1))
+fi
+INPUT_RUNNER_LABELS=bcgov-azure-lz-live-github-managed-runner lint_fixture pass "runner_labels accepts the Azure runner label"
+INPUT_RUNNER_LABELS=$'ubuntu-26.04\nbcgov-azure-*' lint_fixture pass "runner_labels takes one per line and glob patterns"
+INPUT_RUNNER_LABELS=other-runner lint_fixture fail "runner_labels without the label still fails"
+
+set +e
+INPUT_RUNNER_LABELS='bcgov-azure-lz-live-github-managed-runner, other-runner' ACTIONLINT_CONFIG="$config" ACTIONLINT_WORKSPACE="$fixture" RUNNER_TEMP="$fixture" bash "$lint" >/tmp/pr-validate-labels.txt 2>&1
+status=$?
+set -e
+if [[ "$status" -ne 0 ]] && grep -q 'runner_labels: list format' /tmp/pr-validate-labels.txt; then
+  echo "ok  comma-separated runner_labels fails with the list format error"
+  passed=$((passed + 1))
+else
+  echo "FAIL  comma-separated runner_labels fails with the list format error"
+  cat /tmp/pr-validate-labels.txt
+  failed=$((failed + 1))
+fi
+rm -f "$fixture/pr-validate-actionlint.yaml"
+
+# Backslash sequences in labels stay literal: awk -v would turn \n into a line
+# break and \047 into a quote that ends the YAML scalar.
+printf 'self-hosted-runner:\n  labels:\n    - c\\nd\n' > "$fixture/.github/actionlint.yml"
+set +e
+INPUT_RUNNER_LABELS=$'bcgov-azure-lz-live-github-managed-runner\na\\nb\n\\047' ACTIONLINT_CONFIG="$config" ACTIONLINT_WORKSPACE="$fixture" RUNNER_TEMP="$fixture" bash "$lint" >/tmp/pr-validate-labels.txt 2>&1
+status=$?
+set -e
+merged="$fixture/pr-validate-actionlint.yaml"
+if [[ "$status" -eq 0 ]] &&
+  grep -qxF "    - 'a\nb'" "$merged" && grep -qxF "    - '\047'" "$merged" && grep -qxF "    - 'c\nd'" "$merged" &&
+  [[ "$(grep -c '^    - ' "$merged")" -eq $(( $(grep -c '^    - ' "$config") + 4 )) ]] &&
+  [[ "$(grep -E '^[^ #]' "$merged")" == "$(grep -E '^[^ #]' "$config")" ]]; then
+  echo "ok  backslash sequences in runner_labels and caller labels stay literal"
+  passed=$((passed + 1))
+else
+  echo "FAIL  backslash sequences in runner_labels and caller labels stay literal"
+  cat /tmp/pr-validate-labels.txt "$merged"
+  failed=$((failed + 1))
+fi
+rm -f "$merged" "$fixture/.github/actionlint.yml"
 
 # Shared list inputs for bcgov/actions* callers: old formats fail, one per line passes.
 list_fail() { # label input-line(s)
@@ -226,6 +291,7 @@ list_fail "space-separated components fail" "          components: backend front
 list_fail "comma-separated hosts fail" "          hosts: a.example.com,b.example.com"
 list_fail "space-separated cleanup_name fails" "          cleanup_name: app db"
 list_fail "comma-separated remove_pvc fails" "          remove_pvc: data,logs"
+list_fail "comma-separated runner_labels fail" "          runner_labels: azure-a, azure-b"
 
 # cert-expiry strips '# comments' from each hosts line before reading the list.
 cat > "$fixture/.github/workflows/ok.yml" <<'EOF'

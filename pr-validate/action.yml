@@ -9,6 +9,10 @@ inputs:
     description: "Markdown to append to the PR description once. Empty skips it. Needs pull-requests: write."
     required: false
     default: ""
+  runner_labels:
+    description: "Runner labels the workflow lint accepts in runs-on, one per line, such as Azure or other self-hosted runners. Glob patterns (my-runner-*) work. Added to GitHub's hosted labels; it does not change the runner this action runs on."
+    required: false
+    default: "ubuntu-26.04"
   token:
     description: 'Authentication token (defaults to github.token; override with PAT if needed).'
     default: ${{ github.token }}
@@ -57,6 +61,7 @@ runs:
       shell: bash
       env:
         ACTIONLINT_CONFIG: ${{ github.action_path }}/actionlint.yaml
+        INPUT_RUNNER_LABELS: ${{ inputs.runner_labels }}
       run: bash "${{ github.action_path }}/lint-workflows.sh"
 
     - name: PR Description

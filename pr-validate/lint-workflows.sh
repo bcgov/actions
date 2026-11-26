@@ -78,21 +78,56 @@ caller_runner_labels() {
   ' "$1"
 }
 
-# A caller's .github/actionlint.yaml (or .yml) adds its self-hosted-runner labels to
-# the bundled config. Only the labels are read; its other settings are not used.
+# Extra runner labels: the runner_labels input (one per line, read with the shared
+# list parser), then a caller's .github/actionlint.yaml (or .yml) self-hosted-runner
+# labels. Only the caller config's labels are read; its other settings are not used.
+# Labels the bundled config already has are skipped, so the default (ubuntu-26.04)
+# lints with the bundled config unchanged.
+declare -A seen=()
+while IFS= read -r label; do
+  seen["$label"]=1
+done < <(caller_runner_labels "$config")
+labels=()
+add_labels() { # source label...
+  local source="$1" label added=()
+  shift
+  for label in "$@"; do
+    if [[ -n "$label" && -z "${seen[$label]:-}" ]]; then
+      seen["$label"]=1
+      labels+=("$label")
+      added+=("$label")
+    fi
+  done
+  if (( ${#added[@]} > 0 )); then
+    echo "Runner labels from ${source}: ${added[*]}"
+  fi
+}
+
+if ! input_labels="$(node "${here}/../shared/inputs.js" list runner_labels)"; then
+  exit 1
+fi
+mapfile -t input_list <<< "$input_labels"
+add_labels runner_labels "${input_list[@]}"
+
 for caller_config in .github/actionlint.yaml .github/actionlint.yml; do
   [[ -f "$caller_config" ]] || continue
-  merged="${RUNNER_TEMP:-/tmp}/pr-validate-actionlint.yaml"
-  extra=""
-  # Single-quoted YAML keeps glob patterns (private-linux-*) and other characters literal.
-  while IFS= read -r label; do
-    extra+="    - '${label//\'/\'\'}'"$'\n'
-  done < <(caller_runner_labels "$caller_config")
-  awk -v extra="$extra" '{ print } /^  labels:$/ { printf "%s", extra }' "$config" > "$merged"
-  config="$merged"
-  echo "Runner labels from ${caller_config}: $(printf '%s' "$extra" | sed 's/^ *- //' | paste -sd' ' -)"
+  mapfile -t caller_list < <(caller_runner_labels "$caller_config")
+  add_labels "$caller_config" "${caller_list[@]}"
   break
 done
+
+if (( ${#labels[@]} > 0 )); then
+  merged="${RUNNER_TEMP:-/tmp}/pr-validate-actionlint.yaml"
+  extra=""
+  # Single-quoted YAML (quotes doubled) keeps glob patterns (private-linux-*) and
+  # backslashes literal. EXTRA goes through ENVIRON: awk -v would turn \n or \047
+  # in a label into real characters and could break out of the quoted scalar.
+  for label in "${labels[@]}"; do
+    extra+="    - '${label//\'/\'\'}'"$'\n'
+  done
+  EXTRA="$extra" awk '{ print } /^  labels:$/ { printf "%s", ENVIRON["EXTRA"] }' "$config" > "$merged"
+  config="$merged"
+fi
 
 # dotglob: hidden files such as .github/workflows/.reusable.yml are workflows too.
 shopt -s nullglob dotglob
