@@ -13,8 +13,8 @@ Reports stay in the job workspace for later steps (e.g. a caller report script).
 
 - Findings never fail the action.
 - The action fails before any scan runs when `url` is not `http(s)://host[:port][/path]` (including empty), when `url` returns no HTTP response within 20 seconds (DNS failure, refused connection or timeout; any status code passes), when `zap` or `nuclei` is not exactly `'true'` or `'false'`, when both are `'false'`, or when a `nuclei_*` tuning input is not a whole number from 1 to 9999.
-- The action fails when an enabled scanner's step fails or its report is missing (`report_json.json` for ZAP, `nuclei-results.jsonl` for Nuclei). A broken scan must not look like a clean one. SARIF uploads still run for any report that exists.
-- The action fails when Nuclei skips the scanned host and port as unresponsive (`Skipped <host>:<port> from target list as found unresponsive permanently` or `... unresponsive N times`). Nuclei drops the target after a connection timeout, skips its remaining templates and still exits 0, so the scan is incomplete. A skip on another port (a template probing e.g. `:8443`) only warns. If it happens, lower `nuclei_rate_limit` or `nuclei_concurrency`, or raise `nuclei_timeout`.
+- The action fails when an enabled scanner's step fails or its report is missing (`report_json.json` for ZAP, `nuclei-results.jsonl` for Nuclei). A broken scan must not look like a clean one. ZAP SARIF still uploads for any report that exists; Nuclei SARIF uploads only when the Nuclei Scan step succeeded.
+- The action fails when Nuclei skips the scanned host and port as unresponsive (`Skipped <host>:<port> from target list as found unresponsive permanently` or `... unresponsive N times`). Nuclei drops the target after connection timeouts, skips its remaining templates and still exits 0, so the scan is incomplete. The Nuclei Scan step fails, and its SARIF is not uploaded, because a partial scan would close alerts for templates that never ran. A skip on another host or port (a template probing e.g. `:8443` or a third-party site) only warns. If it happens, lower `nuclei_rate_limit` or `nuclei_concurrency`, or raise `nuclei_timeout`.
 
 ## Permissions
 
@@ -39,7 +39,7 @@ permissions:
 
 `zap` and `nuclei` are "what to scan" toggles. Each gates its scanner's scan, SARIF conversion and upload. Any other value fails the action, and setting both to `'false'` fails it too, so a run never passes without scanning. Future scanners (e.g. accessibility) will get their own toggle, on by default.
 
-The `nuclei_*` defaults are lower than Nuclei's own (150 requests per second, 25 templates, 10 seconds). With Nuclei's defaults, OpenShift routes stopped accepting connections partway through the scan, and Nuclei skipped the rest of it.
+The `nuclei_*` defaults are lower than Nuclei's own (150 requests per second, 25 templates, 10 seconds). At Nuclei's defaults, OpenShift TEST routes timed out within the first minute or two of a scan and Nuclei skipped the rest. Lower load makes that later or rarer, but a target that stops answering mid-scan still fails the action.
 
 ## Outputs
 
