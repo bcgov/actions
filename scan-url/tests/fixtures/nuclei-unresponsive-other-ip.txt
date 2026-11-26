@@ -1,0 +1,4 @@
+[[34mINF[0m] Targets loaded for current scan: 1
+[[34mINF[0m] Skipped 203.0.113.50:443 from target list as found unresponsive permanently: Get "https://203.0.113.50/.well-known/openid-configuration": cause="i/o timeout" address=203.0.113.50:443
+[[34mINF[0m] Skipped [2001:db8::50]:443 from target list as found unresponsive permanently: cause="i/o timeout" address=[2001:db8::50]:443 chain="got err while executing https://cdn.app.example.gov.bc.ca.evil.example/x"
+[[34mINF[0m] Scan completed in 6m. 2 matches found.

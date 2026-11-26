@@ -1,0 +1,33 @@
+
+                     __     _
+   ____  __  _______/ /__  (_)
+  / __ \/ / / / ___/ / _ \/ /
+ / / / / /_/ / /__/ /  __/ /
+/_/ /_/\__,_/\___/_/\___/_/   v3.11.1
+
+		projectdiscovery.io
+
+[[34mINF[0m] nuclei-templates are not installed, installing...
+[[34mINF[0m] Successfully installed nuclei-templates at /home/runner/nuclei-templates
+[[34mINF[0m] Current nuclei version: v3.11.1 ([92mlatest[0m)
+[[34mINF[0m] Current nuclei-templates version: v10.5.2 ([92mlatest[0m)
+[[34mINF[0m] New templates added in latest release: 121
+[[34mINF[0m] Templates loaded for current scan: 11330
+[[34mINF[0m] Executing 11330 signed templates from projectdiscovery/nuclei-templates
+[[34mINF[0m] Targets loaded for current scan: 1
+[[34mINF[0m] Templates clustered: 2737 (Reduced 2602 Requests)
+[[92mwildcard-dns-detect[0m] [[94mdns[0m] [[34minfo[0m] 3MPjxCLLcXtpyxaFfrE1OzIlt5b-3MPjxCLLcXtpyxaFfrE1OzIlt5b.quickstart-openshift-test.apps.silver.devops.gov.bc.ca [[96m"142.34.194.118"[0m]
+[[34mINF[0m] Using Interactsh Server: oast.online
+[[34mINF[0m] Skipped quickstart-openshift-test.apps.silver.devops.gov.bc.ca:443 from target list as found unresponsive permanently: cause="i/o timeout" address=quickstart-openshift-test.apps.silver.devops.gov.bc.ca:443
+[[34mINF[0m] Skipped quickstart-openshift-test.apps.silver.devops.gov.bc.ca:443 from target list as found unresponsive permanently: cause="i/o timeout" address=quickstart-openshift-test.apps.silver.devops.gov.bc.ca:443
+[[34mINF[0m] Skipped quickstart-openshift-test.apps.silver.devops.gov.bc.ca:443 from target list as found unresponsive permanently: cause="i/o timeout" address=quickstart-openshift-test.apps.silver.devops.gov.bc.ca:443
+[[34mINF[0m] Skipped quickstart-openshift-test.apps.silver.devops.gov.bc.ca:443 from target list as found unresponsive permanently: cause="i/o timeout" address=quickstart-openshift-test.apps.silver.devops.gov.bc.ca:443
+[[34mINF[0m] Skipped quickstart-openshift-test.apps.silver.devops.gov.bc.ca:443 from target list as found unresponsive permanently: cause="i/o timeout" address=quickstart-openshift-test.apps.silver.devops.gov.bc.ca:443
+[[34mINF[0m] Skipped quickstart-openshift-test.apps.silver.devops.gov.bc.ca:443 from target list as found unresponsive permanently: cause="i/o timeout" address=quickstart-openshift-test.apps.silver.devops.gov.bc.ca:443
+[[92mcsp-script-src-wildcard[0m] [[94mhttp[0m] [[34minfo[0m] https://quickstart-openshift-test.apps.silver.devops.gov.bc.ca
+[[92mweak-csp-detect[0m:[1;92munsafe-script-src[0m] [[94mhttp[0m] [[34minfo[0m] https://quickstart-openshift-test.apps.silver.devops.gov.bc.ca [[96m"default-src 'self' https://*.gov.bc.ca; \t\t\tscript-src 'self' https://*.gov.bc.ca; \t\t\tstyle-src 'self' https://fonts.googleapis.com https://use.fontawesome.com 'unsafe-inline'; \t\t\tfont-src 'self' https://fonts.gstatic.com; \t\t\timg-src 'self' data: https://fonts.googleapis.com https://www.w3.org https://*.gov.bc.ca https://*.tile.openstreetmap.org; \t\t\tframe-ancestors 'self'; \t\t\tform-action 'self'; \t\t\tblock-all-mixed-content; \t\t\tconnect-src 'self' https://*.gov.bc.ca wss://*.gov.bc.ca;"[0m]
+[[92mweak-csp-detect[0m:[1;92munsafe-default-src[0m] [[94mhttp[0m] [[34minfo[0m] https://quickstart-openshift-test.apps.silver.devops.gov.bc.ca [[96m"default-src 'self' https://*.gov.bc.ca; \t\t\tscript-src 'self' https://*.gov.bc.ca; \t\t\tstyle-src 'self' https://fonts.googleapis.com https://use.fontawesome.com 'unsafe-inline'; \t\t\tfont-src 'self' https://fonts.gstatic.com; \t\t\timg-src 'self' data: https://fonts.googleapis.com https://www.w3.org https://*.gov.bc.ca https://*.tile.openstreetmap.org; \t\t\tframe-ancestors 'self'; \t\t\tform-action 'self'; \t\t\tblock-all-mixed-content; \t\t\tconnect-src 'self' https://*.gov.bc.ca wss://*.gov.bc.ca;"[0m]
+[[92mxss-deprecated-header[0m] [[94mhttp[0m] [[34minfo[0m] https://quickstart-openshift-test.apps.silver.devops.gov.bc.ca [[96m"1;mode=block"[0m]
+[[34mINF[0m] Skipped quickstart-openshift-test.apps.silver.devops.gov.bc.ca:443 from target list as found unresponsive permanently: cause="i/o timeout" address=quickstart-openshift-test.apps.silver.devops.gov.bc.ca:443 chain="got err while executing https://quickstart-openshift-test.apps.silver.devops.gov.bc.ca/axis2/services/listServices"
+[[34mINF[0m] Scan completed in 53.928060849s. 5 matches found.
+[[34mINF[0m] HTTP connections: 4326 total, 348 new, 3978 reused (92.0%)

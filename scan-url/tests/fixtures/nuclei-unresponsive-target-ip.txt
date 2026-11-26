@@ -1,0 +1,4 @@
+[[34mINF[0m] Targets loaded for current scan: 1
+[[34mINF[0m] Skipped 198.51.100.7:443 from target list as found unresponsive permanently: cause="i/o timeout" address=198.51.100.7:443 chain="got err while executing https://APP.example.gov.bc.ca/api/health"
+[[34mINF[0m] Skipped [2001:db8::7]:443 from target list as found unresponsive 30 times
+[[34mINF[0m] Scan completed in 1m. 0 matches found.

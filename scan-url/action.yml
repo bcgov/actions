@@ -15,6 +15,17 @@ inputs:
   nuclei:
     description: Run the Nuclei scan (true or false)
     default: 'true'
+  # Nuclei load: its defaults (150 requests/s, 25 templates at once, 10 s timeout)
+  # leave OpenShift routes unresponsive, and Nuclei then skips the rest of the scan
+  nuclei_rate_limit:
+    description: Nuclei maximum requests per second (-rl)
+    default: '25'
+  nuclei_concurrency:
+    description: Nuclei templates run in parallel (-c)
+    default: '5'
+  nuclei_timeout:
+    description: Nuclei seconds to wait for a connection or response (-timeout)
+    default: '30'
 
 outputs:
   zap_json:
@@ -41,6 +52,9 @@ runs:
         URL: ${{ inputs.url }}
         INPUT_ZAP: ${{ inputs.zap }}
         INPUT_NUCLEI: ${{ inputs.nuclei }}
+        NUCLEI_RATE_LIMIT: ${{ inputs.nuclei_rate_limit }}
+        NUCLEI_CONCURRENCY: ${{ inputs.nuclei_concurrency }}
+        NUCLEI_TIMEOUT: ${{ inputs.nuclei_timeout }}
         SHARED_INPUTS: ${{ github.action_path }}/../shared/inputs.js
       run: |
         # Shared boolean rules (shared/README.md); a bad value fails here
@@ -52,6 +66,13 @@ runs:
           echo "::error::zap and nuclei are both 'false'; enable at least one scanner"
           exit 1
         fi
+        for name in nuclei_rate_limit nuclei_concurrency nuclei_timeout; do
+          var="${name^^}"
+          if [[ ! "${!var}" =~ ^[1-9][0-9]{0,3}$ ]]; then
+            echo "::error::${name} must be a whole number from 1 to 9999, got '${!var}'"
+            exit 1
+          fi
+        done
         if [[ ! "$URL" =~ ^https?://[[:alnum:]][[:alnum:].-]*(:[0-9]+)?(/[^[:space:]]*)?$ ]]; then
           echo "::error::url must be http(s)://host[:port][/path], got '${URL}'"
           exit 1
@@ -67,7 +88,7 @@ runs:
         slug="$(sed -E 's#^https?://##; s#[^[:alnum:]]+#-#g; s#^-|-$##g' <<<"$URL")"
         echo "slug=${slug}" >> "$GITHUB_OUTPUT"
         # Stale reports from an earlier run would make a broken scan look clean
-        rm -f report_json.json zap-results.sarif nuclei-results.jsonl nuclei-results.sarif
+        rm -f report_json.json zap-results.sarif nuclei-results.jsonl nuclei-results.sarif nuclei.log
         if [[ -f tests/.zap/rules.tsv ]]; then
           echo "zap_rules=tests/.zap/rules.tsv" >> "$GITHUB_OUTPUT"
         fi
@@ -83,13 +104,37 @@ runs:
         artifact_name: zap_scan-${{ steps.preflight.outputs.slug }}
         allow_issue_writing: false
 
-    - name: Nuclei Scan
-      id: nuclei
+    - name: Install Nuclei
+      id: nuclei_install
       if: steps.preflight.outputs.nuclei == 'true'
       continue-on-error: true
       uses: projectdiscovery/nuclei-action@cc153d0541e1adf8a42bbe31c0a4fb2376147538 # v3.1.1
       with:
-        args: -u ${{ inputs.url }} -jsonl-export nuclei-results.jsonl -sarif-export nuclei-results.sarif
+        install-only: 'true'
+
+    # Run here, not in nuclei-action, so nuclei-skipped.sh can read its output (nuclei.log)
+    - name: Nuclei Scan
+      id: nuclei
+      if: steps.preflight.outputs.nuclei == 'true' && steps.nuclei_install.outcome == 'success'
+      continue-on-error: true
+      shell: bash
+      env:
+        URL: ${{ inputs.url }}
+        RATE_LIMIT: ${{ inputs.nuclei_rate_limit }}
+        CONCURRENCY: ${{ inputs.nuclei_concurrency }}
+        TIMEOUT: ${{ inputs.nuclei_timeout }}
+        SHARED_INPUTS: ${{ github.action_path }}/../shared/inputs.js
+      run: |
+        set -o pipefail
+        args=(-u "$URL" -jsonl-export nuclei-results.jsonl -sarif-export nuclei-results.sarif
+          -rl "$RATE_LIMIT" -c "$CONCURRENCY" -timeout "$TIMEOUT")
+        # Same debug flags nuclei-action adds on a debug re-run
+        if [[ "$(node "$SHARED_INPUTS" debug)" == true ]]; then
+          args+=(-debug -verbose)
+        fi
+        nuclei "${args[@]}" 2>&1 | tee nuclei.log
+        # A skipped target fails here, so a partial scan's SARIF can't close alerts
+        bash "${GITHUB_ACTION_PATH}/nuclei-skipped.sh"
 
     - name: Convert ZAP Report to SARIF
       if: steps.preflight.outputs.zap == 'true' && hashFiles('report_json.json') != ''
@@ -110,14 +155,16 @@ runs:
       shell: bash
       run: bash "${GITHUB_ACTION_PATH}/nuclei-sarif.sh"
 
+    # Only a complete scan uploads: a partial one would close alerts for templates that never ran
     - name: Upload Nuclei SARIF
-      if: ${{ !cancelled() && steps.preflight.outputs.nuclei == 'true' && steps.preflight.outcome == 'success' && hashFiles('nuclei-results.sarif') != '' }}
+      if: ${{ !cancelled() && steps.preflight.outputs.nuclei == 'true' && steps.nuclei.outcome == 'success' && hashFiles('nuclei-results.sarif') != '' }}
       uses: github/codeql-action/upload-sarif@v4
       with:
         sarif_file: nuclei-results.sarif
         category: nuclei-${{ steps.preflight.outputs.slug }}
 
-    # Findings never fail the action; a crashed scanner or missing report does
+    # Findings never fail the action; a crashed scanner, missing report or
+    # Nuclei skipping an unresponsive target (a failed Nuclei Scan step) does
     - name: Verify Scans Completed
       if: ${{ !cancelled() && steps.preflight.outcome == 'success' }}
       shell: bash

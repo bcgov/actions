@@ -381,7 +381,11 @@ jobs:
           fi
           echo "Input guards failed fast as expected."
 
-  # Real scans of quickstart-openshift TEST frontend and backend. A down site
+  # Real scans of public test beds for automated scanners: Google's Firing Range
+  # over HTTPS and ProjectDiscovery's scanme.sh over plain HTTP (its HTTPS
+  # certificate is self-signed). GitHub runners are throttled at
+  # quickstart-openshift TEST's edge (bcgov/quickstart-openshift#2972). ZAP crawls
+  # all of Firing Range (~470 URLs), so that leg takes ~55 minutes. A down site
   # fails that matrix leg on purpose. Duplicate ZAP issue creation is disabled
   # in scan-url so findings upload via SARIF only. Slugs keep artifacts and SARIF apart.
   test-scan-url-live:
@@ -389,7 +393,7 @@ jobs:
     needs: [filter]
     if: contains(fromJSON(needs.filter.outputs.changes), 'scan-url') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
     runs-on: ubuntu-26.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     permissions:
       actions: read
       contents: read
@@ -398,16 +402,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: frontend
-            url: https://quickstart-openshift-test.apps.silver.devops.gov.bc.ca/
-            slug: quickstart-openshift-test-apps-silver-devops-gov-bc-ca
-          - name: backend
-            url: https://quickstart-openshift-test.apps.silver.devops.gov.bc.ca/api
-            slug: quickstart-openshift-test-apps-silver-devops-gov-bc-ca-api
+          - name: https
+            url: https://public-firing-range.appspot.com/cors/
+            slug: public-firing-range-appspot-com-cors
+          - name: http
+            url: http://scanme.sh/
+            slug: scanme-sh
     steps:
       - uses: actions/checkout@v7
 
-      - name: Scan quickstart-openshift test
+      - name: Scan public test site
         id: scan
         uses: $/scan-url
         with:
@@ -457,8 +461,8 @@ jobs:
           echo "Code scanning categories on ${GITHUB_SHA}:"
           echo "$categories"
           for slug in \
-            quickstart-openshift-test-apps-silver-devops-gov-bc-ca \
-            quickstart-openshift-test-apps-silver-devops-gov-bc-ca-api
+            public-firing-range-appspot-com-cors \
+            scanme-sh
           do
             grep -qx "zap_scan-${slug}" <<<"$artifacts" \
               || { echo "::error::artifact zap_scan-${slug} not uploaded"; exit 1; }
@@ -466,6 +470,41 @@ jobs:
               grep -Eq "^${c}/?$" <<<"$categories" || { echo "::error::no SARIF analysis with category ${c}"; exit 1; }
             done
           done
+
+  # Live Nuclei output for an unroutable host (TEST-NET-1, RFC 5737) must trip
+  # nuclei-skipped.sh. scan-url's preflight rejects an unreachable URL before
+  # scanning, so this runs Nuclei directly with the action's flags.
+  test-scan-url-unresponsive:
+    name: Test Scan URL (Unresponsive)
+    needs: [filter]
+    if: contains(fromJSON(needs.filter.outputs.changes), 'scan-url') || contains(fromJSON(needs.filter.outputs.changes), 'workflows')
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Nuclei
+        uses: projectdiscovery/nuclei-action@cc153d0541e1adf8a42bbe31c0a4fb2376147538 # v3.1.1
+        with:
+          install-only: 'true'
+
+      - name: Scan an unroutable host
+        env:
+          URL: https://192.0.2.1
+        run: |
+          set -o pipefail
+          nuclei -u "$URL" -tags tech -rl 25 -c 5 -timeout 5 \
+            -jsonl-export nuclei-results.jsonl 2>&1 | tee nuclei.log
+          rc=0
+          bash scan-url/nuclei-skipped.sh > skipped.out || rc=$?
+          cat skipped.out
+          if [[ "$rc" -ne 1 ]] || ! grep -q '^::error::Nuclei did not complete: Skipped 192.0.2.1:443 ' skipped.out; then
+            echo "::error::nuclei-skipped.sh must fail on Nuclei's live skip of ${URL} (exit ${rc})"
+            exit 1
+          fi
+          echo "Live skip of ${URL} detected."
 
   # ─── DIFF TRIGGERS ──────────────────────────────────────────────────────────
   test-diff-triggers:
@@ -1821,6 +1860,7 @@ jobs:
       - test-scan-url
       - test-scan-url-live
       - test-scan-url-matrix
+      - test-scan-url-unresponsive
       - test-diff-triggers
       - test-get-pr
       - test-ghcr-cleanup

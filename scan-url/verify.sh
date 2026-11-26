@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Findings never fail the action; a failed scanner step or missing report does.
+# The Nuclei Scan step fails when Nuclei skipped the target (nuclei-skipped.sh).
 # Env: ZAP_ENABLED, NUCLEI_ENABLED ('true'/'false'), ZAP_OUTCOME, NUCLEI_OUTCOME
 # (step outcomes). Disabled scanners are not checked. Reads reports from the cwd.
 
