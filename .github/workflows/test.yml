@@ -381,9 +381,9 @@ jobs:
           fi
           echo "Input guards failed fast as expected."
 
-  # Real scans of public sites whose owner (Acunetix) offers them for testing
-  # scanners; GitHub runners are throttled at quickstart-openshift TEST's edge
-  # (bcgov/quickstart-openshift#2972). A down site fails that matrix leg on
+  # Real scans of two small sections of Google's Firing Range, a public test bed
+  # for automated web security scanners; GitHub runners are throttled at
+  # quickstart-openshift TEST's edge (bcgov/quickstart-openshift#2972). A down site fails that matrix leg on
   # purpose. Duplicate ZAP issue creation is disabled in scan-url so findings
   # upload via SARIF only. Slugs keep artifacts and SARIF apart.
   test-scan-url-live:
@@ -400,12 +400,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: testphp
-            url: http://testphp.vulnweb.com/
-            slug: testphp-vulnweb-com
-          - name: testhtml5
-            url: http://testhtml5.vulnweb.com/
-            slug: testhtml5-vulnweb-com
+          - name: clickjacking
+            url: https://public-firing-range.appspot.com/clickjacking/
+            slug: public-firing-range-appspot-com-clickjacking
+          - name: cors
+            url: https://public-firing-range.appspot.com/cors/
+            slug: public-firing-range-appspot-com-cors
     steps:
       - uses: actions/checkout@v7
 
@@ -459,8 +459,8 @@ jobs:
           echo "Code scanning categories on ${GITHUB_SHA}:"
           echo "$categories"
           for slug in \
-            testphp-vulnweb-com \
-            testhtml5-vulnweb-com
+            public-firing-range-appspot-com-clickjacking \
+            public-firing-range-appspot-com-cors
           do
             grep -qx "zap_scan-${slug}" <<<"$artifacts" \
               || { echo "::error::artifact zap_scan-${slug} not uploaded"; exit 1; }
