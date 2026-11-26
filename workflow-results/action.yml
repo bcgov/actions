@@ -19,15 +19,30 @@ inputs:
       Set true or false to override.
     required: false
     default: ''
+  check_annotations:
+    description: >-
+      Fail the gate when a job in this run concluded success but has an error annotation
+      (::error::, ##[error]) or GitHub's 'Unexpected input(s)' warning.
+      Private and internal repos need actions: read and checks: read; without them the check is skipped with a warning.
+      Set false to turn it off.
+    required: false
+    default: 'true'
   token:
-    description: Token for notifications (defaults to github.token). Unused when notify is off.
+    description: Token for the annotation check and notifications (defaults to github.token).
     required: false
     default: ${{ github.token }}
 
 outputs:
   passed:
-    description: Whether all upstream jobs passed or were skipped ('true' or 'false')
-    value: ${{ steps.gate.outputs.passed }}
+    description: >-
+      'true' only when all upstream jobs passed or were skipped and the annotation check didn't fail;
+      'false' otherwise, including when a job that concluded success has an error or 'Unexpected input(s)' annotation
+    value: ${{ steps.gate.outputs.passed == 'true' && steps.annotations.outcome != 'failure' }}
+  annotations:
+    description: >-
+      JSON array of the error and 'Unexpected input(s)' annotations found in jobs that concluded success
+      ([] when none). Empty when the check is off or the token can't read annotations.
+    value: ${{ steps.annotations.outputs.annotations }}
 
 runs:
   using: composite
@@ -48,6 +63,16 @@ runs:
         INPUT_TITLE: ${{ inputs.title }}
       run: node "${{ github.action_path }}/index.js"
 
+    - name: Check annotations
+      id: annotations
+      continue-on-error: true
+      shell: bash
+      env:
+        INPUT_CHECK_ANNOTATIONS: ${{ inputs.check_annotations }}
+        INPUT_TITLE: ${{ inputs.title }}
+        INPUT_TOKEN: ${{ inputs.token }}
+      run: node "${{ github.action_path }}/annotations.js"
+
     - name: Resolve notify
       id: notify
       shell: bash
@@ -56,7 +81,7 @@ runs:
       run: node "${{ github.action_path }}/index.js" --resolve-notify
 
     - name: Checkout CODEOWNERS
-      if: steps.notify.outputs.notify == 'true' && steps.gate.outcome == 'failure' && steps.gate.outputs.cancelled_only != 'true'
+      if: steps.notify.outputs.notify == 'true' && ((steps.gate.outcome == 'failure' && steps.gate.outputs.cancelled_only != 'true') || steps.annotations.outcome == 'failure')
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         path: .workflow-results-notify
@@ -70,7 +95,7 @@ runs:
         sparse-checkout-cone-mode: false
 
     - name: Notify on failure
-      if: steps.notify.outputs.notify == 'true' && steps.gate.outcome == 'failure' && steps.gate.outputs.cancelled_only != 'true'
+      if: steps.notify.outputs.notify == 'true' && ((steps.gate.outcome == 'failure' && steps.gate.outputs.cancelled_only != 'true') || steps.annotations.outcome == 'failure')
       shell: bash
       working-directory: .workflow-results-notify
       env:
@@ -84,7 +109,7 @@ runs:
       run: '"${{ github.action_path }}/../workflow-notifier/action.sh"'
 
     - name: Fail gate
-      if: steps.gate.outcome == 'failure'
+      if: steps.gate.outcome == 'failure' || steps.annotations.outcome == 'failure'
       shell: bash
       run: |
         echo "::error::Workflow results gate failed"
