@@ -24,9 +24,9 @@ Depends on whether notify fires for the event, plus two read permissions for the
 | :--------------------------------------------- | :--------------------------------------------------------------------------------- |
 | notify off (PR events by default, or `false`)  | none (`permissions: {}`)                                                           |
 | notify on (other events by default, or `true`) | `contents: read`, `issues: write` (+ `pull-requests: read` for merger attribution) |
-| annotation check (`check_annotations`, on)     | `actions: read`, `checks: read`                                                    |
+| annotation check (`check_annotations`, on)     | `actions: read`, `checks: read` (private and internal repos)                       |
 
-Without `actions: read` and `checks: read` the annotation check logs a warning and is skipped; the gate result is unchanged.
+Public repositories can read their own jobs and annotations without these, so the check runs even under `permissions: {}`. Private and internal repositories need them; without them the check logs a warning and is skipped, and the gate result is unchanged.
 
 ## Annotation check
 
@@ -39,7 +39,7 @@ The gate lists this run's latest jobs, reads the annotations of every completed 
 
 Other warnings and notices are ignored. Jobs still running, including the results job, are not read. Every job in the run counts, not only those in `needs`. Findings are listed as error annotations and in the step summary, and on non-PR events they notify like any other gate failure.
 
-Grant the results job the read permissions:
+Grant the results job the read permissions (needed for private and internal repositories):
 
 ```yaml
 results:
@@ -135,7 +135,7 @@ The standalone [`workflow-notifier`](../workflow-notifier/) remains for workflow
     notify: ''
 
     # Optional: fail on errors or 'Unexpected input(s)' warnings in jobs that concluded success
-    # Needs actions: read and checks: read; skipped with a warning without them
+    # Private and internal repos need actions: read and checks: read; skipped with a warning without them
     # Default: "true"
     check_annotations: 'true'
 

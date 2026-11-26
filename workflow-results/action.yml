@@ -23,7 +23,7 @@ inputs:
     description: >-
       Fail the gate when a job in this run concluded success but has an error annotation
       (::error::, ##[error]) or GitHub's 'Unexpected input(s)' warning.
-      Needs actions: read and checks: read; without them the check is skipped with a warning.
+      Private and internal repos need actions: read and checks: read; without them the check is skipped with a warning.
       Set false to turn it off.
     required: false
     default: 'true'

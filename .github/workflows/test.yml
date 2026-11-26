@@ -1031,12 +1031,14 @@ jobs:
       - name: Run Unit Tests
         run: node --test workflow-results/tests/unit.test.js workflow-results/tests/annotations.test.js
 
+      # Other jobs in this run log errors on purpose; the annotation check is tested in test-workflow-results.yml
       - name: Test Workflow Results Self Action (All Succeeded & Skipped)
         id: self_check_pass
         uses: $/workflow-results
         with:
           needs: '{"job1":{"result":"success"},"job2":{"result":"skipped"}}'
           title: 'Workflow Results Self-Check'
+          check_annotations: 'false'
 
       - name: Verify Pass Outputs
         run: |
@@ -1053,6 +1055,7 @@ jobs:
         with:
           needs: '{"test":{"result":"failure"},"build":{"result":"success"}}'
           title: 'Failure Simulation Gate'
+          check_annotations: 'false'
           notify: 'false'
 
       - name: Verify Failure Gate Behaved Correctly
@@ -1073,6 +1076,7 @@ jobs:
         with:
           needs: '{"deploy":{"result":"cancelled"},"build":{"result":"success"}}'
           title: 'Cancelled Simulation Gate'
+          check_annotations: 'false'
           notify: 'false'
 
       - name: Verify Cancelled Gate Behaved Correctly
@@ -1108,6 +1112,7 @@ jobs:
         with:
           needs: '{"test":{"result":"failure"}}'
           title: 'Notify Simulation Gate'
+          check_annotations: 'false'
           notify: 'true'
 
       - name: Verify Notify Path Behaved Correctly
@@ -1137,6 +1142,7 @@ jobs:
         with:
           needs: '{"build":{"result":"success"},"deploy":{"result":"cancelled"}}'
           title: 'Cancelled Notify Simulation Gate'
+          check_annotations: 'false'
           notify: 'true'
 
       - name: Verify Cancelled-Only Run Skipped Notify
@@ -1162,6 +1168,7 @@ jobs:
         with:
           needs: '{}'
           title: 'Empty Needs Simulation'
+          check_annotations: 'false'
 
       - name: Verify Empty Needs Failed Fast
         run: |

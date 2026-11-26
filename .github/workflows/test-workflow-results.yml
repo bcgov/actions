@@ -60,6 +60,7 @@ jobs:
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
+      # Public repos can read jobs and annotations without actions: read and checks: read
       - id: results
         uses: $/workflow-results
         with:
@@ -67,16 +68,29 @@ jobs:
           title: No Permissions
           notify: 'false'
 
-      - name: Verify the gate still passed
+      # A token that can't read stands in for a private repo without the permissions
+      - id: unreadable
+        uses: $/workflow-results
+        with:
+          needs: ${{ toJson(needs) }}
+          title: Unreadable
+          notify: 'false'
+          token: not-a-token
+
+      - name: Verify both gates passed and the unreadable one skipped
         env:
           PASSED: ${{ steps.results.outputs.passed }}
           ANNOTATIONS: ${{ steps.results.outputs.annotations }}
+          UNREADABLE_PASSED: ${{ steps.unreadable.outputs.passed }}
+          UNREADABLE_ANNOTATIONS: ${{ steps.unreadable.outputs.annotations }}
         run: |
           echo "passed=${PASSED} annotations=${ANNOTATIONS}"
-          if [ "${PASSED}" != "true" ]; then
-            echo "::error::Without actions: read and checks: read the check should warn and skip, not fail"
-            exit 1
-          fi
+          echo "unreadable: passed=${UNREADABLE_PASSED} annotations=${UNREADABLE_ANNOTATIONS}"
+          fail=0
+          [ "${PASSED}" = "true" ] || { echo "::error::Gate without permissions should pass"; fail=1; }
+          [ "${UNREADABLE_PASSED}" = "true" ] || { echo "::error::Unreadable annotations should warn and skip, not fail"; fail=1; }
+          [ -z "${UNREADABLE_ANNOTATIONS}" ] || { echo "::error::Skipped check should leave annotations empty"; fail=1; }
+          exit $fail
 
   dirty-fixture:
     name: Dirty Fixture
