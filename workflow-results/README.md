@@ -37,7 +37,7 @@ The gate lists this run's latest jobs, reads the annotations of every completed 
 - an error annotation (`::error::`, `##[error]`, including `Process completed with exit code N` from a `continue-on-error` step), or
 - a warning containing `Unexpected input(s)`.
 
-Other warnings and notices are ignored. Jobs still running, including the results job, are not read. Every job in the run counts, not only those in `needs`. Findings are listed as error annotations and in the step summary, and on non-PR events they notify like any other gate failure.
+Other warnings and notices are ignored. Jobs still running, including the results job, are not read. GitHub attaches a job's annotations a few seconds after it completes, so the check first waits until 20 seconds after the latest of those jobs completed (at most 20 seconds). Every job in the run counts, not only those in `needs`. Findings are listed as error annotations and in the step summary, and on non-PR events they notify like any other gate failure.
 
 Grant the results job the read permissions (needed for private and internal repositories):
 

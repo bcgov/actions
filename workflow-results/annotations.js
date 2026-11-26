@@ -9,6 +9,9 @@ const process = require('process')
 
 const UNEXPECTED_INPUT = 'Unexpected input(s)'
 const PER_PAGE = 100
+// GitHub attaches a job's annotations a few seconds after the job completes,
+// and the results job usually starts right after its last upstream job.
+const SETTLE_MS = 20000
 
 /**
  * Error raised when the token can't read jobs or annotations (403/404).
@@ -72,8 +75,9 @@ function isFinding(annotation) {
 
 /**
  * List this run's latest jobs and the findings in those that concluded success.
- * Jobs still running (including the one calling this) are not read.
- * @param {{ apiUrl: string, repository: string, runId: string, token: string, fetchImpl?: typeof fetch }} opts
+ * Jobs still running (including the one calling this) are not read. Waits
+ * until SETTLE_MS after the latest of those jobs completed before reading.
+ * @param {{ apiUrl: string, repository: string, runId: string, token: string, fetchImpl?: typeof fetch, now?: () => number, sleep?: (ms: number) => Promise<void>, logger?: Pick<Console, 'log'> }} opts
  * @returns {Promise<{ job: string, level: string, message: string, path: string, line: number|null }[]>}
  */
 async function collectFindings(opts) {
@@ -84,9 +88,23 @@ async function collectFindings(opts) {
     'jobs',
     {token: opts.token, fetchImpl, permission: 'actions: read'}
   )
+  const passed = jobs.filter(
+    j => j.status === 'completed' && j.conclusion === 'success'
+  )
+  const latest = Math.max(
+    0,
+    ...passed.map(j => Date.parse(j.completed_at ?? '') || 0)
+  )
+  const now = opts.now ?? Date.now
+  const wait = Math.min(SETTLE_MS, latest + SETTLE_MS - now())
+  if (wait > 0) {
+    ;(opts.logger ?? console).log(
+      `Waiting ${Math.ceil(wait / 1000)}s for annotations of recently completed jobs`
+    )
+    await (opts.sleep ?? (ms => new Promise(r => setTimeout(r, ms))))(wait)
+  }
   const findings = []
-  for (const job of jobs) {
-    if (job.status !== 'completed' || job.conclusion !== 'success') continue
+  for (const job of passed) {
     const annotations = await getAll(
       `${base}/check-runs/${job.id}/annotations`,
       '',
@@ -187,7 +205,10 @@ async function run(opts = {}) {
       repository: env.GITHUB_REPOSITORY,
       runId: env.GITHUB_RUN_ID,
       token: getToken(env),
-      fetchImpl: opts.fetchImpl
+      fetchImpl: opts.fetchImpl,
+      now: opts.now,
+      sleep: opts.sleep,
+      logger
     })
   } catch (err) {
     const why =
@@ -236,6 +257,7 @@ if (require.main === module) {
 
 module.exports = {
   NotPermittedError,
+  SETTLE_MS,
   buildSummary,
   collectFindings,
   escapeProperty,

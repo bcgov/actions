@@ -5,6 +5,7 @@ const path = require('node:path')
 const os = require('node:os')
 const {
   NotPermittedError,
+  SETTLE_MS,
   buildSummary,
   collectFindings,
   escapeProperty,
@@ -103,6 +104,7 @@ test('collectFindings: reads only completed jobs that concluded success', async 
     repository: REPO,
     runId: RUN,
     token: 't',
+    sleep: async () => {},
     fetchImpl: fakeFetch(
       {
         [jobsUrl(1)]: {
@@ -155,6 +157,7 @@ test('collectFindings: follows pagination for jobs and annotations', async () =>
     repository: REPO,
     runId: RUN,
     token: 't',
+    sleep: async () => {},
     fetchImpl: fakeFetch(routes)
   })
   assert.deepEqual(
@@ -170,6 +173,7 @@ test('collectFindings: 403 raises NotPermittedError naming the permission', asyn
       repository: REPO,
       runId: RUN,
       token: 't',
+      sleep: async () => {},
       fetchImpl: fakeFetch({[jobsUrl(1)]: 403})
     }),
     err => err instanceof NotPermittedError && /actions: read/.test(err.message)
@@ -180,6 +184,7 @@ test('collectFindings: 403 raises NotPermittedError naming the permission', asyn
       repository: REPO,
       runId: RUN,
       token: 't',
+      sleep: async () => {},
       fetchImpl: fakeFetch({
         [jobsUrl(1)]: {
           jobs: [{id: 1, name: 'A', status: 'completed', conclusion: 'success'}]
@@ -195,6 +200,7 @@ test('run: findings fail with annotations, summary and JSON output', async () =>
   const t = tmpEnv()
   const logger = quietLogger()
   const r = await run({
+    sleep: async () => {},
     env: t.env,
     logger,
     fetchImpl: fakeFetch({
@@ -225,6 +231,7 @@ test('run: findings fail with annotations, summary and JSON output', async () =>
 test('run: clean run passes with [] output', async () => {
   const t = tmpEnv()
   const r = await run({
+    sleep: async () => {},
     env: t.env,
     logger: quietLogger(),
     fetchImpl: fakeFetch({
@@ -248,6 +255,7 @@ test('run: no permission warns and skips with empty output', async () => {
   const t = tmpEnv()
   const logger = quietLogger()
   const r = await run({
+    sleep: async () => {},
     env: t.env,
     logger,
     fetchImpl: fakeFetch({[jobsUrl(1)]: 403})
@@ -265,7 +273,12 @@ test('run: no permission warns and skips with empty output', async () => {
 test('run: other API errors warn and skip', async () => {
   const t = tmpEnv()
   const logger = quietLogger()
-  const r = await run({env: t.env, logger, fetchImpl: fakeFetch({})})
+  const r = await run({
+    sleep: async () => {},
+    env: t.env,
+    logger,
+    fetchImpl: fakeFetch({})
+  })
   assert.equal(r.exitCode, 0)
   assert.match(logger.lines.warn[0], /500 reading/)
 })
@@ -274,6 +287,7 @@ test('run: check_annotations false makes no API calls', async () => {
   const t = tmpEnv({INPUT_CHECK_ANNOTATIONS: 'false'})
   const calls = []
   const r = await run({
+    sleep: async () => {},
     env: t.env,
     logger: quietLogger(),
     fetchImpl: fakeFetch({}, calls)
@@ -301,4 +315,62 @@ test('buildSummary: escapes pipes and newlines', () => {
 
 test('escapeProperty: escapes command property separators', () => {
   assert.equal(escapeProperty('Test (a, b): x%\n'), 'Test (a%2C b)%3A x%25%0A')
+})
+
+test('collectFindings: waits for annotations of recently completed jobs', async () => {
+  const now = Date.parse('2026-01-01T00:01:00Z')
+  const job = completedAt => ({
+    jobs: [
+      {
+        id: 1,
+        name: 'Old',
+        status: 'completed',
+        conclusion: 'success',
+        completed_at: '2026-01-01T00:00:00Z'
+      },
+      {
+        id: 2,
+        name: 'New',
+        status: 'completed',
+        conclusion: 'success',
+        completed_at: completedAt
+      },
+      {
+        id: 3,
+        name: 'Running',
+        status: 'in_progress',
+        conclusion: null,
+        completed_at: null
+      }
+    ]
+  })
+  const read = async completedAt => {
+    const slept = []
+    await collectFindings({
+      apiUrl: API,
+      repository: REPO,
+      runId: RUN,
+      token: 't',
+      now: () => now,
+      sleep: async ms => slept.push(ms),
+      logger: {log: () => {}},
+      fetchImpl: fakeFetch({
+        [jobsUrl(1)]: job(completedAt),
+        [annUrl(1, 1)]: [],
+        [annUrl(2, 1)]: []
+      })
+    })
+    return slept
+  }
+  assert.deepEqual(await read('2026-01-01T00:00:58Z'), [SETTLE_MS - 2000])
+  assert.deepEqual(
+    await read('2025-12-31T23:00:00Z'),
+    [],
+    'no wait for old jobs'
+  )
+  assert.deepEqual(
+    await read('2026-01-01T00:02:00Z'),
+    [SETTLE_MS],
+    'wait is capped'
+  )
 })
