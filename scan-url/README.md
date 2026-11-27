@@ -36,7 +36,7 @@ permissions:
 | `nuclei_rate_limit` | Nuclei maximum requests per second (`-rl`) | `'25'` | No |
 | `nuclei_concurrency` | Nuclei templates run in parallel (`-c`) | `'5'` | No |
 | `nuclei_timeout` | Nuclei seconds to wait for a connection or response (`-timeout`) | `'30'` | No |
-| `nuclei_tags` | Scan depth: run only Nuclei templates with these tags (`-tags`), one per line | unset (every template) | No |
+| `nuclei_tags` | Scan depth: run only Nuclei templates with these tags (`-tags`), one per line. Pass `''` to run every template | `misconfig`, `exposure`, `tech` | No |
 | `nuclei_templates` | Scan depth: run only these Nuclei templates or template directories (`-t`), one per line | unset (every template) | No |
 | `zap_spider_minutes` | Scan depth: minutes the ZAP spider may run (`zap-full-scan.py -m`) | unset (no limit) | No |
 | `zap_scan_minutes` | Scan depth: minutes the ZAP active scan may run (ZAP `scanner.maxScanDurationInMins`) | unset (no limit) | No |
@@ -47,7 +47,7 @@ The `nuclei_*` defaults are lower than Nuclei's own (150 requests per second, 25
 
 ### Scan depth
 
-Unset, the four scan-depth inputs add no flags, so Nuclei runs every template and ZAP spiders and scans with no time limit. Set them only to trade coverage for time, for example in a pipeline's own tests:
+By default, `nuclei_tags` runs `misconfig`, `exposure`, and `tech` (high-signal checks alongside ZAP's active fuzzing, avoiding thousands of irrelevant stack/CVE templates). Pass `nuclei_tags: ''` to run every Nuclei template; the other three scan-depth inputs are unset by default (no template filter, no ZAP time limit). Set them to trade coverage for time, for example in a pipeline's own tests:
 
 ```yaml
       - uses: bcgov/actions/scan-url@vX.Y.Z # Replace with latest release tag

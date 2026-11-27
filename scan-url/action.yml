@@ -26,9 +26,13 @@ inputs:
   nuclei_timeout:
     description: Nuclei seconds to wait for a connection or response (-timeout)
     default: '30'
-  # Scan depth: unset runs the full scans; set these only to trade coverage for time
+  # Scan depth: nuclei_tags defaults to high-signal tags alongside ZAP; pass '' to run every template
   nuclei_tags:
-    description: Run only Nuclei templates with these tags (-tags), one per line. Unset runs every template
+    description: Run only Nuclei templates with these tags (-tags), one per line. Pass '' to run every template
+    default: |
+      misconfig
+      exposure
+      tech
   nuclei_templates:
     description: Run only these Nuclei templates or template directories (-t), one per line. Unset runs every template
   zap_spider_minutes:

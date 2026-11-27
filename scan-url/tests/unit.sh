@@ -141,6 +141,7 @@ assert_eq "$(grep -c 'cmd_options: ${{ steps.preflight.outputs.zap_cmd_options }
 # shellcheck disable=SC2016 # literal action.yml text, not shell
 assert_eq "$(grep -cE '\[\[ -z "\$(TAGS|TEMPLATES)" \]\] \|\| args\+=\(-(tags|t) "\$(TAGS|TEMPLATES)"\)' "$ACTION_YML")" "2" "action.yml adds -tags/-t as arguments only when set"
 assert_eq "$(grep -cE 'inputs\.(nuclei_tags|nuclei_templates|zap_spider_minutes|zap_scan_minutes) \}\}' "$ACTION_YML")" "4" "action.yml reads the new inputs only through env"
+assert_eq "$(awk '/^  nuclei_tags:/{f=1;next} f && /^  [a-z_]+:/{exit} f && /^      /{gsub(/^ +/,""); printf "%s%s", (s?",":""), $0; s=1}' "$ACTION_YML")" "misconfig,exposure,tech" "action.yml defaults nuclei_tags to misconfig,exposure,tech"
 
 # nuclei-sarif.sh: fixes executionSuccessful=false and creates empty SARIF on clean scan
 NUCLEI_SARIF="${SCRIPT_DIR}/../nuclei-sarif.sh"
