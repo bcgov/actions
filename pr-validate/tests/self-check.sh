@@ -115,7 +115,7 @@ else
   failed=$((failed + 1))
 fi
 
-# Runner labels: bundled ubuntu-26.04 labels, plus the caller's own labels.
+# Unknown runs-on labels are not checked. Other actionlint errors still fail.
 lint_fixture() { # expected-status label
   local expected="$1" label="$2" status
   set +e
@@ -123,7 +123,7 @@ lint_fixture() { # expected-status label
   status=$?
   set -e
   if { [[ "$expected" == pass ]] && [[ "$status" -eq 0 ]]; } ||
-    { [[ "$expected" == fail ]] && [[ "$status" -ne 0 ]] && grep -q 'is unknown' /tmp/pr-validate-labels.txt; }; then
+    { [[ "$expected" == fail ]] && [[ "$status" -ne 0 ]]; }; then
     echo "ok  $label"
     passed=$((passed + 1))
   else
@@ -146,116 +146,44 @@ jobs:
     steps:
       - run: echo ok
 EOF
-lint_fixture pass "ubuntu-26.04 and ubuntu-26.04-arm are known runner labels"
-
-cat >> "$fixture/.github/workflows/ok.yml" <<'EOF'
-  custom:
-    runs-on: [self-hosted, my-runner, quoted-runner]
-    steps:
-      - run: echo ok
-EOF
-lint_fixture fail "unknown runner label fails without a caller config"
-
-config_before="$(cat "$config")"
-cat > "$fixture/.github/actionlint.yaml" <<'EOF'
-# caller config, block list
-self-hosted-runner:
-  labels:
-    - my-runner # comment
-    - "quoted-runner"
-paths:
-  '**/*.yml':
-    ignore:
-      - 'anything'
-EOF
-lint_fixture pass "caller .github/actionlint.yaml labels are added to the bundled ones"
-merged="$fixture/pr-validate-actionlint.yaml"
-if grep -q 'my-runner' "$merged" && grep -q 'quoted-runner' "$merged" &&
-  grep -q 'ubuntu-26.04-arm' "$merged" && grep -q 'specifying action' "$merged" &&
-  ! grep -q 'anything' "$merged" && [[ "$(cat "$config")" == "$config_before" ]]; then
-  echo "ok  merged config keeps the bundled labels and ignores, bundled file unchanged"
-  passed=$((passed + 1))
-else
-  echo "FAIL  merged config keeps the bundled labels and ignores, bundled file unchanged"
-  cat "$merged"
-  failed=$((failed + 1))
-fi
-rm "$fixture/.github/actionlint.yaml"
-
-printf 'self-hosted-runner:\n  labels: [quoted-runner, "my-runner"] # flow list\n' > "$fixture/.github/actionlint.yml"
-lint_fixture pass "caller .github/actionlint.yml flow-list labels are added"
-
-printf 'self-hosted-runner:\n  labels:\n    - quoted-runner\n    - "my-*"\n' > "$fixture/.github/actionlint.yml"
-lint_fixture pass "caller glob pattern label matches"
-
-printf 'self-hosted-runner:\n  labels:\n    - other-runner\n' > "$fixture/.github/actionlint.yml"
-lint_fixture fail "caller config without the label still fails"
-
-# runner_labels input: Azure and other custom runners (issue #383).
-INPUT_RUNNER_LABELS=$'quoted-runner\nmy-runner' lint_fixture pass "runner_labels input adds labels with a caller config present"
-rm "$fixture/.github/actionlint.yml" "$fixture/pr-validate-actionlint.yaml"
+lint_fixture pass "ubuntu-26.04 and ubuntu-26.04-arm pass without a runner label list"
 
 cat > "$fixture/.github/workflows/ok.yml" <<'EOF'
-name: azure
+name: labels
 on: push
 jobs:
-  deploy:
+  custom:
+    runs-on: this-label-does-not-exist
+    steps:
+      - run: echo ok
+  azure:
     runs-on: bcgov-azure-lz-live-github-managed-runner
     steps:
       - run: echo ok
-  default:
-    runs-on: ubuntu-26.04
-    steps:
-      - run: echo ok
 EOF
-lint_fixture fail "Azure runner label fails without runner_labels"
-INPUT_RUNNER_LABELS=ubuntu-26.04 lint_fixture fail "Azure runner label fails with the default runner_labels"
-if [[ ! -e "$fixture/pr-validate-actionlint.yaml" ]]; then
-  echo "ok  default runner_labels lints with the bundled config unchanged"
-  passed=$((passed + 1))
-else
-  echo "FAIL  default runner_labels lints with the bundled config unchanged"
-  cat "$fixture/pr-validate-actionlint.yaml"
-  failed=$((failed + 1))
-fi
-INPUT_RUNNER_LABELS=bcgov-azure-lz-live-github-managed-runner lint_fixture pass "runner_labels accepts the Azure runner label"
-INPUT_RUNNER_LABELS=$'ubuntu-26.04\nbcgov-azure-*' lint_fixture pass "runner_labels takes one per line and glob patterns"
-INPUT_RUNNER_LABELS=other-runner lint_fixture fail "runner_labels without the label still fails"
+lint_fixture pass "unknown runner labels do not fail the lint"
 
+cat > "$fixture/.github/workflows/ok.yml" <<'EOF'
+name: labels
+on: push
+jobs:
+  custom:
+    runs-on: this-label-does-not-exist
+    steps:
+      - run: echo ${{ github.evnet }}
+EOF
 set +e
-INPUT_RUNNER_LABELS='bcgov-azure-lz-live-github-managed-runner, other-runner' ACTIONLINT_CONFIG="$config" ACTIONLINT_WORKSPACE="$fixture" RUNNER_TEMP="$fixture" bash "$lint" >/tmp/pr-validate-labels.txt 2>&1
+ACTIONLINT_CONFIG="$config" ACTIONLINT_WORKSPACE="$fixture" RUNNER_TEMP="$fixture" bash "$lint" >/tmp/pr-validate-labels.txt 2>&1
 status=$?
 set -e
-if [[ "$status" -ne 0 ]] && grep -q 'runner_labels: list format' /tmp/pr-validate-labels.txt; then
-  echo "ok  comma-separated runner_labels fails with the list format error"
+if [[ "$status" -ne 0 ]] && grep -q "evnet" /tmp/pr-validate-labels.txt && ! grep -q "is unknown" /tmp/pr-validate-labels.txt; then
+  echo "ok  a real lint error still fails when the workflow also has an unknown runner label"
   passed=$((passed + 1))
 else
-  echo "FAIL  comma-separated runner_labels fails with the list format error"
+  echo "FAIL  a real lint error still fails when the workflow also has an unknown runner label"
   cat /tmp/pr-validate-labels.txt
   failed=$((failed + 1))
 fi
-rm -f "$fixture/pr-validate-actionlint.yaml"
-
-# Backslash sequences in labels stay literal: awk -v would turn \n into a line
-# break and \047 into a quote that ends the YAML scalar.
-printf 'self-hosted-runner:\n  labels:\n    - c\\nd\n' > "$fixture/.github/actionlint.yml"
-set +e
-INPUT_RUNNER_LABELS=$'bcgov-azure-lz-live-github-managed-runner\na\\nb\n\\047' ACTIONLINT_CONFIG="$config" ACTIONLINT_WORKSPACE="$fixture" RUNNER_TEMP="$fixture" bash "$lint" >/tmp/pr-validate-labels.txt 2>&1
-status=$?
-set -e
-merged="$fixture/pr-validate-actionlint.yaml"
-if [[ "$status" -eq 0 ]] &&
-  grep -qxF "    - 'a\nb'" "$merged" && grep -qxF "    - '\047'" "$merged" && grep -qxF "    - 'c\nd'" "$merged" &&
-  [[ "$(grep -c '^    - ' "$merged")" -eq $(( $(grep -c '^    - ' "$config") + 4 )) ]] &&
-  [[ "$(grep -E '^[^ #]' "$merged")" == "$(grep -E '^[^ #]' "$config")" ]]; then
-  echo "ok  backslash sequences in runner_labels and caller labels stay literal"
-  passed=$((passed + 1))
-else
-  echo "FAIL  backslash sequences in runner_labels and caller labels stay literal"
-  cat /tmp/pr-validate-labels.txt "$merged"
-  failed=$((failed + 1))
-fi
-rm -f "$merged" "$fixture/.github/actionlint.yml"
 
 # Shared list inputs for bcgov/actions* callers: old formats fail, one per line passes.
 list_fail() { # label input-line(s)
@@ -291,8 +219,6 @@ list_fail "space-separated components fail" "          components: backend front
 list_fail "comma-separated hosts fail" "          hosts: a.example.com,b.example.com"
 list_fail "space-separated cleanup_name fails" "          cleanup_name: app db"
 list_fail "comma-separated remove_pvc fails" "          remove_pvc: data,logs"
-list_fail "comma-separated runner_labels fail" "          runner_labels: azure-a, azure-b"
-
 # cert-expiry strips '# comments' from each hosts line before reading the list.
 cat > "$fixture/.github/workflows/ok.yml" <<'EOF'
 name: lists

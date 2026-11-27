@@ -53,82 +53,6 @@ fi
 
 cd "$workspace"
 
-# caller_runner_labels FILE: print the self-hosted-runner labels in a caller's
-# actionlint config, one per line. Handles block (- label) and flow ([a, b]) lists.
-caller_runner_labels() {
-  awk '
-    function emit(v) {
-      gsub(/^[[:space:]"\047]+|[[:space:]"\047]+$/, "", v)
-      if (v != "") print v
-    }
-    /^[^[:space:]#]/ { in_runner = ($0 ~ /^self-hosted-runner:/); in_labels = 0; next }
-    in_runner && /^[[:space:]]+labels:/ {
-      v = $0; sub(/^[^:]*:/, "", v); sub(/[[:space:]]#.*$/, "", v)
-      if (v ~ /\[/) {
-        gsub(/[][]/, "", v); n = split(v, items, ",")
-        for (i = 1; i <= n; i++) emit(items[i])
-      } else {
-        in_labels = 1
-      }
-      next
-    }
-    in_labels && /^[[:space:]]*-/ { v = $0; sub(/^[[:space:]]*-/, "", v); sub(/[[:space:]]#.*$/, "", v); emit(v); next }
-    in_labels && /^[[:space:]]*(#.*)?$/ { next }
-    in_labels { in_labels = 0 }
-  ' "$1"
-}
-
-# Extra runner labels: the runner_labels input (one per line, read with the shared
-# list parser), then a caller's .github/actionlint.yaml (or .yml) self-hosted-runner
-# labels. Only the caller config's labels are read; its other settings are not used.
-# Labels the bundled config already has are skipped, so the default (ubuntu-26.04)
-# lints with the bundled config unchanged.
-declare -A seen=()
-while IFS= read -r label; do
-  seen["$label"]=1
-done < <(caller_runner_labels "$config")
-labels=()
-add_labels() { # source label...
-  local source="$1" label added=()
-  shift
-  for label in "$@"; do
-    if [[ -n "$label" && -z "${seen[$label]:-}" ]]; then
-      seen["$label"]=1
-      labels+=("$label")
-      added+=("$label")
-    fi
-  done
-  if (( ${#added[@]} > 0 )); then
-    echo "Runner labels from ${source}: ${added[*]}"
-  fi
-}
-
-if ! input_labels="$(node "${here}/../shared/inputs.js" list runner_labels)"; then
-  exit 1
-fi
-mapfile -t input_list <<< "$input_labels"
-add_labels runner_labels "${input_list[@]}"
-
-for caller_config in .github/actionlint.yaml .github/actionlint.yml; do
-  [[ -f "$caller_config" ]] || continue
-  mapfile -t caller_list < <(caller_runner_labels "$caller_config")
-  add_labels "$caller_config" "${caller_list[@]}"
-  break
-done
-
-if (( ${#labels[@]} > 0 )); then
-  merged="${RUNNER_TEMP:-/tmp}/pr-validate-actionlint.yaml"
-  extra=""
-  # Single-quoted YAML (quotes doubled) keeps glob patterns (private-linux-*) and
-  # backslashes literal. EXTRA goes through ENVIRON: awk -v would turn \n or \047
-  # in a label into real characters and could break out of the quoted scalar.
-  for label in "${labels[@]}"; do
-    extra+="    - '${label//\'/\'\'}'"$'\n'
-  done
-  EXTRA="$extra" awk '{ print } /^  labels:$/ { printf "%s", ENVIRON["EXTRA"] }' "$config" > "$merged"
-  config="$merged"
-fi
-
 # dotglob: hidden files such as .github/workflows/.reusable.yml are workflows too.
 shopt -s nullglob dotglob
 workflow_files=(.github/workflows/*.yml .github/workflows/*.yaml)
@@ -140,7 +64,10 @@ fi
 # checkout and exits before reading the files when the workspace is not a repo.
 out="${RUNNER_TEMP:-/tmp}/pr-validate-actionlint-out"
 status=0
-"$bin" -config-file "$config" "${workflow_files[@]}" | tee "$out" || status=$?
+# Unknown runs-on labels are ignored: a wrong label fails the job at runtime.
+# All other actionlint checks stay on. Pattern matches actionlint 1.7.12:
+#   label "<name>" is unknown. available labels are ...
+"$bin" -config-file "$config" -ignore 'label ".+" is unknown' "${workflow_files[@]}" | tee "$out" || status=$?
 
 # Shared list inputs (triggers, packages, tags, keep_digests) take one item per
 # line or a single value. actionlint cannot check input formats, so flag other
