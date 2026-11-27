@@ -32,7 +32,7 @@ permissions:
 |---|---|---|---|
 | `url` | URL to scan. Preflight fails if it gets no HTTP response (any status passes) | | **Yes** |
 | `zap` | What to scan: run the ZAP full scan (`'true'` or `'false'`) | `'true'` | No |
-| `nuclei` | What to scan: run the Nuclei scan (`'true'` or `'false'`). Opt-in (`'false'` by default) because Silver throttles GitHub-hosted runner connections; enable on self-hosted or non-throttled runners | `'false'` | No |
+| `nuclei` | What to scan: run the Nuclei scan (`'true'` or `'false'`). Opt-in (`'false'` by default) — Nuclei currently struggles with Silver cluster connection throttling from GitHub-hosted runners and may be rate-limited elsewhere; enable on self-hosted or non-throttled runners | `'false'` | No |
 | `nuclei_rate_limit` | Nuclei maximum requests per second (`-rl`) | `'25'` | No |
 | `nuclei_concurrency` | Nuclei templates run in parallel (`-c`) | `'5'` | No |
 | `nuclei_timeout` | Nuclei seconds to wait for a connection or response (`-timeout`) | `'30'` | No |

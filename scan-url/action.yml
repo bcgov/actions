@@ -8,8 +8,9 @@ inputs:
   url:
     description: URL to scan
     required: true
-  # What to scan: ZAP is on by default; Nuclei is opt-in (false by default) because
-  # Silver's perimeter throttles GitHub-hosted runner connections. At least one must stay on
+  # What to scan: ZAP is on by default; Nuclei is opt-in (false by default) because it
+  # struggles with Silver cluster connection throttling from GitHub runners and may be
+  # rate-limited elsewhere. At least one must stay on
   zap:
     description: Run the ZAP full scan (true or false)
     default: 'true'
