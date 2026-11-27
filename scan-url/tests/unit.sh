@@ -26,15 +26,18 @@ q() { jq -r "$1" <<<"$sarif"; }
 
 assert_eq "$(q .version)" "2.1.0" "SARIF version"
 assert_eq "$(q '.runs[0].tool.driver.name')" "ZAP" "tool name"
-assert_eq "$(q '.runs[0].results | length')" "$(jq '[.site[].alerts[].instances[]] | length' "$FIXTURE")" "one result per alert instance"
-assert_eq "$(q '.runs[0].tool.driver.rules | length')" "$(jq '[.site[].alerts[].alertRef] | unique | length' "$FIXTURE")" "one rule per alertRef"
+assert_eq "$(q '.runs[0].results | length')" "$(jq '[.site[].alerts[] | select(.riskcode != "0") | .instances[]] | length' "$FIXTURE")" "one result per non-informational alert instance"
+assert_eq "$(q '.runs[0].tool.driver.rules | length')" "$(jq '[.site[].alerts[] | select(.riskcode != "0") | .alertRef] | unique | length' "$FIXTURE")" "one rule per non-informational alertRef"
 assert_eq "$(q '[.runs[0].results[].ruleId] - [.runs[0].tool.driver.rules[].id] | length')" "0" "every result references a rule"
-assert_eq "$(q '[.runs[0].results[].level] | unique | join(",")')" "$(jq -r '[.site[].alerts[].riskcode | {"3": "error", "2": "warning"}[.] // "note"] | unique | join(",")' "$FIXTURE")" "riskcode maps to level"
+assert_eq "$(q '[.runs[0].results[].level] | unique | join(",")')" "$(jq -r '[.site[].alerts[] | select(.riskcode != "0") | .riskcode | {"3": "error", "2": "warning"}[.] // "note"] | unique | join(",")' "$FIXTURE")" "riskcode maps to level"
+assert_eq "$(q '[.runs[0].results[] | select(.ruleId == "90027")] | length')" "0" "informational alerts excluded from results"
+assert_eq "$(q '[.runs[0].tool.driver.rules[] | select(.id == "90027")] | length')" "0" "informational rules excluded from driver"
+assert_eq "$(q '[.runs[0].results[] | select(.ruleId == "10054-2")] | length')" "2" "low-risk alerts remain in results"
 assert_eq "$(q '[.runs[0].results[].locations[0].physicalLocation.artifactLocation.uri | select(test("^[a-z]+://"))] | length')" "0" "URI scheme stripped"
 assert_eq "$(q '[.runs[0].tool.driver.rules[].fullDescription.text | select(test("<"))] | length')" "0" "HTML stripped from descriptions"
 
-for empty in '{}' '{"site":[]}' '{"site":[{"@name":"x","alerts":[]}]}'; do
-  assert_eq "$(jq -c -f "$JQ_FILTER" <<<"$empty" | jq -c '[.runs[0].results, .runs[0].tool.driver.rules]')" "[[],[]]" "empty report: $empty"
+for empty in '{}' '{"site":[]}' '{"site":[{"@name":"x","alerts":[]}]}' '{"site":[{"@name":"x","alerts":[{"alertRef":"90027","name":"Info","riskcode":"0","desc":"","instances":[{"method":"GET","uri":"https://x"}]}]}]}'; do
+  assert_eq "$(jq -c -f "$JQ_FILTER" <<<"$empty" | jq -c '[.runs[0].results, .runs[0].tool.driver.rules]')" "[[],[]]" "empty or info-only report: $empty"
 done
 
 # verify.sh: findings never fail; failed step or missing report does

@@ -1,7 +1,9 @@
 # ZAP traditional JSON report (report_json.json) -> SARIF 2.1.0.
 # riskcode: 3 High, 2 Medium, 1 Low, 0 Informational.
+# Omit Informational (0) from SARIF so passive metadata doesn't clutter the Security tab;
+# full unfiltered findings remain in the report_json.json workflow artifact.
 def level: {"3": "error", "2": "warning"}[.riskcode] // "note";
-[.site[]?.alerts[]?] as $alerts
+[.site[]?.alerts[]? | select(.riskcode != "0")] as $alerts
 | {
     "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
     version: "2.1.0",
