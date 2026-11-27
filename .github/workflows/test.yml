@@ -441,6 +441,7 @@ jobs:
         uses: $/scan-url
         with:
           url: ${{ matrix.url }}
+          nuclei: 'true'
           nuclei_tags: ${{ matrix.nuclei_tags }}
           nuclei_templates: ${{ matrix.nuclei_templates }}
           zap_spider_minutes: '1'
