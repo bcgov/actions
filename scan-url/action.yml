@@ -15,17 +15,20 @@ inputs:
   nuclei:
     description: Run the Nuclei scan (true or false)
     default: 'true'
-  # Nuclei load: its defaults (150 requests/s, 25 templates at once, 10 s timeout)
-  # leave OpenShift routes unresponsive, and Nuclei then skips the rest of the scan
+  # Nuclei load: its defaults (150 requests/s, 25 templates at once, 10 s timeout, 1 retry)
+  # trip perimeter connection-rate limits and drop the host on a single i/o timeout
   nuclei_rate_limit:
     description: Nuclei maximum requests per second (-rl)
-    default: '25'
+    default: '15'
   nuclei_concurrency:
     description: Nuclei templates run in parallel (-c)
-    default: '5'
+    default: '3'
   nuclei_timeout:
     description: Nuclei seconds to wait for a connection or response (-timeout)
-    default: '30'
+    default: '10'
+  nuclei_retries:
+    description: Nuclei retries per failed request (-retries)
+    default: '3'
   # Scan depth: nuclei_tags defaults to high-signal tags alongside ZAP; pass '' to run every template
   nuclei_tags:
     description: Run only Nuclei templates with these tags (-tags), one per line. Pass '' to run every template
@@ -68,6 +71,7 @@ runs:
         NUCLEI_RATE_LIMIT: ${{ inputs.nuclei_rate_limit }}
         NUCLEI_CONCURRENCY: ${{ inputs.nuclei_concurrency }}
         NUCLEI_TIMEOUT: ${{ inputs.nuclei_timeout }}
+        NUCLEI_RETRIES: ${{ inputs.nuclei_retries }}
         INPUT_NUCLEI_TAGS: ${{ inputs.nuclei_tags }}
         INPUT_NUCLEI_TEMPLATES: ${{ inputs.nuclei_templates }}
         INPUT_ZAP_SPIDER_MINUTES: ${{ inputs.zap_spider_minutes }}
@@ -83,7 +87,7 @@ runs:
           echo "::error::zap and nuclei are both 'false'; enable at least one scanner"
           exit 1
         fi
-        for name in nuclei_rate_limit nuclei_concurrency nuclei_timeout; do
+        for name in nuclei_rate_limit nuclei_concurrency nuclei_timeout nuclei_retries; do
           var="${name^^}"
           if [[ ! "${!var}" =~ ^[1-9][0-9]{0,3}$ ]]; then
             echo "::error::${name} must be a whole number from 1 to 9999, got '${!var}'"
@@ -143,13 +147,15 @@ runs:
         RATE_LIMIT: ${{ inputs.nuclei_rate_limit }}
         CONCURRENCY: ${{ inputs.nuclei_concurrency }}
         TIMEOUT: ${{ inputs.nuclei_timeout }}
+        RETRIES: ${{ inputs.nuclei_retries }}
         TAGS: ${{ steps.preflight.outputs.nuclei_tags }}
         TEMPLATES: ${{ steps.preflight.outputs.nuclei_templates }}
         SHARED_INPUTS: ${{ github.action_path }}/../shared/inputs.js
       run: |
         set -o pipefail
+        # -nmhe keeps transient perimeter i/o timeouts from aborting the remaining templates
         args=(-u "$URL" -jsonl-export nuclei-results.jsonl -sarif-export nuclei-results.sarif
-          -rl "$RATE_LIMIT" -c "$CONCURRENCY" -timeout "$TIMEOUT")
+          -rl "$RATE_LIMIT" -c "$CONCURRENCY" -timeout "$TIMEOUT" -retries "$RETRIES" -nmhe)
         # Optional narrowing (options.sh); unset runs every template
         [[ -z "$TAGS" ]] || args+=(-tags "$TAGS")
         [[ -z "$TEMPLATES" ]] || args+=(-t "$TEMPLATES")
