@@ -8,13 +8,15 @@ inputs:
   url:
     description: URL to scan
     required: true
-  # What to scan: each scanner is on by default; at least one must stay on
+  # What to scan: ZAP is on by default; Nuclei is opt-in (false by default) because it
+  # struggles with Silver cluster connection throttling from GitHub runners and may be
+  # rate-limited elsewhere. At least one must stay on
   zap:
     description: Run the ZAP full scan (true or false)
     default: 'true'
   nuclei:
     description: Run the Nuclei scan (true or false)
-    default: 'true'
+    default: 'false'
   # Nuclei load: its defaults (150 requests/s, 25 templates at once, 10 s timeout)
   # leave OpenShift routes unresponsive, and Nuclei then skips the rest of the scan
   nuclei_rate_limit:
@@ -76,7 +78,7 @@ runs:
       run: |
         # Shared boolean rules (shared/README.md); a bad value fails here
         ZAP=$(node "$SHARED_INPUTS" bool zap true)
-        NUCLEI=$(node "$SHARED_INPUTS" bool nuclei true)
+        NUCLEI=$(node "$SHARED_INPUTS" bool nuclei false)
         echo "zap=${ZAP}" >> "$GITHUB_OUTPUT"
         echo "nuclei=${NUCLEI}" >> "$GITHUB_OUTPUT"
         if [[ "$ZAP" == false && "$NUCLEI" == false ]]; then

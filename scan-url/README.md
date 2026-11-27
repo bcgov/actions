@@ -32,7 +32,7 @@ permissions:
 |---|---|---|---|
 | `url` | URL to scan. Preflight fails if it gets no HTTP response (any status passes) | | **Yes** |
 | `zap` | What to scan: run the ZAP full scan (`'true'` or `'false'`) | `'true'` | No |
-| `nuclei` | What to scan: run the Nuclei scan (`'true'` or `'false'`) | `'true'` | No |
+| `nuclei` | What to scan: run the Nuclei scan (`'true'` or `'false'`). Opt-in (`'false'` by default) — Nuclei currently struggles with Silver cluster connection throttling from GitHub-hosted runners and may be rate-limited elsewhere; enable on self-hosted or non-throttled runners | `'false'` | No |
 | `nuclei_rate_limit` | Nuclei maximum requests per second (`-rl`) | `'25'` | No |
 | `nuclei_concurrency` | Nuclei templates run in parallel (`-c`) | `'5'` | No |
 | `nuclei_timeout` | Nuclei seconds to wait for a connection or response (`-timeout`) | `'30'` | No |
@@ -41,7 +41,7 @@ permissions:
 | `zap_spider_minutes` | Scan depth: minutes the ZAP spider may run (`zap-full-scan.py -m`) | unset (no limit) | No |
 | `zap_scan_minutes` | Scan depth: minutes the ZAP active scan may run (ZAP `scanner.maxScanDurationInMins`) | unset (no limit) | No |
 
-`zap` and `nuclei` are "what to scan" toggles. Each gates its scanner's scan, SARIF conversion and upload. Any other value fails the action, and setting both to `'false'` fails it too, so a run never passes without scanning. Future scanners (e.g. accessibility) will get their own toggle, on by default.
+`zap` and `nuclei` are "what to scan" toggles (`zap` defaults to `'true'`, `nuclei` to `'false'`). Each gates its scanner's scan, SARIF conversion and upload. Any other value fails the action, and setting both to `'false'` fails it too, so a run never passes without scanning. Future scanners (e.g. accessibility) will get their own toggle.
 
 The `nuclei_*` defaults are lower than Nuclei's own (150 requests per second, 25 templates, 10 seconds). At Nuclei's defaults, OpenShift TEST routes timed out within the first minute or two of a scan and Nuclei skipped the rest. Lower load makes that later or rarer, but a target that stops answering mid-scan still fails the action.
 
