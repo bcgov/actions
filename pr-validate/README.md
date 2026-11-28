@@ -8,8 +8,8 @@ Validate Pull Request metadata and apply organizational guardrails to contributo
 - ✅ **Educational UX**: Provides explicit, custom GitHub annotations when title validation fails, instructing contributors exactly how to fix the issue without manually retrying CI.
 - ✅ **PR description**: Optional `markdown` is appended to the PR description once (checkbox state is ignored when checking for it). Shorthand for [pr-description-add](../pr-description-add/), which also works outside `pull_request` events.
 - ✅ **Fork notice**: Emits a warning on fork pull requests with a link to fork CI configuration guidance. Validation continues (conventional commits, etc.).
-- ✅ **Workflow lint**: Runs `rhysd/actionlint` v1.7.12 on Linux x86_64 against every `.yml` and `.yaml` file in `.github/workflows`, hidden files (such as `.reusable.yml`) included. Other runners fail the step. The linux/amd64 tarball is checked against the SHA-256 in `actionlint_1.7.12_checksums.txt` before extraction. Checks the files out with `clean: false` when they are not already in the workspace. A failed download fails the step. The bundled config adds the `ubuntu-26.04` and `ubuntu-26.04-arm` runner labels. Azure, self-hosted and other custom runner labels are added with `runner_labels`; see [Custom runners](#custom-runners). If the repo has `.github/actionlint.yaml` (or `.yml`), its `self-hosted-runner` labels are added too; its other settings are not used.
-- ✅ **List input format**: Fails when a `bcgov/actions` or `bcgov/actions-openshift` caller passes a shared list input (`triggers`, `packages`, `package`, `tags`, `keep_digests`, `runner_labels`, and actions-openshift's `components`, `hosts`, `cleanup_name`, `remove_pvc`) in a format the actions do not read. See [List inputs](#list-inputs).
+- ✅ **Workflow lint**: Runs `rhysd/actionlint` v1.7.12 on Linux x86_64 against every `.yml` and `.yaml` file in `.github/workflows`, hidden files (such as `.reusable.yml`) included. Other runners fail the step. The linux/amd64 tarball is checked against the SHA-256 in `actionlint_1.7.12_checksums.txt` before extraction. Checks the files out with `clean: false` when they are not already in the workspace. A failed download fails the step. Unknown `runs-on` labels are not checked; a wrong label fails the job at runtime. All other actionlint checks stay on.
+- ✅ **List input format**: Fails when a `bcgov/actions` or `bcgov/actions-openshift` caller passes a shared list input (`triggers`, `packages`, `package`, `tags`, `keep_digests`, and actions-openshift's `components`, `hosts`, `cleanup_name`, `remove_pvc`) in a format the actions do not read. See [List inputs](#list-inputs).
 
 ## Permissions
 
@@ -38,34 +38,9 @@ If `markdown` is set, also grant `pull-requests: write`.
       ---
       Deployments will be available below.
 
-    # Optional: Runner labels the workflow lint accepts in runs-on, one per line
-    # (default: ubuntu-26.04). See Custom runners below.
-    runner_labels: |
-      bcgov-azure-lz-live-github-managed-runner
-
     # Optional: Authentication token (defaults to github.token; override with PAT if needed)
     token: ${{ secrets.GITHUB_TOKEN }}
 ```
-
-### Custom runners
-
-actionlint fails any `runs-on` label it does not know (`label "..." is unknown ... [runner-label]`). GitHub-hosted labels, `ubuntu-26.04` and `ubuntu-26.04-arm` are always known. List Azure, self-hosted or other custom runner labels in `runner_labels`, one per line, so those workflows pass without turning the lint off:
-
-```yaml
-- name: Validate PR
-  uses: bcgov/actions/pr-validate@vX.Y.Z
-  with:
-    # One per line; glob patterns such as my-runner-* match too
-    runner_labels: |
-      bcgov-azure-lz-live-github-managed-runner
-      my-runner-*
-```
-
-| Input | Default | Description |
-|---|---|---|
-| `runner_labels` | `ubuntu-26.04` | Runner labels the workflow lint accepts, one per line (a [list input](#list-inputs)). Added to the known labels; labels already known are skipped, so the default changes nothing. It does not pick the runner: the calling job's `runs-on` does, and the lint step needs Linux x86_64. |
-
-Labels in the repo's `.github/actionlint.yaml` `self-hosted-runner` list are added as well, so either place works.
 
 ### Fork pull requests
 
@@ -73,7 +48,7 @@ Fork PRs receive a workflow warning and continue validation. They use read-only 
 
 ## List inputs
 
-`triggers` is the main reason for this check. A `triggers` list the actions cannot read does not always fail loudly: when a PR only changes `.github/workflows`, the build is skipped and pr-close or path filters can miss without anyone noticing. `packages`, `tags` and `keep_digests` use the same parser (`shared/inputs.js` `parseList`), so they are checked the same way, and so is pr-validate's own `runner_labels`. actions-openshift's `components`, `hosts`, `cleanup_name` and `remove_pvc` are read with `shared/inputs.sh` `input_list`, which applies the same rules.
+`triggers` is the main reason for this check. A `triggers` list the actions cannot read does not always fail loudly: when a PR only changes `.github/workflows`, the build is skipped and pr-close or path filters can miss without anyone noticing. `packages`, `tags` and `keep_digests` use the same parser (`shared/inputs.js` `parseList`), so they are checked the same way. actions-openshift's `components`, `hosts`, `cleanup_name` and `remove_pvc` are read with `shared/inputs.sh` `input_list`, which applies the same rules.
 
 Allowed:
 
